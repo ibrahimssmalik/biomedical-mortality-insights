@@ -1,0 +1,386 @@
+
+==== Front
+Sci Rep
+Sci Rep
+Scientific Reports
+2045-2322
+Nature Publishing Group UK London
+
+38858561
+64232
+10.1038/s41598-024-64232-z
+Article
+A new lightweight network for efficient UAV object detection
+Hua Wei
+Chen Qili qilichen@hotmail.com
+
+Chen Wenbai
+https://ror.org/04xnqep60 grid.443248.d 0000 0004 0467 2584 Beijing Information Science and Technology University, Beijing, 100192 China
+10 6 2024
+10 6 2024
+2024
+14 1328813 3 2024
+6 6 2024
+© The Author(s) 2024
+https://creativecommons.org/licenses/by/4.0/ Open Access This article is licensed under a Creative Commons Attribution 4.0 International License, which permits use, sharing, adaptation, distribution and reproduction in any medium or format, as long as you give appropriate credit to the original author(s) and the source, provide a link to the Creative Commons licence, and indicate if changes were made. The images or other third party material in this article are included in the article’s Creative Commons licence, unless indicated otherwise in a credit line to the material. If material is not included in the article’s Creative Commons licence and your intended use is not permitted by statutory regulation or exceeds the permitted use, you will need to obtain permission directly from the copyright holder. To view a copy of this licence, visit http://creativecommons.org/licenses/by/4.0/.
+Optimizing the structure of deep neural networks is essential in many applications. Especially in the object detection tasks of Unmanned Aerial Vehicles. Due to the constraints of the onboard platform, a more efficient network is required to meet practical demands. Nevertheless, existing lightweight detection networks exhibit excessive redundant computations and may yield in a certain level of accuracy loss. To address these issues, this paper proposes a new lightweight network structure named Cross-Stage Partially Deformable Network (CSPDNet). The initial proposal consists of a Deformable Separable Convolution Block (DSCBlock), separating feature channels, greatly reducing the computational load of convolution, and applying adaptive sampling to the separated feature map. Subsequently, to establish information interaction between feature layers, a channel weighting module is proposed. This module calculates weights for the separated feature map, facilitating information exchange across channels and resolutions. Moreover, it compensates for the effect of point-wise (1 × 1) convolutions, filtering out more important feature information. Furthermore, a new CSPDBlock is designed, primarily composed of DSCBlock, establishing multidimensional feature correlations for each separated feature layer. This approach improves the ability to capture critical feature information and reconstruct gradient paths, thereby preserving detection accuracy. The proposed technology achieves a balance between model parameter size and detection accuracy. Furthermore, experimental results on object detection datasets demonstrate that our designed network, using fewer parameters, achieves competitive detection performance results compared to existing lightweight networks YOLOv5n, YOLOv6n, YOLOv8n, NanoDet and PP-PicoDet. The optimization effect of the designed CSPDBlock, using the VisDrone dataset, is validated when incorporated into advanced detection algorithms YOLOv5m, PPYOLOEm, YOLOv7, RTMDetm and YOLOv8m. In more detail, by incorporating the designed modules it was achieved that the parameters were reduced by 10–20% while almost maintaining detection accuracy.
+
+Keywords
+
+Lightweight network
+Object detection
+Convolutional neural network
+Unmanned aerial vehicle (UAV)
+Subject terms
+
+Computer science
+Information technology
+http://dx.doi.org/10.13039/501100001809 National Natural Science Foundation of China 62103056 62276028 Chen Qili Chen Wenbai Qin Xin Talents Cultivation Program(QXTCP)B202403 Chen Qili issue-copyright-statement© Springer Nature Limited 2024
+==== Body
+pmcIntroduction
+
+Unmanned Aerial Vehicle (UAV) perform object detection tasks using onboard cameras and embedded systems. They also find extensive research and applications in civilian and military domains, including UAV reconnaissance1, traffic monitoring2, and personnel rescue3. Moreover, Deep Learning (DL) technology systematizes the identification and localization of objects within images. This feature enhances the perceptual functions of UAV, particularly in a scenarios with limited human-drone interaction, providing fundamental technical support for autonomous detection and flight. To improve the feature quality of small targets for drones, SmallTrack4 uses a small wave pool layer to avoid losing small target information during downsampling and highlights the classification response of small objects through a graph enhancement module, which improves detection accuracy but is difficult to meet real-time requirements. MobileTrack5 proposes a lightweight convolutional network and enhances the feature information of targets by designing an efficient target perception module for local cross-channel information exchange, achieving a balance between speed and accuracy.
+
+Convolutional neural networks (CNNs) have been increasingly utilized in the field of object recognition and have achieved significant advancements. Specifically, You Only Look Once (YOLO) series6–10 might be the most popular detectors in practical applications due to their well-balanced detection accuracy and speed. However, the inference of these detectors still demands high-performance computing and significant runtime memory usage to uphold good detection performance.
+
+As the demand for detection performance increases, so does the parameter count of networks, leading to efficiency concerns in network design. Efficiency primarily revolves around balancing the model’s storage, computational requirements, and performance. Initially, high-performance networks typically encompass several weight parameters, demanding substantial memory resources for storing these parameters. Moreover, real-time requirements in practical scenarios are pressing, necessitating either enhanced processor capabilities or reduced computational load of the network to achieve this goal.
+
+Thus, reducing the model scale and computational complexity while preserving accuracy without compromise has become a crucial research focus. Despite the development of several efficient lightweight methods, such as model pruning11 and knowledge distillation12, they primarily optimize the post-training models of the designated network.For instance, in 2016, Google team introduced the lightweight networks concept13, allowing direct training of Deep Neural Networks (DNNs) tailored for edge device deployment from the network structure itself.
+
+In recent works focusing on UAV embedded deployment14,15, LWUAVDet16 enhances multi-scale representation at each stage by designing a topology structure that should be expanded and refined in the neck layer, and designs a pixel encoder-decoder for spatial and channel dimension exchange to achieve flexible and effective head feature extraction. GCL-YOLO17 proposes a lightweight YOLO network based on Ghost Conv, reducing the parameter quantity by establishing a Ghost Conv-based backbone network with fewer parameters. UAV-Net18 introduces a new filtering pruning method, which automatically compresses the trained network iteratively. LODNU19 reconstructs the backbone network with depthwise separable convolution to reduce model parameters and embeds improved coordinate attention points in the backbone network to enhance the extraction capability of key target features. Meanwhile, an adaptive scale-weighted feature fusion module is incorporated into the path aggregation network to improve the accuracy of multi-scale object detection and achieve a balance between model size and accuracy.
+
+To simplify complex model structures, researchers have developed some lightweight modules for network design. For instance, they have proposed the Fire module in SqueezeNet20, the Depth-wise Separable Convolution in MobileNet13, and modules consisting of channel shuffle and group convolution in ShuffleNet21. Several cutting-edge lightweight networks22–27 leverage depth-wise separable convolution or group convolution to decrease network computation. However, since these operations don’t alter the feature channels’ count, integrating information across channels and adjusting them to a specific dimension necessitates 1×1 convolutions. Consequently, the use of such convolution in lightweight networks consumes substantial computational resources, resulting in constrained channels and a moderate decline in model accuracy. Therefore, the Inverted Residual Block (IRB), proposed by MobileNetv228, can mitigate feature degradation and enhance representational capabilities. Apart from IRB, several efficient basic blocks23,29,30 have been designed to improve the representational capabilities of lightweight CNNs. However, inconsistent architectures could lead to redundant structures, emphasizing the importance of the efficient structural design for both the lightweight nature and performance impact of networks.
+
+In the DNNs design process, many studies have proven that increasing the network depth is an effective means to improve the system’s accuracy31–33. However, as the network depth increases, obstacles, such as gradient explosions, hinder convergence during training. Furthermore, when deep networks start converging, the accuracy tends to saturate and then rapidly degrades. Additionally, directly expanding Neural Networks (NNs) often brings more parameters and computational burdens, hampering the deployment of advanced technologies on edge devices. Several researchers seek more efficient network structural designs to address these issues25,34–36. For instance, ResNet31 addresses this issue by providing a form of residual connectivity and build, an efficient network structure based on this design concept. Unlike aggregated features of ResNet, DenseNet36 connects each layer to all other layers in a feed-forward fashion, leading to modify the gradient vanishing problem, enhance feature propagation, encourage feature reuse, and big decrease the number of parameters. However, this densely connected computation leads to a quadratic increase in memory access overhead with network’s depth, resulting in complex computational and higher energy consumption. To address this challenge, CondenseNet37 proposed a novel network architecture relying on learnable packet convolution. This architecture automatically streamlines the network during training, identifies the optimal input-output connection pattern, and transforms it into a standard packet convolution structure in the end. However, existing CNNs, when lightened, effective scale down model parameters but often sacrifice accuracy.
+
+To address these limitations, the Cross-Stage Partial Deformable Network (CSPDNet) design, proposed in this paper, makes the convolutional computations more efficient. The proposed modules enhance the model’s feature representation capabilities, aiming to maintain sufficient accuracy even after the application of lightweight modifications. Specifically, the primary contributions of this work are as follows: To address the accuracy degradation caused by lightweight convolution operations, this paper proposes a Deformable Separable Convolution Block (DSCBlock) with adaptive cross-channel feature fusion and enhanced deformation modeling capabilities. DSCBlock focuses on image regions adaptively and establishes cross-channel features to obtain richer feature information.
+
+A channel weighting module that integrates three-dimensional (3D) feature information is proposed. This module, built on efficient adaptive extensive feature extraction in two dimensions, replaces expensive pointwise (1 × 1) convolutions by applying weighting operations to the third dimension channel. It filters out more effective features and reduces the negative impact of enhanced extensive deformation modeling capability.
+
+To enhance the efficiency of feature extraction in the model, this paper restructures the gradient paths and further develops an efficient computational component, Cross-Stage Partial Deformable Blocks (CSPDBlock). By controlling the longest and shortest gradient paths, CSPDBlock better balances the speed and accuracy of detection.
+
+Based on the proposed modules, a new, efficient, lightweight CNN model CSPDNet is constructed. The model aims to meet the requirements of deploying networks on drones to perform target detection tasks while minimizing the performance loss caused by model reduction. Additionally, Fig. 1 illustrates the overall architecture of the proposed CSPDNet.
+
+To sum up, the rest structure of this paper is as follows: Section "Related work" provides a review of related work regarding lightweight CNN modeling. Section Methodology introduces the pivotal features of DSCBlock along with the comprehensive structure of CSPDNet, built upon CSPDBlock. In Section "Experiments", extensive experiments are conducted, comparing them with the latest results to verify the efficacy of DSCBlock and CSPDNet. Finally, Section "Conclusion" summarize this work and outlines future research directions.Figure 1 Overall architecture of CSPDNet. It is capable of reducing the parameters while maintaining accuracy and achieves efficient object detection.
+
+Related work
+
+Lightweight convolutional module
+
+To enable the use of network model in embedded devices, several lightweight convolutional components have emerged for CNN design. These components provide cost-effective alternatives to traditional convolutional operations. Concerning the lightweight networks architecture, MobileNetv113 played a pivotal role in its inception. It primarily applied a lightweight Depth-wise Separable Convolution (DSConv) module, disassembling a full convolutional operator into two autonomous decomposition operations where the initial layer executes lightweight filtering for each input channel through Depth-Wise Convolution (DWConv). As for the second layer, it is enriched with feature information using Point-Wise Convolution (PWConv) to perform linear combinations among channels. Consequently, DSConv efficiently reduces computation load and parameters, therefore serving as the fundamental design component in subsequent lightweight network architectures.
+
+While achieving lightweight objectives, it comes at the expense of performance. Following this trend, MobileNetv228 conserves simplicity from the MobileNetv113 structure and introduces IRBs to alleviate feature corruption and improve representation capabilities. The IRB paradigm serves as a fundamental module adopted by several lightweight models with diverse network architectures. Moreover, MobileNetv322 enhances upon MobileNetv2 by refining the excitation module and incorporating Automatic Machine Learning (AutoML). Finally, MobileNeXt38 introduces hourglass blocks to mitigate information loss by flipping the structure of the inverted residue block.
+
+As PWConv requires a significant amount of computational resources during the establishment of feature interaction, ChannelNets39 introduces the concept of channel-wise convolution. This approach establishes connections in the input and output dimensions, avoiding complete connectivity. It associates input and output channels through a convolutional slide, promoting enhanced information exchange between channels and the output. While each of these approaches exhibits its unique characteristics, the fundamental concept of lightweight CNN networks remains intricately linked to deep convolutional operations.
+
+In the design of lightweight convolutional modules, the reliance on repetitive feature mapping has proven high effectiveness. However, current methods primarily emphasize cost-effective operations for lightweight enhancements, often overlooking issues of weak convolutional generalization, instability, and excessive computation. For instance, CEModule, employs a group convolutional strategy to reduce FLoating-point OPerations (FLOPs) generated during training40. Furthermore, it introduces a dynamic adaptation algorithm to strengthen the generalization capacity of lightweight CNN models utilizing CEModule.
+
+Efficient object detection network
+
+A network constructed by lightweight convolutional component design can effectively reduce the amount of computation and model parameters; however, it will result in a certain accuracy loss. An efficient network architecture design can achieve a balance between the parametric quantity and accuracy performance. Typically, lightweight module design tends to sacrifice accuracy, yet this can be mitigated by amalgamating network architecture and accuracy-enhancing methodologies to achieve a parameter reduction without accuracy loss.
+
+Furthermore, DenseNet36 provided significant inspiration for lightweight structure design. Developed upon the dense connection concept of DenseNet, a series of structural optimizations led to propose a network structure suitable for mobile devices. Added to that, by incorporating SSD41, the PeleeNet42 for object detection was introduced. CSPNet34 introduced the concept of Crossstage Partial Network (CSPNet) from a network structure perspective where the main goal was to achieve more abundant gradient combinations while reducing the computational effort. Therefore, CSPNet made the computational bottlenecks of PeleeNet cut into its half.
+
+The efficient structure of Crossstage Partial Network34 (CSPNet) has gathered favor among several popular object detection networks. For instance, CSPDarknet5334 was first introduced by YOLOv46 as its backbone, leading to the development of an efficient and powerful object detection model. Subsequent iterations, such as the backbone design in YOLOv57, also adopted CSPDarknet53. Inspired from the previous work, PP-YOLOE8 introduced a novel backbone network, CSPRepResNet, integrating architectures with both residual and dense connections. As for RTMDet43, it constructs its backbone using CSP-blocks34 and deeper convolutions with larger kernel sizes.
+
+VoVNet35 is designed to address the inefficiency problem as it proposes an energy and computationally efficient architecture consisting of One-Shot Aggregation (OSA). Building upon VoVNet, the CSPVoVNet44 architecture examines gradient paths to gather a wider array of features from various layer weights. Moreover, YOLOv79 conducted an analysis regarding the gradient paths in CSPVoVNet and proposed the Extended Efficient Layer Aggregation Networks (E-ELANs) technique to design the network. This technique maintains the architecture of the transition layers while improving the network’s learning capability by altering the computational block structure through expansion, shuffling, and merging operations. Finally, the backbone network design of YOLOv810 follows the core concept of E-ELAN and introduces a new module, contributing to achieve state-of-the-art results in object detection tasks.
+
+Efficient feature modeling
+
+Effective feature modeling methods play a crucial role in enhancing network performance. Typically, convolutional feature sampling has been widely used and demonstrated effective for image feature extraction. However, feature modeling through sliding window with fixed-size convolution kernels cannot sample specifically according to the morphology of target features, and this sampling method is relatively inefficient. DCNv145 enhances the modeling of geometric transformations by using an adaptive convolution kernel that adjusts sampling adaptively through the addition of a bias to the sampling position. DCNv246 addresses the imprecise object coverage range and the problem of sample distribution extending beyond the region of interest encountered in DCNv1 by introducing a modulation mechanism. DCNv347 compensates for the shortcomings of regular convolution in terms of long-range dependencies and adaptive spatial aggregation by separating the original weights into depth-wise and point-wise components. DCNv448 overcomes the limitations of its predecessor, DCNv3, by removing softmax normalization in spatial aggregation to enhance its dynamism and expressive power, and optimizing memory access to minimize redundant operations for acceleration.
+
+While lightweight convolution operations effectively reduce parameter quantity and computational load, there is some loss in feature extraction process leading to performance degradation. This paper compensates for the accuracy loss with the efficient feature modeling capability of DCNv2 to achieve a balance between speed and accuracy. Compared to standard convolution modeling operations, fewer DCNv2 can be used to establish a larger range of feature modeling, and adaptively adjusting the convolution kernel shape to more efficiently extract valid target features.
+
+The proposed CSPDBlock enhances inter-channel feature fusion by introducing a weighted module to select feature layers that extract more valid features during the feature modeling process of DCNv2 on the separated feature layers. This paper designs lightweight models with efficient modules to meet deployment requirements with minimal accuracy loss, starting from embedded detection tasks. DCNv2 is employed to enhance feature modeling capability. Moreover, a channel weighting module is used to integrate channel information of separated feature layers. Nonetheless, it introduces a more complex sampling method compared to standard convolution, potentially consuming more memory and reducing speed. Considering the constraints of embedded devices, optimization has not yet been performed on model acceleration.Figure 2 Details of the CSPDNet structure, constructing the components of the entire network.
+
+Methodology
+
+This section details the design concepts and implementation specifications of CSPDNet. First, a detailed presentation of the construction of DSCBlock derived from the lightweight module design is proposed. Consequently, the structure of the gradient flow is re-optimized and DSCBlock is added serving as a basic building block to design CSPDBlock. Finally, the specific structure of the whole network is generated.
+
+Cross-stage partial deformable networks
+
+Mainstream backbone network architectures, including ResNet31, ResNeXt49, and DenseNet36 apply linear or nonlinear combinations of feature layers as outputs. In these architectures, both residual and dense layers accumulate gradient information by merging the outputs of preceding layers. This design minimizes the length of the gradient path, enhancing the efficiency of gradient flow during back-propagation. However, it also leads to the repeated learning of redundant information.
+
+The initial segment of CSPDNet involves two convolutions creating a Partial Transition Layer, which divides the input feature map into two segments: the first one segment stores part of the input feature data, while the other one undergoes DSCBlocking, ensuring that sufficient feature information is provided by controlling the shortest and longest gradient paths.
+
+CSPDNet is a further development based on the design foundation of DSCBlock. The entire CSPDNet comprises a backbone network (Backbone), intermediate layers (Neck), and detection layers (Head). The structural design of the backbone network draws inspiration from CSPNet’s feature extraction architecture while leveraging DSCBlock’s efficient feature modeling capability, resulting in the CSPDBackbone. The intermediate layers (Neck) follow the design concept of PAFPN, constructed using DSCBlock. Additionally, aligned with the design of YOLOv8’s detection layers (Head), CSPDNet embraces the concept of Anchor-Free decoupled heads.
+
+Moreover, Fig. 2 illustrates the structure and connectivity diagram of the CSPDNet network. The input image undergoes initially feature extraction through CSPDBackbone; then, it subsequently generates multi-level feature maps. These parts of information covering various stages of feature extraction, are directed into the PAFPN constructed by CSPDBlock for feature fusion, combining local and global features, and allowing the network to accommodate the multi-scale changes of the target. Finally, the decoupled heads gather feature maps from different levels to detect the targets.
+
+Furthermore, the Backbone is constructed by alternating CBS and DSCBlock, primarily achieving the feature extraction function. In more detail, CBS denotes a standard convolution operation, comprising 2D convolution, batch normalization, and activation function. However, DSCBlock adopts the CSPNet design, comprising standard convolution, DWConv, and DConv. The Neck consist of SPPF, CBS, and Up-sample interconnected according to the PAFPN architecture, primarily achieving feature fusion. As for the Head, it consists of CBS and a 2D convolution, and generated three sets of detection results at varying resolutions, notably 20×20, 40×40, 80×80.
+
+In conclusion, CSPDNet effectively leverages CSPNet’s Partial Transition to curtail redundant feature learning and integrates DenseNet’s feature reuse advantages. Moreover, its efficient DSCBlock fosters multidimensional feature fusion within constrained channels, providing diverse and efficient feature modeling capabilities. Consequently, CSPDNet builds a robust backbone feature extraction network with fewer stacked modules. When compared to architectures deploying CSPNet as the backbone, CSPDNet achieves a reduced parameter count and computation while maintaining accuracy levels.Figure 3 Details of the CSPDBlock structure, which has an efficient feature extraction capability and reduces the duplication of modules to form a network.
+
+Cross-stage partial deformable blocks
+
+The structure of the CSPDBlock proposed in this paper is displayed in the Fig. 3. The input feature map of the CSPDBlock is initially split into two parts: the first one is utilized to retain the Partial feature from the input whereas the second part goes through the DSCBlock and enriches feature information by controlling the shortest and longest gradient paths. Moreover, within the first part, the input feature map is split into two portions using x0=[x0′,x0′′]. The x0′′ directly links to the end whereas, the x0′ passes through the densely connected DSCBlock and the convolutional block. In addition, the second part consists of the following procedure: x0′′ first undergoes the DSCBlock to the output xt, followed by a convolution to obtain xk. Then, the output xk from the second part is connected to x0′, followed by a convolutional transition layer, eventually producing the output xu. The equations of the feed-forward pass and weight updating of CSPDBlock are illustrated in Eqs. 1 and 2, respectively:1 xt=Wt∗x0′′xk=Wk∗xtxu=Wu∗[x0′,xk,xt,x0′′]
+
+where ∗ represents the convolution operator, and the vector [x0′,xk,xt,x0′′] reveals to concatenate x0′,xk,xt,x0′′, and Wi representing the weights of the i block.2 Wt′=ft(Wt,g0′′)Wk′=fk(Wk,gt′′)Wu′=fu(Wu,g0′,gk,gt,g0′′)
+
+where fi denotes the function of weight updating of i block, and gi represents the gradient propagated to the ith block.
+
+Deformable separate convolutional blocks
+
+DSConv13, a quintessential lightweight convolutional module, initially applies DWConv Filters to each input channel, then utilizes PWConv to interrelate its feature channels. Moreover, PWConv establishes relationships among feature channels. This decomposition convolutional approach significantly reduces computational load as well as the model size compared to the regular convolutional operations sequence. Nevertheless, PWConv solely facilitates the relationship between feature channels, ignoring the 3D feature information of the feature map. Moreover, in the literature50, 1×1 convolution has been proven to still consume a significant amount of computational resources. Therefore, directly using DSConv will limit detection speed and accuracy.
+
+To overcome this challenge, the deformable convolution (DConv)46 has been proven for its efficient feature modeling capability. We adaptively sample the effective receptive field for each separated channel, establishing multi-dimensional feature correlations to enrich feature information. Additionally, by modulating the amplitude of input features at different spatial positions within each feature channel, this module can more efficiently extract useful feature information.
+
+Due to the different key information that adaptive sampling can capture on each channel, directly integrating the feature information extracted by channels may lead to conflicts and result in a decline in network performance. Therefore, a channel weighting module is used to learn the impact of the sampling results on performance for each channel, enabling the filtering of more interesting feature maps. Additionally, this module enhances the information richness contained in the weights by calculating weights for parallel multi-channel mappings.
+
+The structure of DSCBlock, illustrated in Fig. 4. Initially, the feature map F of W×W×M dimension and is separated into feature channels using depth convolution K, resulting in a combined set of segregated feature channels, denoted as S. Subsequently, a deformable weighted convolutional operator and channel weighting is used to establish multidimensional interaction between channels and within the feature map, resulting in a feature map G having a dimension of H×H×M where W denotes the spatial dimensions (width and height) of the input feature map, M represents the input channel count (depth), H stands for the output spatial dimensions (width and height), and M indicates the output channel count (depth).Figure 4 Details of the DSCBlock structure, which adaptively samples the feature map while separating channels, improving the extraction of effective features.
+
+The first part, the filters, performs depth convolution K on each input channel (depth) of feature map F to generate the combined feature channels S, represented as follows:3 Sk,l,m=∑i,jKi,j,m·Fk+i-1,m
+
+As for the second part, given a convolution kernel with p sampling positions, it conducts deformable weighted convolution on the combined feature features and integration of channel S information by channel weighting to obtain feature map G, represented as follows:4 G(p)=∑k=1pwk·S(p+pk+Δpk)·Δmk
+
+wherewk and pk denote the weights and pre-specified offsets of the kth position, respectively, and · is the multiplication operator. Let S(p) and G(p) represent the features at position p in the input and output feature mapping, respectively. where Δpk and Δmk denote the learnable offset and weighted modulation scalar of the kth position, respectively.Figure 5 Details of the structure of the Channel Weighting Module, creating an exercise of channel dimensional information on the deformed modeled feature maps and filtering the more important information through weighting operations.
+
+Channel weighting module
+
+The proposed channel weighting module involves channel-wise weighting during the two-dimensional adaptive feature extraction process, filtering out more important information, and simultaneously establishing cross-channel information correlation in the third dimension. The element-wise weighting operation across channels is expressed as follows:5 Yw=S⊙Cw
+
+Where S is a separated feature tensor with a size of W×H×M, Cw is a weight mapping, and ⊙is an element-wise multiplication operator.
+
+We use a weighting matrix to calculate the channel dimension weights for the separated feature map. As shown in the Fig. 5, the weighted module will weigh the sampling results on each channel to obtain the output feature tensor, enhancing multi-dimensional information exchange and improving the extraction of effective features.
+
+Training deployment
+
+Data augmentation
+
+It is a crucial machine learning method, consisting of the generation of additional training data based on existing samples. It aims to make the augmented training data as close as possible to the real data distribution, thus enhancing detection accuracy. Moreover, data augmentation enables models to identify more robust features, effectively improving the model’s generalization capability. Added to that, the primary data augmentation methods employed in CSPDNet including: Mosaic6, Random Affine, Augment HSV, and Horizontal Flip.
+
+Loss function
+
+In this paper, the loss function segment of CSPDNet is similar to YOLOv8, involving two components: the positive and the negative sample allocation strategy, and loss computation. The sample allocation strategy employs in this work the Task Aligned Assigner51 (TAA). The decoupled head segments this function into two components, using the Binary Cross Entropy Loss for classification loss Lcls and employing the Distribution Focal Loss52 for positional loss Lbbox. Therefore, the computation of the loss function and the sample allocation strategy is as follows:
+
+1. The classification loss can be expressed as follows:6 Lcls(y,y^)=-1N∑i=1Nyilog(yi^)+(1-yi)log(1-yi^)
+
+2. The position loss can be expressed as follows:7 Lbbox(Si,Si+1)=-1N∑i=1N(yi+1-y^)log(Si)+(y^-yi)log(Si+1)
+
+where y represents the true label of the sample, y^ denotes the predicted value of the model, and N indicates the number of samples. Moreover, S(·) denotes a SoftMax function.
+
+The positive and negative sample allocation strategy can be expressed as follows:8 t=sα×uβ
+
+where s and u represent the classification score and IoU value, respectively, and α and β are the weight hyperparameters. Referring to Eqs. 8, it can be seen that t can control the optimization of classification score as well as the IoU instantaneously to achieve the Task-Alignment process, helping the network in focusing on high-quality anchor dynamically.
+
+Experiments
+
+The effectiveness of the proposed CSPDNet and its constituent module DSCBlock is validated using the UAV VisDrone53 object detection dataset.
+
+Experimental setups
+
+Datasets
+
+MS COCO54 has more than 200K images and 250K instances with 17 key points consisting of 80 categories. The dataset consists of a training set, a validation set, and a test set. The training set is formed of 118K images and 150K instances, the validation set contains 5K images, and the test set englobes 40K images.
+
+VisDrone-DET201953 dataset comprises 8599 images captured using UAV platforms. They serve as tasks, including urban traffic monitoring, and pedestrian detection. These images vary in location and height, offering diverse perspectives. Interpreted with over 540,000 bounding boxes across ten predefined categories, it includes training (6471), validation (548), and testing (1580) subsets. Each subset, generated from distinct locations yet resembling.
+
+Performance metrics
+
+As the number of parameters affects significantly the deployability of the embedded devices and the maintaining accuracy is paramount, the proposed evaluation focuses on the effectiveness of the lightweight module and its backbone network. Finally, the performance is evaluated based on parameter count and accuracy metrics.
+
+Standard evaluation metrics in target detection tasks include Recall (R), Precision (P), Average Precision (AP), and mean Average Precision (mAP), and crucial indicators of detection accuracy. Among these, Intersection Over Union (IOU) measures the overlap between the Ground Truth (GT) and Proposed Result (PR) regions.9 IoU=area(GT∩PR)area(GT∪PR)
+
+Whether a target is detected or not is determined by setting the threshold of IOU, which is categorized into the number of True Positives (TP), False Negatives (FN), False Positives (FP), and True Negatives (TN) according to the different results of the judgment. Recall and correctness are defined as follows.10 Precision=TPTP+FP
+
+11 Recall=TPTP+FN
+
+where TP + FN denotes the number of generated bounding boxes and TP + FP represent the total number of objects to be detected. Thus, P calculates the number of correctly detected objects out of the total number of objects and R calculates the number of detected objects. AP considers both accuracy and recall and is defined as follows.12 AP=∫01P(R)dR
+
+It represents the average precision of detecting the same category of objects with a recall between 0 and 1. Moreover, mAP represents the average precision of all categories and is expressed as follows.13 mAP=1D∑i=1DAP(i)
+
+Where D represents the number of detected object categories and i represents one of the categories. mAP metrics consider the object detection precision comprehensively. Therefore, the higher the mAP value is, the more accurate the detector will be.Figure 6 (a),(b),(c) show the original images to be detected, (d), (e), (f) show the detection results of CSPDNet.
+
+Parameter settings
+
+It represents the key parameters that must be configured. The input image size of the network is 640×640 pixels. The batch size for each training is set to eight. The SGD optimization algorithm is applied in the training process, and the optimizer momentum is set to 0.937. Moreover, the Base learning rate is set to 0.01, the Base weight decay is equal to 0.0005, and the learning rate schedule is set to 0.0005. In addition, the linear rules are used where the training of the whole network is set for 300 epochs, and data enhancement is turned off in the last ten epochs to make the network converge more easily.
+
+Experiments were conducted using Python 3.8 within the PyTorch framework, applying a single GeForce RTX 4070Ti GPU (12 GB RAM). To ensure fair comparisons, consistent training setups were employed through all experiments. The experimental comparisons, conducted using DSCBlock, involved prototypes of CSPNet and its enhanced network, CSPDNet. This latter undergoes evaluation against five other CNN models based on MMDetection’s official profile. Throughout the training process, inputs were uniformly cropped to (640 x 640). A total of 300 epochs were set for training, with a weight decay of 0.05. Due to the GPU RAM limitations, a batch size of four was chosen. The learning rate was set at 0.004.
+
+The validation on the embedded device was realized on the Jetson Xavier NX edge computing platform. The device was configured with an Ubuntu 18.04 system, and experiments were completed using PyTorch and a single 364-core NVIDIA Volta GPU with 48 Tensor Cores.Figure 7 (a), (b), (c) show the characteristic heat maps of the baseline model, (d), (e), (f) show the characteristic heat maps of CSPDNet.
+
+Figure 8 Schematic of the baseline model and the structure after replacing the module.
+
+Table 1 Comparison of the parameters and accuracy of different lightweight detectors on COCO val.
+
+Module	Parameters(MB)	Flops(G)	mAP50:95	FPS	
+MobileNetv113	5.1	1.3	22.2	–	
+MobileNetv228	4.3	0.8	22.1	–	
+MobileNetv322	5.0	0.6	22.0	–	
+ShuffleNet21	1.9	1.5	30.5	–	
+NanoDet55	2.4	2.9	34.1	–	
+PP-PicoDet56	2.1	2.5	34.3	–	
+YOLOv5-n7	1.9	4.5	28.0	290	
+YOLOv6-n57	4.3	11.1	35.0	196	
+YOLOv8-n10(baseline)	3.2	8.7	37.3	232	
+CSPDNetv2-n(ours)	2.9	4.2	36.7	208	
+CSPDNetv4-n(ours)	2.8	4.1	36.5	216	
+
+Table 2 Comparison of the parameters and accuracy of different lightweight detectors on embedded devices.
+
+Module	Parameters(MB)	Flops(G)	mAP50	FPS	
+YOLOv5-nu7	5.3	7.7	30.4	27.7	
+YOLOv7-ns9	11.7	13.1	35.4	17.0	
+YOLOv8-s10(baseline)	6.2	8.7	33.2	26.4	
+CSPDNetv2-s(ours)	5.2	7.1	32.5	24.5	
+CSPDNetv2-P6(ours)	8.6	7.0	34.2	24.7	
+
+Comparing with existing lightweight networks
+
+We select some classical and advanced lightweight detectors for comparison. The classical lightweight networks include MobileNet series13,22,28 and ShuffleNet21, whereas the advanced detectors include YOLO series7,10,57, NanoDet55, PP-PicoDet56, and the results refer to the original data provided in their papers and another reference58. Two versions of CSPDNet are provided, which use DCNv259 and DCNv448 to compose the CSPDBlock. Since DCNv4 improves CUDA acceleration at the GPU compared to the v2 version, the amount of computation and the number of parameters are comparable, but the inference is faster.
+
+Referring to Table 1, we compare the performance effects of the proposed CSPDNet and existing lightweight networks on the COCO dataset. Our method achieves 36.7 mAP with less number of parameters and computational effort. It can be seen that comparing networks with comparable number of parameters, the proposed model is able to achieve higher accuracy. Comparing networks with approaches accuracy, the proposed model has fewer parameters.
+
+The Fig. 6 shows the detection effect of CSPDNet on the VisDrone dataset, and it can be seen that the network is still able to recognize the target effectively under few parameters, which benefits from the efficient feature modeling capability.
+
+The Fig. 7, this paper extracts the heatmaps during the feature extraction process of the CSPDNet backbone network. The depth of color in the image represents the current layer’s focus on regions in the image, with deeper colors indicating greater emphasis by the network on this area, hence, higher weights. From (a), (b), and (c) in the figure, it can be seen that the efficiency of feature modeling is enhanced by deformable convolutions, although the weights are somewhat dispersed. Subsequently, by introducing the proposed channel weighting module, the information fusion between separate feature layers can be established, resulting in (d), (e), and (f), enabling the network to focus more on extracting target feature information, further enhancing the ability to model effective features.
+
+The Table 2 shows the validation results of the proposed CSPDNet and benchmark networks on embedded devices after being trained on the VisDrone dataset. By scaling down the number of parameters and computation, the network can be easily deployed on edge devices with limited computational and memory resources, and is able to achieve an inference speed of 25 FPS with the acceleration of hardware-supported GPUs.
+
+Ablation study
+
+DSCBlock validation
+
+To validate the efficacy of DSCBlock, we opted to substitute the optimized Bottlenecks within the advanced model using the foundational architecture of CSPNet. This new model maintains consistency across other components. Moreover, data results are compared on the VisDrone dataset with a Baseline model to observe alterations in both parameters count and accuracy. The network’s structure before and after the replacement is displayed in Fig. 8.
+
+The schematic diagram illustrates the structure of the DSCBlock replacement section. In Fig. 8a, the backbone network design incorporates optimized Bottlenecks using CSPResNet34 serving as the foundational structure within YOLOv57. Conversely, Fig. 8b showcases the component restructured within YOLOv79, adopting the design concept of CSPDenseNet34. Subsequently, Fig. 8c,d represent the optimized structures yielding from replacing Bottleneck with DSCBlock under both foundational network types of CSPNet.
+
+Moreover, Table 3 presents the number of parameters for both the Baseline and optimized models, along with their accuracy performance. Notably, there is a substantial reduction in the network’s parameter count after implementing DSCBlock replacement, while maintaining accuracy levels. Table 3 Results of VisDrone-DET2019. Performance comparison between baseline model and after replacing DSCBlock.
+
+Module	Parameters(MB)	Flops(G)	mAP50	Latency(ms)	FPS	
+YOLOv5s7	7.046	7.964	30.4	3.3	290	
+YOLOv7tiny9	6.039	13.301	35.4	5.5	179	
+YOLOv5s(improve)	6.127(↓13.04%)	5.178(↓34.98%)	30.3	3.7	270	
+YOLOv7tiny(improve)	5.333(↓11.69%)	9.810(↓26.31%)	35.5	6.6	150	
+
+CSPDblock validation
+
+To verify the performance of CSPDblock at different locations in the network, disintegration experiments were conducted by adding CSPDblock to the backbone and neck layers of YOLOv8-P610. Experimental comparisons were conducted on the VisDrone53 dataset to examine variations in model performance. The experimental results are shown in Table 4.
+
+Experimental results indicate that adding CSPDblock at different locations effectively reduces the number of parameters and computations while maintaining accuracy within an acceptable range. Furthermore, with the incorporation of additional modules, there is a substantial reduction in both parameter and computational demands, leading to a modest enhancement in inference speed, while maintaining a minimal loss in accuracy. Table 4 Results of VisDrone -DET2019. Performance comparison between baseline model and after replacing CSPDblock.
+
+Module	Parameters(MB)	Flops(G)	mAP50	Latency(ms)	FPS	
+YOLOv8m-P610	85.9	82.9	43.4	12.2	82	
+YOLOv8m-P6(CSPDBlock-Backbone)	72.2	59.3	42.3	10.0	100	
+YOLOv8m-P6(CSPDBlock-Neck)	72.6	68.0	42.5	10.1	98	
+YOLOv8m-P6(CSPDBlock-Backbone+Neck)	58.9	44.5	42.1	8.1	132	
+
+Table 5 Results of VisDrone -DET2019. Performance comparison between baseline model and after replacing CSPDNet.
+
+Model	Backbone	Parameters of module(MB)	Parameters of backbone(MB)	Flops of module(G)	Flops of backbone(G)	mAP50	
+YOLOv5m7	CSPv6	20.908	12.168	24.077	15.579	36.9	
+PPYOLOEm8	RepResNet	23.428	9.041	24.965	13.302	36.6	
+YOLOv7m9	E-ELANet	36.552	13.372	105.302	67.500	48.3	
+RTMDetm43	CSPNeXt	24.669	12.279	39.093	15.714	32.8	
+YOLOv8m10	Darknet	25.903	11.856	39.566	19.341	43.7	
+YOLOv8s10	Darknet	11.129	5.082	28.457	12.346	39.5	
+YOLOv5m-CSPD	CSPDNet	17.869(↓14.53%)	9.129(↓24.97%)	20.246(↓15.91%)	11.748(↓24.59%)	37.0	
+PPYOLOEm-CSPD	CSPDNet	20.424(↓12.82%)	6.672(↓26.20%)	20.269(↓18.81%)	9.621(↓27.67%)	36.5	
+YOLOv7m-CSPD	CSPDNet	32.857(↓10.10%)	9.667(↓27.63%)	82.901(↓21.27%)	45.100(↓33.19%)	47.5	
+RTMDetm-CSPD	CSPDNet	21.518(↓12.77%)	9.129(↓25.65%)	35.126(↓10.14%)	11.748(↓25.36%)	32.8	
+YOLOv8m-CSPD	CSPDNet	20.495(↓20.87%)	6.489(↓45.26%)	29.369(↓25.77%)	9.229(↓52.28%)	39.1	
+
+CSPDBackbone Validation
+
+Table 5 demonstrated the validation against state-of-the-art models applying CSPNet as the foundational design on the VisDrone dataset. The CSPDBackbone, a novel lightweight CNN backbone network founded on the DSCBlock, is represented. Moreover, CSPDNet predominantly integrates DSCBlock and convolution components. The YOLOv57, PPYOLOE8, YOLOv79, RTMDet43, and YOLOv810 network models in the Table 5 are experimental comparisons performed on mmyolo60.
+
+Moreover, comparative experiments are conducted utilizing advanced target detection algorithms while employing CSPNet as the basis for the feature extraction network. Without altering the network’s Neck and Head design structure, we individually replaced the backbone networks of YOLOv57, PPYOLOE8, YOLOv79, RTMDet43, and YOLOv810. These changes were assessed through experiments on the VisDrone dataset, considering the requirements the UAV-embedded platform’s.
+
+The backbone network CSPDBackbone proposed in this paper is mainly constructed using CSPDBlock, because the backbone network of YOLOv8 is mainly constructed by the C2f module, in which the C2f module in yolov8m multiplexes the Bottleneck. In this paper, we use CSPDBackbone to directly replace the backbone network of YOLOv8m, and the module in the corresponding position after the replacement replaces multiple multiplexed modules in YOLOv8m, which leads to a significant decrease in the number of parameters and computation in the backbone network and thus a significant decrease in the accuracy.
+
+The performance of the yolov8-s model is supplemented in Table 5, where it can be seen that the YOLOv8m-CSPD has a comparable number of parameters in the backbone network as yolov8-s, and has a reduced computational volume, but with a very limited loss of accuracy. At this scale of computational volume, it still maintains competitive performance metrics.
+
+For this experiment, we prioritized medium-sized models, aligning with typical volume constraints on the UAV-embedded platform. The results of the experiments, outlined in Table 5, showcase a significant reduction in the overall model size by 10–20% after replacing the Baseline model. Furthermore, the number of backbone network parameters decreased by 15–25%, with a minimal impact on accuracy.
+
+Conclusion
+
+Due to the limited computational and storage resources of the UAVs mounted platform, algorithms designed to be deployed in such situations are not able to achieve excellent performance with the presence a large number of model parameters. The development of lightweight object detection algorithms can meet the needs of UAVs to perform object detection tasks, while also enhancing real-time performance and achieving better performance.
+
+The proposed DSCBlock effectively reduces the parameter count of the advanced object detection algorithms (such as YOLOv7, YOLOv8, and RTMDet) while maintaining their superior performance. This lightweight module can be incorporated into networks, facilitating the deployment on embedded devices and edge platforms. One of its major contributions lies in multi-dimensional feature modeling of depth-wise separable convolutions and enhancing the efficiency of feature fusion, therefore enriching feature information on a larger scale. Based on these findings, CSPDNet is designed to reuse multilevel feature information in the network structure and utilizes truncated gradient flow to reduce redundant information during the reuse process. Therefore, this allows CSPDNet to use fewer parameters while reaching advanced algorithms level. Finally, experimental results indicate that our proposed DSCBlock and lightweight CSPDNet are more efficient in object detection tasks when being on parameter-limited embedded platforms compared to other outstanding already existing detection algorithms.
+
+To sum up, these works have reduced the parameters of the detection model, but the accuracy can only be maintained within a certain range. Meanwhile, the loss of accuracy due to the characteristics of UAVs aerial images, limited by the predominance of small targets, also requires accommodation in the algorithm design. Moreover, for UAVs to perform target detection tasks, the demand for real-time performance is higher than other detection tasks.
+
+As for the future works, based on the existing lightweight network, the network structure in the inference stage is adaptively adjusted according to the different input images to achieve the purpose of real-time detection.
+
+Acknowledgements
+
+This work was supported by the National Natural Science Foundation of China (NSFC) under Grant 62103056, 62276028 and Qin Xin Talents Cultivation Program, Beijing Information Science Technology University(QXTCP B202403).
+
+Author contributions
+
+Conceptualization, W.H. and Q.C.; methodology, W.H.; software, W.H.; validation, W.H., Q.C.; formal analysis, W.H.; investigation, Q.C.; resources, W.H.; data curation, W.H., W.C.; writing—original draft preparation, W.H.; writing—review and editing, W.H., W.C. and Q.C.; visualization, W.H.; supervision, Q.C.; project administration, Q.C. and W.C.; funding acquisition, Q.C., W.C.
+
+Data availability
+
+The datasets analysed during the current study are available at https://github.com/VisDrone/VisDrone-Dataset.
+
+Competing interests
+
+The authors declare no competing interests.
+
+Publisher's note
+
+Springer Nature remains neutral with regard to jurisdictional claims in published maps and institutional affiliations.
+==== Refs
+References
+
+1. Zhou H Ma A Niu Y Ma Z Small-object detection for uav-based images using a distance metric method Drones 2022 6 308 10.3390/drones6100308
+2. Khosravi MR Rezaee K Moghimi MK Wan S Menon VG Crowd emotion prediction for human-vehicle interaction through modified transfer learning and fuzzy logic ranking IEEE Trans. Intell. Transp. Syst. 2023 10.1109/TITS.2023.3239114
+3. Roy AM Bhaduri J Real-time growth stage detection model for high degree of occultation using densenet-fused yolov4 Comput. Electron. Agric. 2022 193 106694 10.1016/j.compag.2022.106694
+4. Xue Y Smalltrack: Wavelet pooling and graph enhanced classification for uav small object tracking IEEE Trans. Geosci. Remote Sens. 2023 10.1109/TGRS.2023.3305728
+5. Xue Y Mobiletrack: Siamese efficient mobile network for high-speed uav tracking IET Image Proc. 2022 16 3300 3313 10.1049/ipr2.12565
+6. Bochkovskiy, A., Wang, C.-Y. & Liao, H.-Y. M. Yolov4: Optimal speed and accuracy of object detection. arXiv preprint arXiv:2004.10934 (2020).
+7. Jocher, G. et al. ultralytics/yolov5: v7.0—YOLOv5 SOTA Realtime Instance Segmentation, 10.5281/zenodo.7347926 (2022).
+8. Xu, S. et al. Pp-yoloe: an evolved version of yolo. arXiv preprint arXiv:2203.16250 (2022).
+9. Wang, C.-Y., Bochkovskiy, A. & Liao, H.-Y. M. Yolov7: Trainable bag-of-freebies sets new state-of-the-art for real-time object detectors. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, 7464–7475 (2023).
+10. Jocher, G., Chaurasia, A. & Qiu, J. Ultralytics yolov8 (2023).
+11. Liu, Z. et al. Learning efficient convolutional networks through network slimming. In Proceedings of the IEEE international conference on computer vision, 2736–2744 (2017).
+12. Hinton, G., Vinyals, O. & Dean, J. Distilling the knowledge in a neural network. arXiv preprint arXiv:1503.02531 (2015).
+13. Howard, A. G. et al. Mobilenets: Efficient convolutional neural networks for mobile vision applications. arXiv preprint arXiv:1704.04861 (2017).
+14. Deng J Shi Z Zhuo C Energy-efficient real-time uav object detection on embedded platforms IEEE Trans. Comput. Aided Des. Integr. Circuits Syst. 2019 39 3123 3127 10.1109/TCAD.2019.2957724
+15. Zhang, P., Zhong, Y. & Li, X. Slimyolov3: Narrower, faster and better for real-time uav applications. In Proceedings of the IEEE/CVF International Conference on Computer Vision Workshops, 0–0 (2019).
+16. Min X Lwuavdet: A lightweight uav object detection network on edge devices IEEE Internet of Things J. 2024 10.1109/JIOT.2024.3388045
+17. Cao J Bao W Shang H Yuan M Cheng Q Gcl-yolo: A ghostconv-based lightweight yolo network for uav small object detection Remote Sens. 2023 15 4932 10.3390/rs15204932
+18. Ringwald, T., Sommer, L., Schumann, A., Beyerer, J. & Stiefelhagen, R. Uav-net: A fast aerial vehicle detector for mobile platforms. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition Workshops, 0–0 (2019).
+19. Chen N Lodnu: lightweight object detection network in uav vision J. Supercomput. 2023 79 10117 10138 10.1007/s11227-023-05065-x
+20. Iandola, F. N. et al. Squeezenet: Alexnet-level accuracy with 50x fewer parameters and< 0.5 mb model size. arXiv preprint arXiv:1602.07360 (2016).
+21. Zhang, X., Zhou, X., Lin, M. & Sun, J. Shufflenet: An extremely efficient convolutional neural network for mobile devices. In Proceedings of the IEEE conference on computer vision and pattern recognition, 6848–6856 (2018).
+22. Howard, A. et al. Searching for mobilenetv3. In Proceedings of the IEEE/CVF international conference on computer vision, 1314–1324 (2019).
+23. Li, D., Zhou, A. & Yao, A. Hbonet: Harmonious bottleneck on two orthogonal dimensions. In Proceedings of the IEEE/CVF international conference on computer vision, 3316–3325 (2019).
+24. Tan, M. et al. Mnasnet: Platform-aware neural architecture search for mobile. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition, 2820–2828 (2019).
+25. Tan, M. & Le, Q. Efficientnet: Rethinking model scaling for convolutional neural networks. In International conference on machine learning, 6105–6114 (2019).
+26. Tan, M. & Le, Q. Efficientnetv2: Smaller models and faster training. In International conference on machine learning, 10096–10106 (2021).
+27. Xiong, Y. et al. Mobiledets: Searching for object detection architectures for mobile accelerators. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition, 3825–3834 (2021).
+28. Sandler, M., Howard, A., Zhu, M., Zhmoginov, A. & Chen, L.-C. Mobilenetv2: Inverted residuals and linear bottlenecks. In Proceedings of the IEEE conference on computer vision and pattern recognition, 4510–4520 (2018).
+29. Chen, Y. et al. Dynamic convolution: Attention over convolution kernels. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition, 11030–11039 (2020).
+30. Tan, M. & Le, Q. V. Mixconv: Mixed depthwise convolutional kernels. arXiv preprint arXiv:1907.09595 (2019).
+31. He, K., Zhang, X., Ren, S. & Sun, J. Deep residual learning for image recognition. In Proceedings of the IEEE conference on computer vision and pattern recognition, 770–778 (2016).
+32. Huang, G., Liu, Z., Van Der Maaten, L. & Weinberger, K. Q. Densely connected convolutional networks. In Proceedings of the IEEE conference on computer vision and pattern recognition, 4700–4708 (2017).
+33. Xie, S., Girshick, R., Dollár, P., Tu, Z. & He, K. Aggregated residual transformations for deep neural networks. In Proceedings of the IEEE conference on computer vision and pattern recognition, 1492–1500 (2017).
+34. Wang, C.-Y. et al. Cspnet: A new backbone that can enhance learning capability of cnn. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition workshops, 390–391 (2020).
+35. Lee, Y., Hwang, J.-w., Lee, S., Bae, Y. & Park, J. An energy and gpu-computation efficient backbone network for real-time object detection. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition workshops, 0–0 (2019).
+36. Huang, G., Liu, Z., Van Der Maaten, L. & Weinberger, K. Q. Densely connected convolutional networks. In Proceedings of the IEEE conference on computer vision and pattern recognition, 4700–4708 (2017).
+37. Huang, G., Liu, S., Van der Maaten, L. & Weinberger, K. Q. Condensenet: An efficient densenet using learned group convolutions. In Proceedings of the IEEE conference on computer vision and pattern recognition, 2752–2761 (2018).
+38. Zhou, D., Hou, Q., Chen, Y., Feng, J. & Yan, S. Rethinking bottleneck structure for efficient mobile network design. In Computer Vision–ECCV 2020: 16th European Conference, Glasgow, UK, August 23–28, 2020, Proceedings, Part III 16, 680–697 (Springer, 2020).
+39. Convolutions, C.-W. Channelnets: Compact and efficient convolutional neural networks via. IEEE Transactions on pattern analysis and machine intelligence 43 (2021).
+40. Liang Y Li M Jiang C Liu G Cemodule: A computation efficient module for lightweight convolutional neural networks IEEE Trans. Neural Netw. Learn. Syst. 2021 34 6069 10.1109/TNNLS.2021.3133127
+41. Liu, W. et al. Ssd: Single shot multibox detector. In Computer Vision–ECCV 2016: 14th European Conference, Amsterdam, The Netherlands, October 11–14, 2016, Proceedings, Part I 14, 21–37 (Springer, 2016).
+42. Wang, R. J., Li, X. & Ling, C. X. Pelee: A real-time object detection system on mobile devices. Advances in neural information processing systems 31 (2018).
+43. Lyu, C. et al. Rtmdet: An empirical study of designing real-time object detectors. arXiv preprint arXiv:2212.07784 (2022).
+44. Wang, C.-Y., Bochkovskiy, A. & Liao, H.-Y. M. Scaled-yolov4: Scaling cross stage partial network. In Proceedings of the IEEE/cvf conference on computer vision and pattern recognition, 13029–13038 (2021).
+45. Dai, J. et al. Deformable convolutional networks. In Proceedings of the IEEE international conference on computer vision, 764–773 (2017).
+46. Zhu, X., Hu, H., Lin, S. & Dai, J. Deformable convnets v2: More deformable, better results. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition, 9308–9316 (2019).
+47. Wang, W. et al. Internimage: Exploring large-scale vision foundation models with deformable convolutions. arXiv preprint arXiv:2211.05778 (2022).
+48. Xiong, Y. et al. Efficient deformable convnets: Rethinking dynamic and sparse operator for vision applications. arXiv preprint arXiv:2401.06197 (2024).
+49. Xie, S., Girshick, R., Dollár, P., Tu, Z. & He, K. Aggregated residual transformations for deep neural networks. In Proceedings of the IEEE conference on computer vision and pattern recognition, 1492–1500 (2017).
+50. Yu, C. et al. Lite-hrnet: A lightweight high-resolution network. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition, 10440–10450 (2021).
+51. Feng, C., Zhong, Y., Gao, Y., Scott, M. R. & Huang, W. Tood: Task-aligned one-stage object detection. In 2021 IEEE/CVF International Conference on Computer Vision (ICCV), 3490–3499 (IEEE Computer Society, 2021).
+52. Li X Generalized focal loss: Learning qualified and distributed bounding boxes for dense object detection Adv. Neural. Inf. Process. Syst. 2020 33 21002 21012
+53. Du, D. et al. Visdrone-det2019: The vision meets drone object detection in image challenge results. In Proceedings of the IEEE/CVF international conference on computer vision workshops, 0–0 (2019).
+54. Lin, T.-Y. et al. Microsoft coco: Common objects in context. In Computer Vision–ECCV 2014: 13th European Conference, Zurich, Switzerland, September 6-12, 2014, Proceedings, Part V 13, 740–755 (Springer, 2014).
+55. RangiLyu. Nanodet-plus: Super fast and high accuracy lightweight anchor-free object detection model. https://github.com/RangiLyu/nanodet (2021).
+56. Yu, G. et al. Pp-picodet: A better real-time object detector on mobile devices. arXiv preprint arXiv:2111.00902 (2021).
+57. Li, C. et al. Yolov6 v3.0: A full-scale reloading (2023). arXiv:2301.05586.
+58. Vasu, P. K. A., Gabriel, J., Zhu, J., Tuzel, O. & Ranjan, A. Mobileone: An improved one millisecond mobile backbone. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition, 7907–7917 (2023).
+59. Zhu, X., Hu, H., Lin, S. & Dai, J. Deformable convnets v2: More deformable, better results. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition, 9308–9316 (2019).
+60. Contributors, M. MMYOLO: OpenMMLab YOLO series toolbox and benchmark. https://github.com/open-mmlab/mmyolo (2022).

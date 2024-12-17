@@ -1,0 +1,382 @@
+
+==== Front
+PLoS One
+PLoS One
+plos
+PLOS ONE
+1932-6203
+Public Library of Science San Francisco, CA USA
+
+PONE-D-23-40658
+10.1371/journal.pone.0300358
+Research Article
+Physical Sciences
+Physics
+Thermodynamics
+Entropy
+Physical Sciences
+Mathematics
+Applied Mathematics
+Algorithms
+Research and Analysis Methods
+Simulation and Modeling
+Algorithms
+Research and Analysis Methods
+Simulation and Modeling
+Medicine and Health Sciences
+Oncology
+Cancers and Neoplasms
+Research and Analysis Methods
+Mathematical and Statistical Techniques
+Cluster Analysis
+Hierarchical Clustering
+Physical Sciences
+Mathematics
+Applied Mathematics
+Algorithms
+Clustering Algorithms
+Research and Analysis Methods
+Simulation and Modeling
+Algorithms
+Clustering Algorithms
+Medicine and Health Sciences
+Oncology
+Cancers and Neoplasms
+Lung and Intrathoracic Tumors
+Medicine and Health Sciences
+Oncology
+Cancers and Neoplasms
+Head and Neck Cancers
+SillyPutty: Improved clustering by optimizing the silhouette width
+SillyPutty algorithm
+https://orcid.org/0009-0007-4221-7354
+Bombina Polina Conceptualization Formal analysis Investigation Writing – original draft Writing – review & editing 1 *
+Tally Dwayne Data curation Formal analysis 2
+Abrams Zachary B. Conceptualization Data curation Formal analysis Project administration Supervision 3
+https://orcid.org/0000-0002-7630-2123
+Coombes Kevin R. Conceptualization Data curation Formal analysis Investigation Methodology Project administration Resources Software Supervision Validation Visualization Writing – review & editing 1
+1 Department of Biostatistics, Data Science and Epidemiology, Georgia Cancer Center at Augusta University, Augusta, GA, United States of America
+2 Department of Informatics, Indiana University, United States of America
+3 Division of Data Science and Biostatistics, Institute for Informatics, Washington University School of Medicine, Saint Louis, MO, United States of America
+Siudak Dariusz Editor
+Lodz University of Technology: Politechnika Lodzka, POLAND
+Competing Interests: The authors have declared that no competing interests exist.
+
+* E-mail: pbombina@augusta.edu
+2024
+7 6 2024
+19 6 e03003584 12 2023
+26 2 2024
+© 2024 Bombina et al
+2024
+Bombina et al
+https://creativecommons.org/licenses/by/4.0/ This is an open access article distributed under the terms of the Creative Commons Attribution License, which permits unrestricted use, distribution, and reproduction in any medium, provided the original author and source are credited.
+
+Clustering is an important task in biomedical science, and it is widely believed that different data sets are best clustered using different algorithms. When choosing between clustering algorithms on the same data set, reseachers typically rely on global measures of quality, such as the mean silhouette width, and overlook the fine details of clustering. However, the silhouette width actually computes scores that describe how well each individual element is clustered. Inspired by this observation, we developed a novel clustering method, called SillyPutty. Unlike existing methods, SillyPutty uses the silhouette width for individual elements as a tool to optimize the mean silhouette width. This shift in perspective allows for a more granular evaluation of clustering quality, potentially addressing limitations in current methodologies. To test the SillyPutty algorithm, we first simulated a series of data sets using the Umpire R package and then used real-workd data from The Cancer Genome Atlas. Using these data sets, we compared SillyPutty to several existing algorithms using multiple metrics (Silhouette Width, Adjusted Rand Index, Entropy, Normalized Within-group Sum of Square errors, and Perfect Classification Count). Our findings revealed that SillyPutty is a valid standalone clustering method, comparable in accuracy to the best existing methods. We also found that the combination of hierarchical clustering followed by SillyPutty has the best overall performance in terms of both accuracy and speed.
+
+Availability: The SillyPutty R package can be downloaded from the Comprehensive R Archive Network (CRAN).
+
+http://dx.doi.org/10.13039/100018189 Center for Big Data Analytics, University of Texas at Austin Coombes Kevin R. This study was supported in the form of funding from the Georgia Cancer Center at Augusta University. Data AvailabilityThe SillyPutty R package can be downloaded from the Comprehensive R Archive 351 Network (CRAN). Code to perform and analyze the simulations described here can be found in a Git 353 project hosted at https://gitlab.com/krcoombes/sillyputty.
+Data Availability
+
+The SillyPutty R package can be downloaded from the Comprehensive R Archive 351 Network (CRAN). Code to perform and analyze the simulations described here can be found in a Git 353 project hosted at https://gitlab.com/krcoombes/sillyputty.
+==== Body
+pmcIntroduction
+
+In modern data analysis, uncovering inherent groupings within a collection of patterns, data points, or objects has significant value. Unsupervised clustering is a crucial tool to tackle this challenge. It is widely acknowledged that there is no one-size-fits-all approach [1, 2]. It is often important to tailor the cluster analysis method to the specific requirements of the data at hand, based on domain expertise and the ultimate purpose of clustering [3].
+
+Cluster algorithms have been used, and new ones proposed, for decades. Ward’s linkage rule for hierarchical clustering was proposed in 1963 [4]. The popular K-means method was introduced by 1967 [5]. The methods of partitioning around medoids (PAM) and clustering large applications (CLARA) were introduced by Kaufman and Rooseeuw in the late 1980’s [6, 7]. After the development of high throughput biological assays (starting with gene expression microarrays) in the late 1990’s, the following decade saw the introduction of new algorithms designed to work with larger data sets. These included spectral clustering from 2001 [8–10], and subspace clustering [11, 12], which started with the CLIQUE algorithm in 1998 [13].
+
+Different algorithms rely on different models of the shapes of clusters, and they optimize different metrics. K-means, for example, is a heuristic algorithm to minimize the within-group sum-of-squares. PAM is a related method that generalizes the K-means optimization target, the Euclidean distance, to arbitrary distance metrics. Existing clustering algorithms have used other measures to guide their heuristics, including density-based methods [14] or gradient descent optimization [15].
+
+In 1987, Rousseeuw introduced an idea known as the silhouette width (SW) [16]. The SW is defined for each clustered object, producing a value in the interval [−1, + 1]. The SW gives us an idea of how strongly we should believe that an object has been assigned to the correct cluster. Positive values indicate good clustering, negative values indicate that the object is closer to a different cluster. To date, its main application has been to use the mean silhouette width (ASW) over all objects to assess the overall quality of a clustering assignment and to decide on the “correct” number of clusters [7].
+
+Inspired by the applications of ASW to assess cluster quality, we had the idea that a heuristic clustering method based on maximizing the mean silhouette width might be useful. We developed a novel clustering method, called “SillyPutty”, that relies on the individual SW values to drive the heuristic. To our knowledge, no one has previously used the silhouette width of individual objects in this way.
+
+In this manuscript, we compare the performance of our new SillyPutty algorithm to the top performing methods arising from a recent study that examined existing clustering algorithms [17]. We use both simulated and real-life data. Both internal and external clustering validation metrics were considered to evaluate the algorithms [18]. In the “Materials and methods” section, we review the silhouette width and describe the SillyPutty algorithm in detail. Next, we outline the data generation methodology and describe the performance metrics used to compare the algorithms. Finally, we analyze and present the performance results.
+
+Materials and methods
+
+All computations were performed using R version 4.3.2 (2023–10-31 ucrt) of the R Statistical Programming Environment [19].
+
+Existing cluster algorithms
+
+The recent study conducted by Rodriguez and colleagues [17] involved a thorough evaluation wherein they compared nine frequently employed clustering methods available in the R language [19]. In our work, for each simulated data set, we compare the performance of SillyPutty with the “winners” of their analysis: PAM, CLARA, Hierarchical, K-means, Spectral, and Subspace.
+
+We used the implementations of both hierarchical clustering (hclust) with Ward’s linkage [4] and the K-means (kmeans) algorithm [5] from version 4.3.2 of the stats R package. We used the implementations of the PAM (pam; [6]) and CLARA (clara; ~ []bib7) algorithms from version 2.1.4 of the cluster R package. We used the implementation of spectral clustering (specc; [8, 10]) from version 0.9.32 of the kernlab R package. Finally, we used the implementation of subspace clustering (hddc; [11]) from version 2.2.1 of the HDclassif R package.
+
+Silhouette width
+
+The silhouette width is a well-known and popular measure of how well each data point fits its designated cluster. Let X = {x1, …, xn} ⊂ RF be a finite point set along with a pairwise distance metric D. Here F is the number of features measured at each data point. Define K to be the (true) number of clusters. The silhouette width for an observation xi ∈ X is calculated as follows: s(xi)=b(xi)-a(xi)max(b(xi),a(xi)), (1)
+
+Here b(xi) is a measure of separation; that is, the minimum (over other clusters) average distance between xi and the data points in the other cluster. Similarly, a(xi) is a measure of cohesion; that is, the average distance between xi and every data point in its assigned cluster.
+
+The silhouette width s(xi) falls within the range [−1, 1]. A value near 1 signifies that the data point is well-clustered, indicating distinct separations between clusters and strong cohesion within each group. On the other hand, a value closer to 0 implies overlapping clusters, while a value near −1 suggests that the data point has been miscassified.
+
+SillyPutty algorithm
+
+We propose a novel clustering algorithm, called SillyPutty, in this section. SillyPutty is a heuristic algorithm based on the concept of silhouette widths. Its goal is to iteratively optimize the cluster assignments to maximize the average silhouette width. SillyPutty starts with any given set of cluster assignments, either user-specified, randomly chosen, or obtained from other clustering methods. SillyPutty enters a loop where it iteratively refines the clustering. The algorithm calculates the silhouette widths for the current clustering. Then it identifies the data point with the lowest (most negative) silhouette width, which implies a potential misclassification. The algorithm reassigns this data point to the cluster to which it is closest. The loop continues until all data points have non-negative silhouette widths, or an early termination condition is reached. SillyPutty halts under three conditions:
+
+When all data points are well-classified, as evidenced by having all silhouette width non-negative, indicating convergence.
+
+When the maximum number of iterations is reached, to avoid infinite loops.
+
+When it detects a possible infinite loop by finding the same vector of silhouette widths within the last n iterations, where n is user-specified.
+
+Upon convergence or termination, SillyPutty returns the refined clustering, along with the corresponding silhouette widths and other relevant information. A summary of the SillyPutty workflow is shown in Fig 1.
+
+10.1371/journal.pone.0300358.g001 Fig 1 SillyPutty algorithm.
+
+Axiomatic characterization of the ASW
+
+Since the SillyPutty algorithm is rooted in the ASW concept, it is useful to verify how well ASW, a metric for cluster quality, aligns with theoretical principles. Batool and Hennig [20] used an axiomatic approach to assess ASW. They found that, as a clustering quality measure,
+
+ASW is scale invariant; that is, the result remains the same even when all dissimilarities are uniformly scaled by a constant factor.
+
+ASW is consistent; that is, reducing or maintaining all within-cluster dissimilarities while increasing or maintaining all between-cluster dissimilarities, does not alter the result.
+
+ASW is rich; that is, every conceivable clustering can be generated by an appropriate dissimilarity measure
+
+0.1 Hybrid approaches
+
+The standalone SillyPutty algorithm starts with purely random cluster assignments, repeating the algorithm with (by default) 100 different random starting points. Since SillyPutty can start with any cluster assignments, we also investigated the efficacy of following other clustering methods by applying SillyPutty to their cluster assignments. As SillyPutty requires a distance matrix as one of its inputs, we compute distances using the Euclidean metric. Our goal with this part of the study was to assess whether integrating SillyPutty with existing clustering techniques can improve their performance.
+
+Simulated datasets
+
+To generate realistic datasets, we employed version 2.0.10 of the Umpire (Ultimate Microarray Prediction, Inference, and Reality Engine) R package [21, 22]. Although originally developed in the context of gene expression microarrays, Umpire can sill be used to generate gene-expression-like data analogous to log-transformed mRNA sequencing data, from multiple clusters with known “ground truth”. These data mimic the characteristics of actual cancer transcriptomics data.
+
+We generated data sets that differ in the number of clusters (3, 6 or 12), the sample size (600 or 1000), and the feature size, (e.g., number of genes; 5000 or 10000). Moreover, we modify the data by applying different levels of noise (additive on the log scale), categorized as low, medium, or high. Mathematically, if Ygi represents the observed expression of gene g in sample i, Sgi represents the true biological signal of gene g in sample i, and ϵgi defines the additive noise for gene g in sample i, then the noise model can be represented as: Ygi=Sgi+ϵgi (2)
+
+In our framework, ϵ ∼ N(ν, τ). We set ν = 0.1 and vary τ, using a gamma distribution with different means to model differing standard deviations τ.
+
+The summary of distinct datasets that were generated is shown in Table 1. We repeat each set of parameters 19 times, so that our study encompasses a total of 513 individual simulations. To illustrate the simulated data, we present graphical summaries of four data sets from one replicate run (Fig 2). These include (A) a data set that should be easy to classify, with three clusters, 600 samples, 5000 features, and low noise; (B) another “easy” data set, with six clusters, 1000 samples, 5000 features, and low noise, (C) a data set of “intermediate” difficulty, with six clusters, 600 samples, 10000 features, and medium noise; and (D) a “hard” data set, with twelve clusters, 1000 samples, 10000 features, and high noise.
+
+10.1371/journal.pone.0300358.g002 Fig 2 UMAP plots of four examples of simulated data sets using different parameters.
+
+(A) 3 clusters, 600 samples, 5000 features, low noise. (B) 6 clusters, 1000 samples, 5000 features, low noise. (C) 6 clusters, 600 samples, 10000 features, medium noise. (D) 12 clusters, 1000 samples, 10000 features, high noise.
+
+10.1371/journal.pone.0300358.t001 Table 1 List of cancer genomics datasets generated by the Umpire package.
+
+Dataset	Clusters	Noise	Samples	Features	
+1	12	High	1000	10000	
+2	12	Low	1000	10000	
+3	12	Low	1000	5000	
+4	12	Low	600	10000	
+5	12	Low	600	5000	
+6	12	Medium	1000	10000	
+7	12	Medium	1000	5000	
+8	12	Medium	600	10000	
+9	12	Medium	600	5000	
+10	3	High	1000	10000	
+11	3	Low	1000	10000	
+12	3	Low	1000	5000	
+13	3	Low	600	10000	
+14	3	Low	600	5000	
+15	3	Medium	1000	10000	
+16	3	Medium	1000	5000	
+17	3	Medium	600	10000	
+18	3	Medium	600	5000	
+19	6	High	1000	10000	
+20	6	Low	1000	10000	
+21	6	Low	1000	5000	
+22	6	Low	600	10000	
+23	6	Low	600	5000	
+24	6	Medium	1000	10000	
+25	6	Medium	1000	5000	
+26	6	Medium	600	10000	
+27	6	Medium	600	5000	
+
+Real-world dataset: TCGA, squamous cell cancers
+
+To illustrate the performance of SillyPutty on real-world data, we used data from The Cancer Genome Atlas (TCGA), a pan-cancer public data repository containing clinical and omics data. We downloaded the Level III normalized RNA-Seq data from the FireBrowse web site (http://firebrowse.org/ [23] on 6 August 2018. While the full dataset contains 8895 patient samples, across 32 diverse cancer types, we focused on squamous cell cancers, specifically lung squamous cell carcinoma (LUSC), head and neck squamous cell carcinoma (HNSC), bladder urothelial carcinoma (BLCA), and cervical squamous cell carcinoma (CESC). We selected these cancers because previous published analyses [24] suggested that they clustered close together, possibly overlapping after dimension reduction, and thus posed a more serious challenge for methods to identify the best clustering solution.
+
+To streamline our analysis, we excluded metastatic and normal samples from consideration and worked with primary solid tumors only. As a result, HNSC comprises 520 samples, BLCA has 408 samples, CESC includes 304 samples, and LUSC involves 552 samples. Every sample includes data regarding the expression levels of 20, 531 genes. We clustered the samples using a correlation distance matrix, where distance is computed by subtracting the Pearson correlation coefficient from 1.
+
+Comparative evaluation
+
+For each set of simulation parameters, we computed the average performance across the repetitions to determine the most effective algorithm. Our evaluation criteria encompass both external measures (the Adjusted Rand Index (ARI) and Entropy), and internal measures (ASW and the “Normalized Within-group Sum-of-Squares” (NWSS)). Finally, we consider a measure we call the Perfect Classification Count (PCC). Furthermore, we assess and compare the computational runtime of all algorithms. For squamous cell cancers dataset, we computed ASW, ARI, WSS and Entropy metrics.
+
+Adjusted Rand index (ARI)
+
+The ARI is a measure of agreement between two sets of clustering assignments. It is computed as follows: ARI=∑ij(nij2)-[∑i(ai2)∑j(bj2)]/(n2)12[∑i(ai2)+∑j(bj2)]-[∑i(ai2)∑j(bj2)]/(n2),
+
+where nij is the number of data points that are in the same cluster in both clustering solutions, ai is the total number of data points in cluster i in the first clustering solution, bj is the total number of data points in cluster j in the second clustering solution, and n is the total number of data points.
+
+The “external” aspect of ARI arises because we compare any algorithm-derived cluster to the known truth. It is the metric of choice for assessing overall agreement between clustering methods, while taking into account the potential occurrence of coincidental agreement [18].
+
+Entropy
+
+Entropy measures the degree of impurity or disorder within each cluster. The entropy of a single cluster Si is defined to be E(Si)=-1log(K)∑i=1Knij|Si|log(nij|Si|) (3)
+
+Here, nij is the number of data points in the same cluster in both clustering solutions for cluster Si, |Si| is the total number of data points in cluster in the second clustering solution, K is the number of clusters.
+
+Global entropy is defined to be the sum of the individual cluster entropies, weighted by the cluster size: E=∑i=1K|Si|nE(Si) (4)
+
+Global entropy takes values between 0 and 1. Lower entropy values indicate that the cluster assignments are more homogeneous which one expects will better correspond to the ground truth. To calculate the entropy, we call the external_validation function from version 1.3.1 of the ClusterR R package. The entropy measure is also “external”, since we compare each clustering solution to the known ground truth.
+
+Mean silhouette width
+
+The SW formula was presented above (Eq 1). We use the silhouette function from version 2.1.4 of the cluster R package to calculate the ASW.
+
+Normalized within-group sum-of-squares
+
+The within-group sum of square errors is equivalent to the sum of distances of each point from the centroid of its assigned cluster. This can be written as: WSS=∑i=1K∑x∈Si‖x-μi‖2, (5)
+
+where μi is the centroid of the cluster Si. This equation is the same as the K-means objective function. For our analysis, we wrote our own function wss to return the WSS for a (numeric) data frame. Then we normalize WSS by dividing by the WSS from the true cluster assignments so that the result does not depend on the size of the data set. We expect NWSS to take values in [1, ∞).
+
+Perfect classification count
+
+We introduce a metric called Perfect Classification Count (PCC). PCC is the number of times (out of all 513 simulations) that a method correctly classifies all samples in a simulated data set. The percentage of perfect classifications is an empirical estimate of the probability that a method will produce perfect (“true”) clusters.
+
+Results
+
+Running time
+
+This section starts with the outcomes for simulated datasets. We recorded the average run time for each method. The values we recorded are for running each method on a complete set of 27 different combinations of simulation parameters as in Table 1. The running times of algorithms are provided in Table 2. We note that the standalone SillyPutty clustering exhibits the slowest performance, with an average convergence time of 9629 seconds. Hierarchical clustering outperforms the rest of the algorithms demonstrating the highest time efficiency than any other method.
+
+10.1371/journal.pone.0300358.t002 Table 2 Average running time of algorithms across all simulations.
+
+Method	Running Time (seconds)	
+Hierarchical	1.0	
+Kmeans+Sillya	4.7	
+Subb+Sillya	5.5	
+Hierc+Sillya	16.9	
+Specc+Sillya	26.1	
+PAM+Sillya	40.3	
+CLARA+Sillya	46.3	
+Kmeans	99.2	
+CLARA	120.8	
+Spectral	416.2	
+Subspace	3214.8	
+PAM	8925.7	
+SillyPutty	9628.9	
+a Hybrid methods report the time for SillyPutty.
+
+b Sub = Subspace clustering.
+
+c Hier = Hierarchical clustering.
+
+d Spec = Spectral clustering.
+
+Clustering performane metrics
+
+In Fig 3, we show the distributions of values for four performance metrics for each method across all simulations. It is clear that the methods PAM and CLARA are far inferior to other methods, while Spectral and Hierarchical have intermediate performance. In general, following almost any method by applying SillyPutty makes the results substantially better.
+
+10.1371/journal.pone.0300358.g003 Fig 3 Evaluation of algorithms.
+
+Values over 19 replicate simulated sets were averaged. Distributions of averaged values over 27 sets of simulation parameters are displayed in ‘bean plots’ for each of the 13 methods (plus true clusters) (A) Adjusted Rand Index. (B) Mean silhouette width. (C) Normalized within-group sum of squares. (D) Entropy.
+
+Moreover, in Table 3, we report a summary of mean values of each performance metric for each method across all simulations. By these measures, SillyPutty from random starts has the best performance of standalone algorithms. CLARA and PAM have the worst performance, with hierarchical clustering (HC) and Spectral clustering in the middle. Applying SillyPutty after running another algorithm makes very little change to K-means or Subspace clustering, but it dramatically improves the performance of the four inferior methods, causing all four to perform better than K-means or Subspace. The best overall performance in four out of five metrics is found by first doing hierarchical clustering followed by SillyPutty (HCSilly), with perfect performance in 70% of simulations, average ARI of 0.94, average SW of 0.027, and average NWSS of 1.
+
+10.1371/journal.pone.0300358.t003 Table 3 The averaged values of the validity indices for all clustering methods across all simulated data experiments.
+
+Method	SW	ARI	NWSS	Entropy	PCC	
+CLARA	0.008	0.272	1.008	0.612	0	
+PAM	0.012	0.336	1.007	0.617	0	
+Spectral	0.020	0.614	1.007	0.287	122	
+Hierarchical	0.023	0.717	1.009	0.248	13	
+Subspace	0.024	0.846	1.005	0.075	210	
+Kmeans	0.024	0.846	1.005	0.075	226	
+Kmeans+Silly	0.025	0.859	1.006	0.066	222	
+Sub+Silly	0.025	0.867	1.007	0.063	229	
+Spec+Silly	0.025	0.873	1.006	0.070	255	
+CLARA+Silly	0.026	0.888	1.006	0.059	275	
+PAM+Silly	0.026	0.915	1.005	0.053	322	
+SillyPutty	0.027	0.930	1.006	0.031	318	
+Hier+Silly	0.027	0.935	1.005	0.041	355	
+Truth	0.027	1.000	1.008	0.000	513	
+
+Effects of simulation parameters
+
+We next looked at the ways in which the simulation parameters affected the Adjusted Rand Index (Fig 4). We performed this analysis for the number of clusters, the number of samples, the number of features, and the noise level. It is clear that more clusters, more samples, more features, or more noise decrease the ARI. We also looked at combinations of parameters and concluded that the effects appeared to be independent and additive (see S1 Fig). We performed similar analyses for other outcome measures (ASW, Entropy) and found qualitatively similar results. However, NWSS appeared not to be significantly impacted by the factors under consideration.
+
+10.1371/journal.pone.0300358.g004 Fig 4 Effect of simulation parameters on Adjusted Rand Index.
+
+(A) Clusters. (B) Samples (C) Features. (D) Noise.
+
+Squamous cell cancers
+
+Finally, we apply clustering methods to a real-world data set (Fig 5). We report the evaluation metrics for each clustering algorithm in Table 4. The top-performance for ASW (0.1655) and Entropy (0.3900) was obtained by SillyPutty, HCSilly and PAMSilly, all exhibiting the same clustering. However the best results for ARI were achieved by Spectral (0.5265) and PAM (0.5027), with the three methods that had the best ASW close behind at 0.4285. K-Means displayed unfavorable performance across all metrics, with ASW at 0.1291, ARI at 0.3140, and entropy at 0.6442. It is worth noting that “Truth” (defined as the four known cancer cohorts) exhibits poor performance when assessed by SW, reflecting the similarities between these cancer across tissue of origin.
+
+10.1371/journal.pone.0300358.g005 Fig 5 Nonlinear t-SNE mapping depicts the arrangement of squamous cell cancers aligned with the HCSilly clustering.
+
+10.1371/journal.pone.0300358.t004 Table 4 Summary of clustering quality metrics for squamous cell cancers dataset.
+
+Algorithm	SW	ARI	WSS	Entropy	
+HC	0.098	0.416	29231238	0.507	
+PAM	0.135	0.503	28587906	0.485	
+Spectral	0.147	0.527	28428120	0.443	
+Subspace	0.088	0.312	29615208	0.615	
+CLARA	0.127	0.256	29863050	0.454	
+K-Means	0.129	0.314	28667449	0.644	
+SillyPutty	0.165	0.428	29018898	0.390	
+HCSilly	0.165	0.428	29018898	0.390	
+PAMSilly	0.165	0.428	29018898	0.390	
+SpectralSilly	0.165	0.430	29003132	0.392	
+SubcpaceSilly	0.154	0.388	29013501	0.509	
+CLARASilly	0.157	0.374	29615149	0.407	
+KMSilly	0.154	0.388	29013501	0.509	
+Truth	0.118	1.000	29468225	0.000	
+
+Discussion
+
+In this study, we conducted a comprehensive comparison of unsupervised clustering methods using using both simulated and real-world data. Our goal was to identify the top-performing method and assess the potential of SillyPutty, a novel clustering algorithm that optimizes silhouette width, in improving overall clustering performance.
+
+For simulated data, in terms of accuracy, SillyPutty had better performance than any of the existing clustering methods. It achieved perfect agreement with the known ground truth in 318 (61.9%) out of 513 data sets, its mean ARI score was 0.930, and its mean entropy was 0.031. By all three measures, it was the best of the standalone algorithms.
+
+However, this accuracy came at a cost; SillyPutty was by far the slowest standalone algorithm (taking an average of 9629 seconds, or 2.67 hours, over a 27-data-set simulation run). These large elapsed times appear to arise from two sources. First, we computed the length of time to run the base algorithm from 100 random starts. So, the mean time for a single run is only 96 seconds, about the same time taken by K-means. A second source of longer run times is the amount of work that must be performed when starting from random cluster assignments. The amount of time reported in Table 2 to run SillyPutty in “hybrid” methods (that is, after first running one of the other algorithms) was considerably shorter, rangeing from 4.7 seconds after K-means to 46.3 seconds after CLARA. It is interesting to note that those times appear to be related to the quality of the initial clustering. The better the initial clustering, the faster SillyPutty completes its task. The fastest combined mean run time (17.9 seconds) for a hybrid method was achieved by first performing hierarchical clustering (which is extremely fast) and then running SillyPutty.
+
+We also found that the same hybrid combination, hierarchical clustering followed by SillyPutty, was the best method overall in our experiments. It had a perfect classification count of 355/513 (69.2%), a mean ARI of 0.935, and a mean entropy of 0.041. These results are significantly better than the best existing standalone method, K-means, with PCC = 236/513 (46.0%), ARI = 0.846, and entropy = 0.075. In fact, following any existing method with SillyPutty improved the performance. Of course, bigger improvements were observed when following algorithms that had worse performance to start with (witness the results when following PAM or CLARA). This result suggests that SillyPutty’s unique approach of maximizing silhouette width can significantly enhance clustering outcomes compared to established methods.
+
+The results displayed in Fig 4 also provide some insight into how some of the characteristics of a data set are likely to affect clustering results. The decrease in performance associated with more clusters (which provides more different ways to misclassify an individual sample) or more samples (which means more things that might be misclassified) or more noise were expected. The decrease in ARI and other measures in the presence of more features was unexpected. It may be explained by an increased difficulty of extracting the true signal in the presence of additional features that are entirely unrelated to the true subtype. This finding suggests that, with real data, it may be valuable to filter out features that do not seem to help separate clusters, such as those that do not vary much across the data set, before trying to cluster the data.
+
+When applying the clustering methods to a real-life dataset of squamous cell cancers taken from TCGA, our findings reveal that the highest ASW wasproduced by SillyPutty, HCSilly and PAMSilly (0.1655), while the ASW associated with the ground truth is only 0.1182. This observation can be attributed to the presence of overlapping clusters representing cancer types. This overlap can be attributed to a shared characteristic: despite arising in different organ systems, these cancers demonstrate a commonality in their underlying biology, originating from the same progenitor cells.
+
+It is also possible that some tumors may exhibit characteristics of more than one cancer type, leading to ambiguity in classification. Tumors that display characteristics of more than one cancer type are often referred to as mixed or hybrid tumors. These tumors pose a challenge in classification and diagnosis due to their diverse and complex nature. The ambiguity arises because the tumor cells may exhibit features associated with distinct cancer types, making it difficult to categorize them into a single well-defined classification.
+
+When SillyPutty is used across different algorithms for squamous cell cancers, there is a consistent enhancement observed in SW and Entropy. However, it should be acknowledged that improvements in ARI values may not be consistently observed. It is important to highlight that ARI may not offer comprehensive insights into biological data, particularly in cases where disease labels lack homogeneity.
+
+The promising performance of SillyPutty, especially when coupled with hierarchical clustering, opens up opportunities for its application in various domains. SillyPutty’s ability to enhance clustering outcomes could significantly impact fields like biology, where identifying distinct subgroups in large data sets is critical for understanding complex biological systems.
+
+We cannot end this manuscript without mentioning some of the limitations of the present study. One of the current applications of clustering to biology lies in the realm of single cell RNA sequencing (scRNA). Such data sets frequently contain tens of thousands or even millions of individual cells that need to be clustered. Our simulations were limited to clustering 1000 samples. While that number is adequate for modern day studies of bulk samples, we cannot yet say that the performance will remain the same with much larger data sets. The speed of the best hybrid combination (hierarchical plus SillyPutty) suggest that it will be feasible to test that combination. But the time taken to run SillyPutty from 100 random starts would be a challenge. In principle, there are several ways to speed up the algorithm. For example, one could reduce the time to compute silhouette widths when moving one sample to another cluster by only recomputing values for the two clusters that changed. It might also be possible to recluster more than one sample during each iteration, though research would need to be done to determine what the optimal “move size” should be. In addition, it might be possible to transport some of the computations either into a faster compiled language or onto a parallel processing framework.
+
+A second potential application area in biology or medicine is in the area of clinical data, which is often characterized as “mixed”, since it contains a mixture of binary data (symmetric or asymmetric), categorical data (nominal or ordinal), and continuous data on widely divergent scales. The challenge here is determining a reasonable distance metric. Again, we have not performed studies on this kind of data, so we can not assert that the best method found in our paper will remain the best in that context. However, the Umpire package that we developed previously [21] and used to generate the data sets here has already been extended to be able to simulate mixed clinical data [22] and shown to be useful [25, 26].
+
+Conclusion
+
+In conclusion, SillyPutty demonstrates great promise as a valuable addition to the toolkit of clustering practitioners. It is competitive with the best existing clustering algorithms. Its effectiveness in improving clustering outcomes warrants continued investigation and exploration across a diverse range of data sets and real-world applications.
+
+Supporting information
+
+S1 Fig Beanplots depicting combinations of simulation parameters and their effect on the ARI.
+
+(PDF)
+==== Refs
+References
+
+1 Sekula M , Datta S An R Package for Determining the Optimal Clustering Algorithm. Bioinformation. 2017;13 : 101–103. doi: 10.6026/97320630013101 28584451
+2 Handl J , Knowles J , Kell DB . Computational cluster validation in post-genomic data analysis. Bioinformatics (Oxford, England). 2005;21 : 3201–3212. 15914541
+3 Patel KMA, Thakral P. The best clustering algorithms in data mining. 2016 International Conference on Communication and Signal Processing (ICCSP). 2016. pp. 2042–2046.
+4 Ward JH . Hierarchical Grouping to Optimize an Objective Function. Journal of the American Statistical Association. 1963;58 : 236–244. doi: 10.1080/01621459.1963.10500845
+5 MacQueen J. Some methods for classification and analysis of multivariate observations. Proceedings of the Fifth Berkeley Symposium on Mathematical Statistics and Probability, Volume 1: Statistics. University of California Press; 1967. pp. 281–298.
+6 Kaufman L , Rousseeuw P . Clustering by means of medoids. Faculty of mathematics and informatics, Delft University of Technology; 1987.
+7 Kaufman L , Rousseeuw PJ . Finding Groups in Data: An Introduction to Cluster Analysis. 1st ed. New York: Wiley; 1990.
+8 Ng A , Jordan M , Weiss Y . On Spectral Clustering: Analysis and an algorithm. Advances in Neural Information Processing Systems. MIT Press; 2001.
+9 Nascimento MCV , de Carvalho ACPLF . Spectral methods for graph clustering—A survey. European Journal of Operational Research. 2011;211 : 221–231. doi: 10.1016/j.ejor.2010.08.012
+10 Karatzoglou A , Smola A , Hornik K , Zeileis A . Kernlab—An S4 Package for Kernel Methods in R. Journal of Statistical Software. 2004;11 : 1–20. doi: 10.18637/jss.v011.i09
+11 Bergé L , Bouveyron C , Girard S . HDclassif: An R Package for Model-Based Clustering and Discriminant Analysis of High-Dimensional Data. Journal of Statistical Software. 2012;46 : 1–29.22837731
+12 Pavlenko T , von Rosen D . Effect of dimensionality on discrimination. Statistics. 2001;35 : 191–213. doi: 10.1080/02331880108802731
+13 Agrawal R , Gehrke J , Gunopulos D , Raghavan P . Automatic subspace clustering of high dimensional data for data mining applications. ACM SIGMOD Record. 1998;27 : 94–105. doi: 10.1145/276305.276314
+14 Ester M, Kriegel H-P, Sander J, Xu X. A density-based algorithm for discovering clusters in large spatial databases with noise. Proceedings of the Second International Conference on Knowledge Discovery and Data Mining. Portland, Oregon: AAAI Press; 1996. pp. 226–231.
+15 Dhillon IS , Modha DS . Concept Decompositions for Large Sparse Text Data Using Clustering. Machine Learning. 2001;42 : 143–175. doi: 10.1023/A:1007612920971
+16 Rousseeuw PJ . Silhouettes: A graphical aid to the interpretation and validation of cluster analysis. Journal of computational and applied mathematics. 1987;20 : 53–65. doi: 10.1016/0377-0427(87)90125-7
+17 Rodriguez MZ , Comin CH , Casanova D , Bruno OM , Amancio DR , Costa L da F , et al . Clustering algorithms: A comparative approach. PloS One. 2019;14 : e0210236. doi: 10.1371/journal.pone.0210236 30645617
+18 Brock G , Pihur V , Datta S , Datta S . clValid, an R package for cluster validation. Journal of Statistical Software (Brock et al, March 2008). 2011.
+19 R Core Team. R: A Language and Environment for Statistical Computing. Vienna, Austria: R Foundation for Statistical Computing; 2022.
+20 Batool F , Hennig C . Clustering with the Average Silhouette Width. Computational Statistics and Data Analysis. 2021;158 : 107190. doi: 10.1016/j.csda.2021.107190
+21 Zhang J , Roebuck PL , Coombes KR . Simulating gene expression data to estimate sample size for class and biomarker discovery. Int J Advances Life Sci. 2012;4 : 44–51.
+22 Coombes CE , Abrams ZB , Nakayiza S , Brock G , Coombes KR . Umpire 2.0: Simulating realistic, mixed-type, clinical data for machine learning. F1000 Research; 2021
+23 Deng M , Bragelmann J , Kryukov I , Saraiva-Agostinho N , Perner S . FirebrowseR: An R client to the Broad Institute’s Firehose Pipeline. Database (Oxford). 2017;2017 . doi: 10.1093/database/baw160 28062517
+24 Abrams ZB , Zucker M , Wang M , Asiaee Taheri A , Abruzzo LV , Coombes KR . Thirty biologically interpretable clusters of transcription factors distinguish cancer type. BMC Genomics. 2018;19 : 738. doi: 10.1186/s12864-018-5093-z 30305013
+25 Coombes CE , Abrams ZB , Li S , Abruzzo LV , Coombes KR . Unsupervised machine learning and prognostic factors of survival in chronic lymphocytic leukemia. Journal of the American Medical Informatics Association: JAMIA. 2020;27 : 1019–1027. doi: 10.1093/jamia/ocaa060 32483590
+26 Coombes CE , Liu X , Abrams ZB , Coombes KR , Brock G . Simulation-derived best practices for clustering clinical data. Journal of biomedical informatics. 2021;118 : 103788. doi: 10.1016/j.jbi.2021.103788 33862229

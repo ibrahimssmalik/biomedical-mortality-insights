@@ -1,0 +1,605 @@
+
+==== Front
+F1000Res
+F1000Res
+F1000Research
+2046-1402
+F1000 Research Limited London, UK
+
+10.12688/f1000research.136097.2
+Research Article
+Articles
+Graph neural network-based anomaly detection for river network systems
+[version 2; peer review: 1 approved
+
+Buchhorn Katie Formal Analysis Investigation Methodology Software Validation Visualization Writing – Original Draft Preparation https://orcid.org/0000-0001-6079-1615
+a12
+Santos-Fernandez Edgar Data Curation Visualization Writing – Review & Editing 12
+Mengersen Kerrie Conceptualization Funding Acquisition Supervision Writing – Review & Editing 12
+Salomone Robert Methodology Supervision Writing – Review & Editing 13
+1 Centre for Data Science, Queensland University of Technology, Brisbane, Queensland, Australia
+2 School of Mathematical Sciences, Queensland University of Technology, Brisbane, Queensland, Australia
+3 School of Computer Science, Queensland University of Technology, Brisbane, Queensland, Australia
+a k.buchhorn@qut.edu.au
+No competing interests were disclosed.
+
+28 3 2024
+2023
+12 99116 2 2024
+Copyright: © 2024 Buchhorn K et al.
+2024
+https://creativecommons.org/licenses/by/4.0/ This is an open access article distributed under the terms of the Creative Commons Attribution Licence, which permits unrestricted use, distribution, and reproduction in any medium, provided the original work is properly cited.
+
+Background
+
+Water is the lifeblood of river networks, and its quality plays a crucial role in sustaining both aquatic ecosystems and human societies. Real-time monitoring of water quality is increasingly reliant on in-situ sensor technology.
+
+Anomaly detection is crucial for identifying erroneous patterns in sensor data, but can be a challenging task due to the complexity and variability of the data, even under typical conditions. This paper presents a solution to the challenging task of anomaly detection for river network sensor data, which is essential for accurate and continuous monitoring.
+
+Methods
+
+We use a graph neural network model, the recently proposed Graph Deviation Network (GDN), which employs graph attention-based forecasting to capture the complex spatio-temporal relationships between sensors.
+
+We propose an alternate anomaly threshold criteria for the model, GDN+, based on the learned graph. To evaluate the model’s efficacy, we introduce new benchmarking simulation experiments with highly-sophisticated dependency structures and subsequence anomalies of various types. We also introduce software called gnnad.
+
+Results
+
+We further examine the strengths and weaknesses of this baseline approach, GDN, in comparison to other benchmarking methods on complex real-world river network data.
+
+Conclusions
+
+Findings suggest that GDN+ outperforms the baseline approach in high-dimensional data, while also providing improved interpretability.
+
+Anomaly Detection
+Graph Deviation Network
+Graph Neural Network
+Multivariate Time Series
+Graph Attention Forecasting
+Spatio-temporal Data
+Complex Systems
+Australian Research CouncilLP180101151 This work was supported by the Australian Research Council (ARC) Linkage Project (LP180101151) titled “Revolutionising water-quality monitoring in the informa- tion age". Case study data were provided by the Depart- ment of Environment and Science, Queensland, and is available as part of the Python package gnnad. The funders had no role in study design, data collection and analysis, decision to publish, or preparation of the manuscript. Revised Amendments from Version 1
+
+Minor revisions based on reviewer feedback, notably the inclusion of an ablation study surrounding the choice of percentile used for the threshold calculation for GDN+ across various datasets.
+==== Body
+pmcIntroduction
+
+River network systems play a vital role as freshwater habitats for aquatic life, and as support for terrestrial ecosystems in riparian zones, but are particularly sensitive to the anthropogenic impacts of climate change, water pollution and over-exploitation, among other factors. As a United Nations Sustainable Development Goal, 1 water quality is a major environmental concern worldwide. The use of in-situ [ 1] sensors for data collection on river networks is increasingly prevalent, 2 , 3 generating large amounts of data that allow for the identification of fine-scale spatial and temporal patterns, trends, and extremes, as well as potential sources of pollutants and their downstream impacts. However, such sensors are susceptible to technical errors relating to the equipment, herein defined as anomalies, for example due to miscalibration, biofouling, electrical interference and battery failure. In contrast, extreme events in rivers occur as result of heavy rain and floods. Technical anomalies must be identified before the data are considered for further analysis, as they can introduce bias in model parameters and affect the validity of statistical inferences, confounding the identification of true changes in water variables. Trustworthy data is needed to produce reliable and accurate assessments of water quality, for enhanced environmental monitoring, and for guiding management decisions in the prioritisation of ecosystem health.
+
+Anomaly detection in river networks is challenging due to the highly dynamic nature of river water even under typical conditions, 4 as well as the complex spatial relationships between sensors. The unique spatial relationships between neighbouring sensors on a river network are characterised by a branching network topology with flow direction and connectivity, embedded within the 3-D terrestrial landscape. Common anomalies from data obtained from in-situ sensors are generally characterised by multiple consecutive observations ( subsequence or persistent 5 ), including sensor drift and periods of unusually high or low variability, which may indicate the necessity for sensor maintenance or calibration. 6 Such anomalies are difficult to detect and often associated with high false negative rates. 7 The taxonomy employed to categorize anomalies into distinct types follows Ref. 7.
+
+Earlier statistical studies have focused on developing autocovariance models based on within-river relationships to capture the unique spatial characteristics of rivers. 8 Although these methods are adaptable to different climate zones, and have recently been extended to take temporal dependencies into account, 9 data sets generated by in-situ sensors still pose significant computational challenges with such prediction methods due to the sheer volume of data. 10 Autocovariance matrices must be inverted when fitting spatio-temporal models and making predictions, and the distances between sites must be known. Previous work, 11 aimed to detect drift and high-variability anomalies in water quality variables, by studying a range of neural networks calibrated using a Bayesian multi-objective optimisation procedure. However, the study was limited to analyzing univariate time series data, and the supervised methods required a significant amount of labeled data for training, which are not always available.
+
+There are limited unsupervised anomaly detection methods for subsequence anomalies (of variable length), and even less so for multivariate time series anomaly detection. 5 One such method uses dynamic clustering on learned segmented windows to identify global and local anomalies. 12 However, this algorithm requires the time series to be well-aligned, and is not suitable for the lagged temporal relationships observed with river flow. Another method to detect variable-length subsequence anomalies in multivariate time series data uses dimensionality reduction to construct a one-dimensional feature, to represent the density of a local region in the recurrence representation, indicating the recurrence of patterns obtained by a sliding window. 13 A similarity measure is used to classify subsequences as either non-anomalous or anomalous. Only two summary statistics were used in this similarity measure and the results were limited to a low-dimensional simulation study. In contrast, the technique introduced by Ref. 14, DeepAnT, uses a deep convolutional neural network (CNN) to predict one step ahead. This approach uses Euclidean distance of the forecast errors as the anomaly score. However, an anomaly threshold must be provided.
+
+Despite the above initial advances, challenges still remain in detecting persistent variable-length anomalies within high-dimensional data exhibiting noisy and complex spatial and temporal dependencies. With the aim of addressing such challenges, we explore the application of the recently-proposed Graph Deviation Network (GDN), 15 and explore refinements with respect to anomaly scoring that address the needs of environmental monitoring. The GDN approach 15 is a state-of-the-art model that uses sensor embeddings to capture inter-sensor relationships as a learned graph, and employs graph attention-based forecasting to predict future sensor behaviour. Anomalies are flagged when the error scores are above a calculated threshold value. By learning the interdependencies among variables and predicting based on the typical patterns of the system in a semi-supervised manner, this approach is able to detect deviations when the expected spatial dependencies are disrupted. As such, GDN offers the ability to detect even the small-deviation anomalies generally overlooked by other distance based and density based anomaly detection methods for time series, 16 , 17 while offering robustness to lagged variable relationships. Unlike the commonly-used statistical methods that explicitly model covariance as a function of distance, GDN is flexible in capturing complex variable relationships independent of distance. GDN is also a semi-supervised approach, eliminating the need to label large amounts of data, and offers a computationally efficient solution to handle the ever increasing supply of sensor data. Despite the existing suite of methods developed for anomaly detection, only a limited number of corresponding software packages are available to practitioners. In summary, we have identified the following gaps in the current literature and research on this topic: 1. An urgent need exists for a flexible approach that can effectively capture complex spatial relationships in river networks without the specification of an autocovariance model, and the ability to learn from limited labeled data, in a computationally efficient manner.
+
+2. Lack of data and anomaly generation schemes on which to benchmark methods, that exhibit complex spatial and temporal dependencies, as observed across river networks.
+
+3. Limited open-source software for anomaly detection, which hinders the accessibility and reproducibility of research in this field, and limits the ability for individuals and organisations to implement effective anomaly detection strategies.
+
+Our work makes four primary contributions to the field: 1. An improvement of the GDN approach via the threshold calculation based on the learned graph is presented, and shown to detect anomalies more accurately than GDN while improving the ability to locate anomalies across a network.
+
+2. Methods for simulating new benchmark data with highly-sophisticated spatio-temporal structures are provided, contaminated with various types of persistent anomalies.
+
+3. Numerical studies are conducted, featuring a suite of benchmarking data sets, as well as real-world river network data, to explore the strengths and limitations of GDN (and its variants) in increasingly challenging settings.
+
+4. User-friendly, free open-source software for the GDN/GDN+ approach is made available on the pip repository as gnnad, with data and anomaly generation modules, as well as the publication of a novel real-world data set.
+
+The structure of the remainder of the paper is as follows: The next section details the methods of GDN and the model extension GDN+, and describes the methodology of the simulated data and anomaly generation. In the Results section we present an extensive simulation study on the benchmarking data, as well as a real-world case study. The performance of GDN/GDN+ is assessed against other state-of-the-art anomaly detection models. Further details and example code for the newly-released software are also provided. The paper concludes with a discussion of the findings, and the strengths and weaknesses of the considered models.
+
+Methods
+
+Consider multivariate time series data Y=y1…yT , obtained from n sensors over T time ticks. The (univariate) data collected from sensor i=1,…,n at time t=1,…,T are denoted as yit . Following the standard semi-supervised anomaly detection approach, 18 , 19 non-anomalous data are used for training, while the test set may contain anomalous data. That is, we aim to learn the sensor behaviour using data obtained under standard operational conditions throughout the training phase and identify anomalous sensor readings during testing, as those which deviate substantially from the learned behaviour. As the algorithm output, each test point yt is assigned a binary label, at∈01 , where at=1 indicates an anomaly at time t , anywhere across the full sensor network.
+
+The GDN approach 15 for anomaly detection is composed of two aspects: 1. Forecasting-based time series model: a non-linear autoregressive multivariate time series model that involves graph neural networks is trained, and
+
+2. Threshold-based anomaly detection: transformations of the individual forecasting errors are used to determine if an anomaly has occurred, if such errors exceed a calculated threshold.
+
+The above components are described in more detail below.
+
+Forecasting-based Time Series Model. To predict yt , the model takes as input w∈ℕ lags of the multivariate series, Xt≔yt−1…yt−w.
+
+The i -th row (containing sensor i ’s measurements for the previous w lags) of the above input matrix is represented by the column vector, xit=yit−1…yit−w . Prior to training, the practitioner specifies acceptable candidate relationships via the sets C1,…,Cn , where each Ci⊆12…n and does not contain i . These sets specify which nodes are allowed to be considered to be connected from node i (noting that the adjacency graph connections are not necessarily symmetric).
+
+The model implicitly learns a graph structure via training sensor embedding parameters vi∈ℝd for i=1,…,n which are used to construct a graph. The intuition is that the embedding vectors capture the inherent characteristics of each sensor, and that sensors which are “similar” in terms of the angle between their vector embeddings are considered connected. Formally, the quantity eji is defined as the cosine similarity between the vector embeddings of sensors i and j : eji=viΤvj‖vi‖‖vj‖Ij∈Ci,i,j∈1…n,
+
+with ‖⋅‖ denoting the Euclidean norm, and indicator function I which equals 1 when node j belongs to set Ci , and 0 otherwise. Note that the similarity is forced to be zero if a connecting node is not in the permissible candidate set. Next, let ej,i be the i -th largest value in ej1…ejn . A graph-adjacency matrix (and in turn a graph itself) is then constructed from the sensor similarities via: Aji=Ieji≥ej,K∪i=j,
+
+for user-specified K∈1…n which determines the maximum number of edges from a node, referred to as the “Top-K” hyperparameter.
+
+The above describes how the trainable parameters vkk=1n yield a graph. Next, the lagged series are fed individually through a shallow Graph Attention Network 20 that uses the previously constructed graph. Here, each node corresponds to a sensor, and the node features for node i are the lagged (univariate) time-series values, xit∈ℝw . Allow a parameter weight matrix W∈ℝd×w to apply a shared linear transform to each node. Then, the output of the network is given by zit=max0∑j:Aji>0αijWxit,
+
+where zit is called the node representation, and coefficients αij are the attention paid to node j when computing the representation for node i , with: πij=LeakyReLUaΤvi⊕Wxit+vj⊕Wxjt,whereαij=expπij∑k:Aki>0expπik, (1)
+
+with learnable parameters a∈ℝ2d , where ⊕ denotes concatenation, and LeakyReLUx≔maxδxx for δ>0 , with the maximum operation applied elementwise. Note the addition [ 2] in Equation 1 and that ∑j=1nαij=1 . Intuitively, the above is an automated mechanism to aggregate information from a node itself and neighbouring nodes (whilst simultaneously assigning a weight of how much information to take from each neighbour) to compute a vector representing extracted information about node i itself and its neighbours’ interaction with it. The final model output (prediction) is given by, y^t=fηv1⊙z1t…vn⊙znt,
+
+where fη:ℝd×n→ℝn is a feedforward neural network with parameters η , and ⊙ denotes element-wise multiplication. The model is trained by optimizing the parameters vii=1n , W , a , and η to minimize the mean squared error loss function L=1T−w∑t=w+1Ty^t−yt2.
+
+Threshold-based Anomaly Detection. Given the learned inter-sensor and temporal relationships, we are able to detect anomalies as those which deviate from these interdependencies. An anomalousness score is computed for each time point in the test data. For each sensor i , we denote the prediction error at time t as, εi,t=|yit−y^it|,
+
+with |⋅| denoting the absolute value, and the vector of prediction error for each sensor is, εi∈ℝT−w . Since the error values of different sensors may vary substantially, we perform a robust normalisation of each sensor’s errors to prevent any one sensor from overly dominating the others, that is, ε˜i=εi−MedianεiIQRεi,
+
+where IQR denotes inter-quartile range. In the original work by Ref. 15, a time point t is flagged as anomalous if, At=Imaxiε˜i,t>κ,
+
+using the notation ε˜i,t for the error value at the t -th index. Alternatively, the authors recommend using a simple moving average of ε˜i and flagging time t as anomalous if the maximum of that moving average exceeds κ . The authors specify κ as the maximum of the normalised errors observed on some (non-anomalous) validation data, denoted by variant epsilon, ε˜ . However, this is applied to all sensors as a fixed threshold.
+
+Sensor-based anomaly threshold: GDN+
+
+The behavior of water quality variables may differ across space, for example, water level at high-altitude river network branches are generally characterised by rainfall patterns, whereas water level downstream near a river outlet can also be influenced by tidal patterns. A fixed threshold across the network does not allow for any local adaptations in error sensitivity. For this reason, this work also considers the novel sensor-specific threshold calculation, Ait=Iε˜i,t>κi,
+
+where κi is chosen such that, 1|ε˜j,tj:Aji>0,i≠j|∑j:Aji>0,i≠jIε˜j,t<κi=τ,
+
+for some user-specified percentile, τ∈0,100 , and where |⋅| is the cardinality. In other words, the threshold for each sensor, κi , is set as the τ -th percentile of the normalised error scores across the neighbourhood of i , on the validation data set. Unless otherwise stated, we set τ=99 . In this way, the sensor threshold is based only on its direct neighbourhood, as opposed to the original method which uses the global maximum, and is thus in tune with the local behaviour of the system, and more robust as a percentile. We refer to the GDN model using this variant of the threshold-based anomaly detection as GDN+.
+
+New class of benchmarking data
+
+The following is a method for simulating synthetic datasets with persistent anomalies inspired by the statistical models recently used to model river network data. 9 Let S denote an arbitrary set of individual spatial locations, with locations s1,s2,…,sn∈S chosen by experimental design 21 or otherwise. Consider a linear mixed model with n×1 response Y , and n×m design matrix X of explanatory variables spatially indexed at locations s1,s2,…,sn , Yt=β0+Xtβ+Z+ε0,t=1,…,T, (2)
+
+with time-homogeneous spatially-correlated random effects Z∼N0ΣZ and vector of independent noise terms ε0∼N0σ02I , yielding CovYtXt=xt=ΣZ+σ02I , where I denotes the n×n identity matrix and ε0 is an error term. The covariates Xt for t=1,…,T are simulated according to an autoregressive process based on an underlying sequence of independent random fields, Xt=Σi=0pφiX˜t−i, (3)
+
+where p is the order of the autoregressive process, and X˜t∼iidN0ΣX,t=1,…,T.
+
+Note that other distributions may be used. Above, ΣXij=ksisj′
+
+for some covariance kernel k . For example, kss′σα=σ2exp−s−s′2α, (4)
+
+where ‖⋅‖ denotes the Euclidean norm, σ2>0 is the covariance-scaling parameter, and α∈ℝ is the range parameter that controls the rate of decay of correlation between points over distance. Figure 1 illustrates an example of a generated Gaussian random field evolving over time.
+
+Figure 1. Smooth random Gaussian field used to generate covariate values, X , in the simulation studies.
+
+Examples of the field are shown for t=1,2,3 . Sensor locations are shown as white dots.
+
+We consider two scenarios in generating simulated data: 1) spatial relationships characterised by Euclidean distance only, where the covariance matrix, ΣZ , is constructed via the kernel function given in Equation 4, and 2) data simulated on a river network, where ΣZ is constructed via the kernel function given in Equation 5. Together, this approach provides a variety of simulated data with highly-sophisticated dependency structure, see Figure 2.
+
+Figure 2. SimEuc site locations across space (left) and SimRiver site locations along a river network (right).
+
+Both simulations use the same (x, y) coordinates for sensor locations. The direction of flow is from top to bottom for SimRiver. Red dots indicate sites for which time series have been shown in Figure 3 and Figure 4.
+
+Two points si , sj on a river network are said to be flow-connected if they share water flow, and flow-unconnected otherwise. We define stream distance, hRivsisj , as the shortest distance separating si and sj when travelling along a given river network. Tail-up covariance models for river networks, introduced in, 8 effectively represent spatial relationships when variables are dominated by flow (e.g. pollutants enter a stream and only impact downstream locations). By construction, the tail-up covariance function only allows for correlation between flow-connected sites: kTUsisjσα=ωijσ2exp−hRivsisjαFij, (5)
+
+where Fij is equal to one if si and sj are flow-connected, and zero otherwise, and ωij is a weighting attributed to each stream segment to account for the upstream branching network structure and ensure stationarity in variance (for full details, see Refs. 22, 23). The weightings corresponding to each segment may incorporate flow volume, or the area of the catchment, or a proxy such as stream order. 24 Note that there are various choices of covariance models. Tail-down models allow correlation between both flow-connected and flow-unconnected locations, and may be more suitable for water variables such as temperature, or organisms that can move both upstream and downstream. 25 Here we use the exponential function for decay, for further covariance model examples see Ref. 8.
+
+Once the base multivariate time series is constructed as above, it is modified to include persistent anomalies as follows. Hyperparameters are, nanomaly≥0 , the number of subsequence anomalies and, λanomaly>0 , the average length of an anomalous subsequence, for each anomaly type. In this example, we consider two types of anomalies, high-variability and drift, see Algorithm 1.
+
+Algorithm 1. Two-type Anomaly Generation.
+
+input : Time series data Y=y1…yT , number of locations n , expected length of each anomaly type λdrift and λvar , number of anomalies, ndrift and nvar , variability anomaly scale ζ , and drift anomaly parameter δ .
+
+for anomaly∈driftvar do
+
+    for i=1,…,nanomaly do
+
+    Draw location S∼Uniform12…n
+
+    Draw time t∼Uniform1…T
+
+    Draw length L∼Poissonλanomaly
+
+     if anomaly=drift then
+
+      v←δ2δ…Lδ          // drift
+
+     else
+
+      v∼N0ζ2IL×L       // variability
+
+     yS,t:t+L←yS,t:t+L+v
+
+Python Package: Graph-Based Neural Network Anomaly Dectection (gnnad)
+
+The Python package gnnad introduced in this paper extends and generalises the research code originally implemented by Ref. 15, which is incompatible with newer package dependencies and offers only a command line interface. The code is refactored to be modular and user-friendly, with a scikit-inspired interface, and extended to include visualisation, data and anomaly generation modules, as well as the GDN+ model extension. A continuous integration/continuous deployment (CI/CP) pipeline is established with unit testing to ensure that changes to the code are tested and deployed efficiently. Comprehensive documentation now accompanying the codebase enhances readability for future developers, facilitating maintenance, reuse, and modification. Furthermore, rigorous error handling is implemented to improve the software experience. The software developments have resulted in a more robust, user-friendly and easily distributable package that is available via https://github.com/KatieBuc/gnnad and the pip repository, gnnad. See below for example code that shows the process of fitting the GDN+ model.
+
+from sklearn.model_selection import train_test_split
+
+from gnnad.graphanomaly import GNNAD
+
+from gnnad.generate import GenerateAnomaly
+
+# split train test for input data frame, X
+
+X_train, X_test = train_test_split(X, shuffle=False)
+
+# generate anomalies on test set
+
+anoms = GenerateAnomaly(X_test)
+
+X_test = anoms.generate(anoms.variability, lam=3, prop_anom=0.07, seed=45)
+
+X_test = anoms.generate(anoms.drift, lam=11, prop_anom=0.07, seed=234)
+
+y_test = anoms.get_labels()
+
+# instantiate and fit GDN model object
+
+model = GNNAD(threshold_type="max_validation", topk=6, slide_win=200)
+
+fitted_model = model.fit(X_train, X_test, y_test)
+
+# sensor based threshold based on GDN+
+
+pred_label = fitted_model.sensor_threshold_preds(tau=99)
+
+# print evaluation metrics
+
+fitted_model.print_eval_metrics(pred_label)
+
+Results
+
+This section presents a summary of the main findings for anomaly detection using GDN/GDN+ on both simulated and real-world data. To ensure quality of data, the aim for practitioners is to maximise the ability to identify anomalies of different types, while minimising false detection rates. We define the following metrics in terms of true positive (TP), true negative (TN), false positive (FP) and false negative (FN) classifications. In other words, the main priority is to minimise FN, while maintaining a reasonable number of FP, such that it is not an operational burden to check the total number of positive flags. Accordingly, we use recall, defined by TPTP+FN , to evaluate the performance on the test set and to select hyperparameters. That is, the proportion of actual positive cases that were correctly identified by the model(s). We also report the performance using precision TPTP+FP , accuracy TP+TNTP+TN+FP+FN and specificity TNTN+FP .
+
+To evaluate model performance, three existing anomaly detection models are used as benchmarks: 1. The naive (random walk) Autoregressive Integrated Moving Average Model (ARIMA) prediction model from Refs. 7, 26 ; 2. HDoutliers, 17 an unsupervised algorithm designed to identify anomalies in high-dimensional data, based on a distributional model that allows for probability assignment to an anomaly; and 3. DeepAnT, 14 an unsupervised, deep learning-based approach to detecting anomalies in time series data.
+
+Simulation study: Benchmark data
+
+Data are generated using the linear-mixed model described in Equation 2, with differing spatial dynamics: SimEuc where the random effect, Z , is characterised by Euclidean distance only, and SimRiver where Z simulates complex river network dynamics, 27 using the same site locations and covariate values, X . Detecting anomalies that involve multiple consecutive observations is a difficult task that often requires user intervention, and is the focus of this study. We consider scenarios with drift and high-variability anomaly types, which together contaminate 13.2% of the test data, given ndrift=5,λdrift=11,nvar=24,λvar=3 , see Table 1.
+
+Table 1. Details of the three data sets used in the case studies.
+
+Dataset	#Train	#Test	%Anomalies	
+SimEuc	3,000	1,000	13.2	
+SimRiver	3,000	1,000	13.2	
+Herbert	12,745	3,499	58.0	
+
+Figure 3 visualises aspects of the SimEuc dataset, where sensor 37 and sensor 8 are in close (Euclidean) proximity, resulting in a high correlation between the locations (0.65), as anticipated. Note that sensor 23 exhibits anomalous behavior, high-variability and drift, consecutively, over time. Compared to the SimRiver dataset, shown in Figure 4, we note how the time series from sensor 37 and sensor 8 are no longer strongly correlated (0.07), despite their close proximity, as they are not flow-connected in the simulated river network.
+
+Figure 3. A selection of time series from the SimEuc data set; sensor 8 and sensor 37 separated by a short Euclidean distance share high correlation (Pearson‘s coefficient of 0.65).
+
+A Savitzky-Golay filter smoothens the time series (purple line). On the bottom, sensor 23 illustrates high-variability and drift anomalies, consecutively (red dots).
+
+Figure 4. A selection of series from the SimRiver data set; sensor 8 and sensor 37 are not flow-connected sites, and share low correlation (Pearson‘s coefficient of 0.07).
+
+Drift anomalies (red dots) are shown in data from sensor 4. A Savitzky-Golay filter is used to smoothen the time series for visual representation (purple line).
+
+Table 2 shows the performance of the different anomaly detection methods. The best performance in terms of recall is highlighted in bold, while the second-best performance is underlined. We observe that GDN/GDN+ outperforms most other models in terms of recall, which is the fraction of true positives among all actual positive instances. Specifically, GDN has a recall score of 83.3% on SimEuc and 72.7% on SimRiv, while GDN+ has the second highest recall score of 85.6% on SimEuc and 78.0% on SimRiv. Although ARIMA performed best in terms of recall, the high percentage of detected anomalies, 81.6% and 85.6%, is impractical to use (discussed below) and results in low accuracy scores of 28.6% and 25.3%, respectively. HDoutliers did not flag any time point as anomalous in any test case. DeepAnT tends to classify most samples as negative, resulting in a low recall score. These results suggest that GDN/GDN+ are best able to detect a high proportion of actual anomalies in the datasets.
+
+Table 2. Anomaly detection performance in terms of recall (%), precision (%), accuracy (%), and specificity (%) of GDN and its variants and baseline methods for the simulation study.
+
+Data	Model	Rec	Prec	Acc	Spec	
+SimEuc	HDoutliers	0.0	0.0	86.8	100.0	
+ARIMA	88.6	14.4	28.6	19.4	
+DeepAnT	3.8	11.9	83.5	95.7	
+GDN	83.3	55.3	88.9	89.7	
+GDN+	85.6	48.1	85.9	85.9	
+SimRiv	HDoutliers	0.0	0.0	86.8	100.0	
+ARIMA	91.7	14.2	25.3	15.1	
+DeepAnT	0.8	9.1	85.9	98.8	
+GDN	72.7	54.2	88.3	90.6	
+GDN+	78.0	43.1	83.5	84.3	
+
+Figure 5 shows the classifications of anomalies in the simulation study. For reasons mentioned, recall is the performance metric of interest, but we also consider the trade-off between recall and precision. Lower precision means that the model may also identify some normal instances as anomalies, leading to false positives. In the context of river network anomaly detection, FP may be manually filtered, but it is critical to minimise FN. Note that GDN+ outperforms GDN in minimising the FN count, but at the cost of increasing FP, in both data sets. Such a trade-off is acceptable and considered an improvement in this context. Conversely, while ARIMA has the highest recall score, the number of FP classifications is impractical for practitioners to deal with (>70% of the test data). We also note that drift anomalies are harder to detect than high-variability anomalies, with drift as the majority of FN counts, in all cases.
+
+Figure 5. Anomaly detection performance of ARIMA, GDN, and GDN+ for the simulation study, in terms of true positive (TP), true negative (TN), false positive (FP) and false negative (FN).
+
+The authors of the GDN model demonstrated its efficacy in detecting anywhere-within-system failures at time t by applying a threshold to all sensors within a system. However, the use of sensor-based thresholds in GDN+ has the advantage of indicating anomalies at the individual sensor level. In the context of monitoring river networks, it is crucial to identify the anomalous sensor, i , at a given time t . The percentage of true positives detected at the correct sensor, i , using the sensor-based anomaly threshold, Ait , in GDN+, was 92% and 89% for SimEuc and SimRiver, respectively. Similarly, the rate of true positives detected in the neighbourhood of the correct sensor i were 96% and 91%, respectively. This granularity of information is essential for large networks consisting of independent sensors that are separated by significant spatial distances, where the cost of time and travel for sensor replacement or maintenance is substantial.
+
+Replication study
+
+This section explores the anomaly detection performance of GDN/GDN+ across multiple simulated data sets. The approach is as follows. First, ten new sets of spatial sampling locations are created, and for each set a Gaussian random field evolving over time is simulated, as per Equation 3. For each set of locations, we again consider both the Euclidean spatial characterisation ( SimEuc), and the river network spatial characterisation ( SimRiver), yielding a total of 20 benchmark data sets. In the first case, we use the Euclidean covariance model in Equation 4, parameterised by, σ2∈15 , and, α∈515 , with independent noise parameter, σ02∈01 , and regression parameters β0∈110 , and, β1∈110 , for the linear model in Equation 2. The values of the parameters are chosen uniformly at random. The Tail-up covariance model in Equation 5 is used in the second case, parameterised as above.
+
+Then, anomalies are generated with the following parameters: drift δ∈36 , variability ζ∈1215 , length of anomalies λdrift∈510 , λvar∈210 , and the number of anomalies, ndrift∈50,100 , nvar∈50,100 (see Algorithm 1). Across all simulations, the size of the data set is fixed to have length, T=4000 , and number of sensors, n=40 .
+
+Figure 6 illustrates the anomaly detection performance for GDN and GDN+, run on each data set with sliding window length w=3 , and Top-K hyperparameter K=5 . Note that the total number of anomalies can be seen at the bar height of TP+FN. In every scenario, GDN+ improves the FN count (red line), but at the cost of an increased TP count (orange line). Whether such a tradeoff is tolerable depends on how critical it is in practical scenarios that true anomalies are successfully detected. Note, that performance varies from one scenario to the next. Nevertheless, despite the simulated datasets being extremely noisy and complex, GDN and GDN+ appear to succeed in successful anomaly detection when other methods cannot.
+
+Figure 6. Anomaly detection performance of GDN, and GDN+ across the twenty simulated benchmarks in the replication study.
+
+Note that GDN+ consistently decreases false negatives (red line) in every case, but also increases false positives (orange line).
+
+Case study: Herbert river
+
+This case study examines water-level data collected from eight sites located across the Herbert river, a major river system located in the tropical region of Australia, as shown in Figure 7. The time series data is highly non-stationary, characterised by river events caused by abnormal rainfall patterns, with some coastal sites exhibiting shorter periodicity trends which can be attributed to tidal patterns, see Figure 8. The spatial relationships are complex, and depend on the surrounding water catchment areas, spatial rainfall patterns, dams, and other impediments. In-situ sensors are prone to various anomalies such as battery failure, biofouling (accumulation of microorganisms, plants, algae, or small animals), and damage. In some cases, anomalies can manifest as the absence of a water event (i.e., flatlining) rather than the presence of abnormal time series patterns (i.e., spikes, variability, drift). In real-world scenarios, anomalies can persist for extended periods, and resolving them may require traveling to remote locations to inspect and repair sensors. As seen in Figure 8, anomalies at time t are largely attributed to Sensor 4, which was out of water for long periods of time.
+
+Figure 7. The Herbert river system and sensor locations.
+
+Figure 8. Test data of water level collected from sensors across the Herbert river (light blue), and the corresponding predictions from the GDN model (dark blue).
+
+Actual anomalies (red dots) are shown, along with the predicted anomalies (orange line) on the bottom.
+
+The Herbert river is a challenging data set for all of the anomaly detection models, due to the sparse placement of sensors across the network, i.e., fewer sensors at greater distances apart resulting in weaker spatial relationships, and the test set contains a high proportion of anomalies (58%; see Table 1). GDN applied to the real-world dataset yields a recall of 29.2% , with GDN+ improving recall to 34.8% , see Table 3. Model performance suffers primarily due to the failure to detect the large anomaly spanning across 2022-01-10 in Figure 8. This may be attributed to the learned graph relationships being characterised by river events in the training data, and without such events, it is difficult to identify when a sensor is flat-lining. However, the model successfully identified anomalies spanning across 2021-12-27 and 2022-01-03, which coincided with river events. See also the extended data 36 (see Data availability) for an ablation study focusing on the effectiveness of anomaly detection across different thresholds, τ.
+
+Table 3. Anomaly detection performance in terms of recall (%), precision (%), accuracy (%), and specificity (%) of GDN and its variants and baseline methods for the Herbert river case study.
+
+Data	Model	Rec	Prec	Acc	Spec	
+Herbert	HDoutliers	0.0	0.0	42.0	100.0	
+ARIMA	30.5	62.9	51.3	77.5	
+DeepAnT	1.6	39.7	44.0	97.0	
+GDN	29.2	60.6	50.1	76.2	
+GDN+	34.8	59.2	50.4	70.0	
+GDN++	100.0	80.7	86.7	70.0	
+
+Figure 9 shows the learned graph adjacency matrix, A . Sensor 1, separated geographically by a large distance from the other sensors, has weaker relationships with the other nodes. Interestingly, the attention weights indicate that sensor 3 is strongly influenced by sensor 6, with tidal patterns from sensor 6 being evident in the predictions of sensor 3. Large error scores indicating an anomaly spanning across 2021-12-27 are primarily observed in sensor 2, impacted by anomalous sensors 3 and 4, where the predicted values are low. However, due to the small network of sensors in this case study, it is difficult to determine which sensor had the anomaly.
+
+Figure 9. Graph with learned adjacency matrix, A .
+
+The edge weightings are determined by αij , which indicates attention and depend on model input, Xt .
+
+Adjusting the threshold in the GDN+ model can only enhance performance to a limited extent, since some anomalies may have insignificant error scores due to the underlying time series model. For instance, the anomaly spanning across 2022-01-10 has negligible error scores because the prediction model was performing well and no river events had occurred, making it challenging to detect the flat-lining type of anomaly in this particular scenario. Therefore, relying solely on the model may not be sufficient in practice, and we recommend implementing some basic expert rules. We introduce another model variant GDN++, by applying a simple filter to the time series ensuring that all values are positive, used in conjunction with adjusting the threshold calculation (GDN+). That is, an anomaly at time, t , on sensor, i , is flagged if, maxIyit<0Ait=1. GDN++ successfully detects all anomalies.
+
+Discussion
+
+Multivariate anomaly detection and prediction models for spatio-temporal sensor data have the potential to transform water quality observation, modelling, and management. 7 , 8 The provision of trustworthy sensor data has four major benefits: 1. It enables the production of finer-scale, reliable and more accurate estimates of sediment and nutrient loads, 2. It provides real-time feedback to landholders and managers, 3. It guides compliance with water quality guidelines, and 4. It allows for the assessment of ecosystem health and the prioritisation of management actions for sustaining aquatic ecosystems. However, technical anomalies in the data provided by the sensors can occur due to factors such as low battery power, biofouling of the probes, and sensor miscalibration. As noted by Ref. 7, there are a wide variety of anomaly types present within in-situ sensor data (e.g., high-variability, drift, spikes, shifts). Most anomaly detection methods used for water quality applications tend to target specific anomalies, such as sudden spikes or shifts. 28 – 30 Detecting persistent anomalies, such as sensor drift and periods of abnormally high variability, remains very challenging for statistical and machine learning research. Such anomalies are often overlooked by distance and kernel based methods, yet must be detected before the data can be used, because they confound the assessment of status and trends in water quality. Understanding the relationships among, and typical behaviours of, water quality variables and how these differ among climate zones is thus an essential step in distinguishing anomalies from real water quality events.
+
+We investigated the graph-based neural network model, GDN, 15 for its ability to capture complex interdependencies between different variables in a semi-supervised manner. As such, GDN offered the ability to capture deviations from expected behaviour within a high-dimensional setting. We developed novel bench-marking data sets for subsequence anomaly detection (of variable length and type), with a range of spatio-temporal complexities, inspired by the statistical models recently used for river network data. 9 Results showed that GDN tended to outperform the benchmarks in anomaly detection. We developed a model extension, GDN+, by adjusting the threshold calculation. GDN+ was shown to further improve performance. A replication study with multiple benchmarking data sets demonstrated consistency in these results. Sensor-based thresholds also proved useful in terms of identifying which neighbourhood the anomaly originated from in the simulation study.
+
+We used a real-world case study of water level in the Herbert river, with non-stationary time series characterised by multiple river events caused by abnormal rainfall patterns. In this case, most of the anomalies appeared as flat-lining, due to the river drying out. Considering an individual time series, such anomalies may not appear obvious, as it is the failure to detect river events (in a multivariate setting) that is indicative of an anomalous sensor. Despite the challenges in the data, GDN+ was shown to successfully detect technical anomalies when river events occurred, and combined with a simple expert-based rule, GDN++, all anomalies were successfully detected.
+
+There are two recent methodological extensions to the GDN approach. First, the Fused Sparse Autoencoder and Graph Net 31 which extends the GDN approach by augmenting the prediction-based loss with a reconstruction-based term arising from the output of a sparse autoencoder, and a further extension that allows the individual sensors to have multivariate data. Second, a probabilistic (latent variable) extension is trained using variational inference. 32 Since these were published contemporaneously to the present research, and only the latter provided accompanying research code, these approaches were not considered in the paper. Future extensions of this work could consider incorporating the above methodological extensions, as well as developing on the existing software package.
+
+Other applications could consider the separation of river events from technical anomalies. In terms of interpretability, since the prediction model aggregates feature data from neighbouring sensors, anomalous data can affect the prediction of any other sensor within the neighbourhood. Therefore, large error scores originating from one sensor anomaly can infiltrate through to the entire neighbourhood, and impairs the ability to attribute an anomaly to a sensor. The extensive body of literature on signal processing for source identification has the potential to inspire future solutions in addressing this issue. 33 , 34
+
+In summary, this work extends and examines the practicality of the GDN approach when applied to an environmental monitoring application of major international concern, with complex spatial and temporal interdependencies. Successfully addressing the challenge of anomaly detection in such settings can facilitate the wider adoption of in-situ sensors and could revolutionise the monitoring and management of air, soil, and water.
+
+Conclusions
+
+This work studied the application of Graph Deviation Network (GDN) based approaches for anomaly detection on the challenging setting on river network data, which often feature sensors that generate high-dimensional data with complex spatio-temporal relationships. We introduced alternative defection criteria for the model (GDN+/GDN++), and their practicality was explored on both real and simulated benchmark data. The findings indicated that GDN and its variants were effective in correctly (and conservatively) identifying anomalies. Benchmark data were generated via an approach that was also introduced in this paper, along with open-source software, and may serve useful in the development and testing of other anomaly-detection methods. In short, we found that graph neural network based approaches to anomaly detection offer a flexible framework, able to capture and model non-standard, highly dynamic, complex relationships over space and time, with the ability to flag a variety of anomaly types. However, the task of anomaly detection on river network sensor data remains a considerable challenge.
+
+Author contributions
+
+KB; Investigation, Formal Analysis, Methodology, Software, Validation, Visualisation, Writing – Original Draft Preparation. RS; Methodology, Supervision, Writing – Review & Editing. KM; Funding Acquisition, Conceptualisation, Supervision, Writing – Review & Editing. ES; Data Curation, Visualisation, Writing – Review & Editing.
+
+Acknowledgements
+
+Łukasz Mentel; Software. Cameron Roberts; Data Curation. James McGree; Writing – Review & Editing. A version of this manuscript has been uploaded onto the pre-print server, arxivs.org as https://arxiv.org/abs/2304.09367.
+
+Data availability
+
+Zenodo. Water level across the Herbert river. DOI: 10.5281/zenodo.8053359. 35
+
+This project contains the following underlying data: • herbert_train.csv (real sensor data).
+
+• herbert_test.csv (real sensor data with sensor anomalies flags).
+
+Data are available under the terms of the Commons Attribution 4.0 International license (CC-BY 4.0). Functions for the generation of simulated data are also provided in the software package.
+
+Extennded data
+
+Zenodo: KatieBuc/gnnad: Adding files from paper review DOI: 10.5281/zenodo.1082360. 36
+
+This project contains the following Extended data: • Ablation_study.txt
+
+Data are available under the terms of the Commons Attribution 4.0 International license (CC-BY 4.0).
+
+Software availability
+
+• Source code avaliable from https://github.com/KatieBuc/gnnad/releases
+
+• Archived source code at time of publication: Zenodo. 10.5281/zenodo.8111760
+
+• License: MIT License
+
+10.5256/f1000research.162799.r282583
+Reviewer response for version 2
+Vellingiri J 1Referee https://orcid.org/0000-0003-4553-2230
+
+1 Vellore Institute of Technology, Vellore, Tamil Nadu, India
+8 6 2024 Copyright: © 2024 Vellingiri J
+2024
+https://creativecommons.org/licenses/by/4.0/ This is an open access peer review report distributed under the terms of the Creative Commons Attribution Licence, which permits unrestricted use, distribution, and reproduction in any medium, provided the original work is properly cited.
+Version 2recommendationapprove
+The author focuses on the importance of anomaly detection to predict water quality. Anomaly detection is critical to detect false patterns in sensor data. And it highlights a difficult process because of the data's complexity and variability. Author proposed a GDN-based method. Overall work is good, I have  accepted the proposed work with minor revisions.
+
+Minor points:
+
+1. Author only discussed GDN methods. Might include related work parts and discuss other relevant algorithms.
+
+2. Problem statement part needs to be added precisely.
+
+3. In the method section the author might clarify why Threshold-based Anomaly detection is used.
+
+Is the work clearly and accurately presented and does it cite the current literature?
+
+Yes
+
+If applicable, is the statistical analysis and its interpretation appropriate?
+
+I cannot comment. A qualified statistician is required.
+
+Are all the source data underlying the results available to ensure full reproducibility?
+
+Yes
+
+Is the study design appropriate and is the work technically sound?
+
+Yes
+
+Are the conclusions drawn adequately supported by the results?
+
+Yes
+
+Are sufficient details of methods and analysis provided to allow replication by others?
+
+No
+
+Reviewer Expertise:
+
+Data Analytics
+
+I confirm that I have read this submission and believe that I have an appropriate level of expertise to confirm that it is of an acceptable scientific standard.
+
+10.5256/f1000research.149233.r208772
+Reviewer response for version 1
+Araújo Dias Maurício 1Referee
+1 Department of Mathematics and Computer Science, School of Sciences and Technology, Universidade Estadual Paulista, São Paulo, State of São Paulo, Brazil
+20 10 2023 Copyright: © 2023 Araújo Dias M
+2023
+https://creativecommons.org/licenses/by/4.0/ This is an open access peer review report distributed under the terms of the Creative Commons Attribution Licence, which permits unrestricted use, distribution, and reproduction in any medium, provided the original work is properly cited.
+Version 1recommendationapprove-with-reservations
+In recent years, there has been an increasing interest in distinguishing anomaly detection from outlier detection (Chandola et al., 2009 1 ; Chandola et al., 2012 2 ; Kittler et al., 2014 3 ; Dias et al., 2019 4 ; Dias et al., 2022 5 ). According to the scientific literature, the former differs from the latter by categorizing outliers based on some taxonomy, in addition to just detecting them. In 2009 and 2010, a small taxonomy was used in Chandola et al. (2009 1 ) and Chandola et al. (2012 2 ). In 2014, Kittler’s Taxonomy, a more complete taxonomy, was introduced in Kittler et al. (2014 3 ). In 2020, Kittler’s Taxonomy was used as a basis to detect anomalies (high variability) mainly in rivers and in a spatial context, as described in Dias et al. (2019 4 ). In 2022, a detection of anomalies (drift) based on Kittler’s Taxonomy, in a river and mainly in a temporal context, was described in Dias et al. (2022 5 ).
+
+The reviewed article, which presents a graph neural network-based anomaly detection for river network systems, is in agreement with the aforementioned papers. In the reviewed article, the anomaly detection process deals with the complexity and variability of the data from spatio-temporal relationships between sensors for accurate and continuous monitoring of river water quality. Another positive aspect of the reviewed article is that it actually describes anomaly detection, in contrast to many articles present in the scientific literature that describe outlier detection despite using the term anomaly detection. Moreover, the work is clearly and accurately presented. A negative aspect of the reviewed article is that it could have had more references on this distinguishing and on anomaly taxonomies. It would also be interesting to highlight in the beginning of the article which taxonomy the authors based on to categorize anomalies as being of the following types: high-variability, drift, spikes, and shifts (ref. 7 cited by the article maybe?).
+
+In general, the study design is appropriate. My only suggestions are, please: (1) To add north arrow and scale bar to Figures 1, 2, and 7. (2) To consider presenting the algorithm in page 9 (Algorithm 2, maybe?) in the same style that Algorithm 1 was presented in page 8. The work is technically sound.
+
+There are sufficient details of methods and analysis provided to allow replication by others. The reviewed article provides researchers with many mathematical definitions regarding the steps of the methodology used in the work. Those mathematical definitions allow researchers to replicate the work more accurately. The analysis process is supported by a number of real and simulated benchmark data.
+
+The statistical analysis and its interpretation is appropriate since the work validated its results based on well-established metrics, as follows: (1) The quantity of truly relevant results was measured using Recall. (2) The efficiency of results was measured using Accuracy. (3) The relevancy of results was measured using Precision. (4) The ratio of true negatives to all negative outcomes was measured using Specificity.
+
+The source data and software underlying the results of this work are all available on the Internet to ensure full reproducibility. The authors add “Data Availability” and “Software Availability” subsections to the end of the paper. My only suggestion is to distinguish and highlight “real” and “simulated” benchmark data in the subsection “Data Availability”.
+
+The conclusions drawn are adequately supported by the results. However, I would like to highlight a certain feature present in the reviewed article, although I do not particularly consider it a flaw. The contents of the “Discussion” and “Conclusions” sections of the reviewed article are most commonly found in the scientific literature merged to form a broader “Conclusions” section than that presented in the reviewed article. For example, suggestions for future work are normally part of the “Conclusions”, but in the reviewed article they appear in the “Discussion” (in a scientific article, it seems a bit strange to “discuss” something that has not yet been done). The scientific literature usually discusses the results found. This is done in the reviewed article, but merged with the “Results” section, rather than in the “Discussion”.
+
+Is the work clearly and accurately presented and does it cite the current literature?
+
+Partly
+
+If applicable, is the statistical analysis and its interpretation appropriate?
+
+Yes
+
+Are all the source data underlying the results available to ensure full reproducibility?
+
+Yes
+
+Is the study design appropriate and is the work technically sound?
+
+Yes
+
+Are the conclusions drawn adequately supported by the results?
+
+Yes
+
+Are sufficient details of methods and analysis provided to allow replication by others?
+
+Yes
+
+Reviewer Expertise:
+
+NA
+
+I confirm that I have read this submission and believe that I have an appropriate level of expertise to confirm that it is of an acceptable scientific standard, however I have significant reservations, as outlined above.
+
+Buchhorn Katie School of Mathematical Science, Queensland University of Technology, Brisbane, Queensland, Australia
+
+26 1 2024 The authors thank the reviewer for their thoughtful feedback. Please see the enumerated responses below:
+
+1. Clarification of the anomaly taxonomy has been added in the introduction, including reference 7. Thank you for highlighting these papers. We considered the inclusion of the above references, however since as their definition of “drift” differs, they were not included to avoid confusion.
+
+2. North arrow and scale have been added to Figure 7 (Figure 1 & 2 are simulated data with arbitrary values for the scale and direction). Algorithm 1 is pseudo-code, whereas on the following page, an excerpt of python code is provided. Thus, we feel it is necessary to have a distinction in presentation.
+
+5. The “Data availability” section has been updated with this clarification.
+
+10.5256/f1000research.149233.r199872
+Reviewer response for version 1
+Deng Ailin 1Referee
+1 National University of Singapore, Singapore, Singapore
+28 9 2023 Copyright: © 2023 Deng A
+2023
+https://creativecommons.org/licenses/by/4.0/ This is an open access peer review report distributed under the terms of the Creative Commons Attribution Licence, which permits unrestricted use, distribution, and reproduction in any medium, provided the original work is properly cited.
+Version 1recommendationapprove-with-reservations
+The authors provide detailed analysis on a previous anomaly detection method, GDN and improve it by proposing a new threshold selection methodology based on the learned local graph structure, denoted as GDN+. The work mainly focuses on the river network systems and further provides benchmarking data generation which is specifically designed for the river network or similar systems' analysis. They show the GNN-based method’s effectiveness in the river network systems in their study.
+
+Pros: The threshold selection based on the neighborhood sensors is interesting and reasonable. It enables a more flexible threshold for sensors based on the learned graph structure.
+
+The authors provide detailed code implementation and python package for the method.
+
+They also provide methods for generating data based on spatio-temporal structures.
+
+The case study is interesting and effective to show the interpretability in this river system scenario.
+
+Cons: It would be interesting to have an ablation study on the effect of the \tau selection, it seems the default setting is 99 (or should it be 99%?), it would be good to see how different \tau will affect the recall or other performance metrics.
+
+Minor: In table 2, some of the methods are bold, but it seems they are not achieving the best recall performance, such as ARIMA.
+
+In GDN+ threshold part, should the denotation exclude i for A_{ji}? As the A_{ij} includes {i=j} and the description is “across the neighborhood of i” which might not include sensor i itself.
+
+Some of the claims could be rephrased more gently or targeted at a more specific domain of problem, such as anomaly detection in river network systems. Page 4 of 18: “Lack of open-source software for anomaly detection…”. For anomaly detection, there are some existing open-source packages, such as PyOD (Zhao et al., 2019 1 ).
+
+In overall, I think this paper has a clear writing and detailed study in anomaly detection in the specific river system and provides open-source code for method and data generation for this kind of problem. Some ablation study and minor or typos can be further addressed.
+
+Is the work clearly and accurately presented and does it cite the current literature?
+
+Partly
+
+If applicable, is the statistical analysis and its interpretation appropriate?
+
+Not applicable
+
+Are all the source data underlying the results available to ensure full reproducibility?
+
+Yes
+
+Is the study design appropriate and is the work technically sound?
+
+Yes
+
+Are the conclusions drawn adequately supported by the results?
+
+Partly
+
+Are sufficient details of methods and analysis provided to allow replication by others?
+
+Yes
+
+Reviewer Expertise:
+
+Anomaly detection
+
+I confirm that I have read this submission and believe that I have an appropriate level of expertise to confirm that it is of an acceptable scientific standard, however I have significant reservations, as outlined above.
+
+Buchhorn Katie School of Mathematical Science, Queensland University of Technology, Brisbane, Queensland, Australia
+
+26 1 2024 The authors thank the reviewer for their thoughtful feedback. Please see the responses below:
+
+Cons:
+
+- Tau is introduced as a percentile (as opposed to percentage), and ranges between 0-100.  As per the suggestion, a complete ablation study has been added to the Appendix.
+
+Minor:
+
+- We utilised bold to highlight points of discussion (particularly poor or particularly good performance). However, to avoid confusion the choice of formatting has been updated so that bold denotes the highest recall value, and underline denotes the second highest.
+
+- Yes, the GDN+ threshold notation should exclude i for A_{ji}, this has been amended.
+
+- Wording has been changed to “Limited open-source software for anomaly detection…”.
+
+1 In-situ refers to an instrument in direct contact with the medium of observation.
+
+2 It seems that the authors of Ref. 15 mistakenly denote this addition as concatenation in the paper, however, their corresponding reference code computes addition.
+
+Competing interests: No competing interests were disclosed.
+
+Competing interests: No competing interests were disclosed.
+
+Competing interests: No competing interests were disclosed.
+
+Competing interests: No competing interests were disclosed.
+
+Competing interests: No competing interests were disclosed.
+==== Refs
+References
+
+1 UN General Assembly Transforming our World: The 2030 Agenda for Sustainable Development. United Nations. 2015. (A/RES/70/1).
+2 Marinho e Silva G Campos DF Brasil JAT : Advances in technological research for online and in situ water quality monitoring—A review. Sustainability. 2022;14 (9 ):5059. 10.3390/su14095059
+3 Ritchie JC Zimba PV Everitt JH : Remote sensing techniques to assess water quality. Photogramm. Eng. Remote Sens. 2003;69 (6 ):695–704. 10.14358/PERS.69.6.695
+4 Kang JM Shekhar S Henjum M : Discovering teleconnected flow anomalies: A relationship analysis of dynamic neighborhoods (RAD) approach. International Symposium on Advances in Spatial and Temporal Databases. Springer;2009; pp.44–61.
+5 Blázquez-Garca A Conde A Mori U : A review on outlier/anomaly detection in time series data. ACM Computing Surveys (CSUR). 2021;54 (3 ):1–33. 10.1145/3444690
+6 Bourgeois W Romain A-C Nicolas J : The use of sensor arrays for environmental monitoring: interests and limitations. J. Environ. Monit. 2003;5 (6 ):852–860. 10.1039/b307905h 14710922
+7 Leigh C Alsibai O Hyndman RJ : A framework for automated anomaly detection in high frequency water-quality data from in situ sensors. Sci. Total Environ. 2019;664 :885–898. 10.1016/j.scitotenv.2019.02.085 30769312
+8 Ver Hoef JM Peterson EE : A moving average approach for spatial statistical models of stream networks. J. Am. Stat. Assoc. 2010;105 (489 ):6–18. 10.1198/jasa.2009.ap08248
+9 Santos-Fernandez E Ver JM Hoef EE : Bayesian spatio-temporal models for stream networks. Comput. Stat. Data Anal. 2022;170 :107446. 10.1016/j.csda.2022.107446
+10 Porter JH Hanson PC Lin C-C : Staying afloat in the sensor data deluge. Trends Ecol. Evol. 2012;27 (2 ):121–129. 10.1016/j.tree.2011.11.009 22206661
+11 Rodriguez-Perez J Leigh C Liquet B : Detecting technical anomalies in high-frequency water-quality data using artificial neural networks. Environ. Sci. Technol. 2020;54 (21 ):13719–13730. 10.1021/acs.est.0c04069 32856893
+12 Wang X Lin J Patel N : Exact variable-length anomaly detection algorithm for univariate and multivariate time series. Data Min. Knowl. Disc. 2018;32 :1806–1844. 10.1007/s10618-018-0569-7
+13 Min H Feng X Ji Z : A novel computational approach for discord search with local recurrence rates in multivariate time series. Inf. Sci. 2019;477 :220–233. 10.1016/j.ins.2018.10.047
+14 Munir M Siddiqui SA Dengel A : DeepAnT: A deep learning approach for unsupervised anomaly detection in time series. IEEE Access. 2018;7 :1991–2005.
+15 Deng A Hooi B : Graph neural network-based anomaly detection in multivariate time series. Proceedings of the AAAI Conference on Artificial Intelligence. 2021; vol.35 : pp.4027–4035.
+16 Schmidl S Wenig P Papenbrock T : Anomaly detection in time series: A comprehensive evaluation. Proc. VLDB Endow. 2022;15 (9 ):1779–1797. 10.14778/3538598.3538602
+17 Wilkinson L : Visualizing Big Data outliers through distributed aggregation. IEEE Trans. Vis. Comput. Graph. 2017;24 (1 ):256–266. 10.1109/TVCG.2017.2744685 28866555
+18 Goldstein M Uchida S : A comparative evaluation of unsupervised anomaly detection algorithms for multivariate data. PLoS One. 2016;11 (4 ):e0152173. 10.1371/journal.pone.0152173 27093601
+19 Nassif AB Talib MA Nasir Q : Machine learning for anomaly detection: A systematic review. IEEE Access. 2021;9 :78658–78700. 10.1109/ACCESS.2021.3083060
+20 Velivcković P Cucurull G Casanova A : Graph attention networks. International Conference on Learning Representations (ICLR). 2018.
+21 Buchhorn K Mengersen K Santos-Fernandez E : Bayesian design with sampling windows for complex spatial processes. arXiv preprint arXiv:2206.05369. 2022.
+22 Cressie N Frey J Harch B : Spatial prediction on a river network. J. Agric. Biol. Environ. Stat. 2006;11 (2 ):127–150. 10.1198/108571106X110649
+23 Ver JM Hoef EP Theobald D : Spatial statistical models that use flow and stream distance. Environ. Ecol. Stat. 2006;13 (4 ):449–464. 10.1007/s10651-006-0022-8
+24 Shreve RL : Statistical law of stream numbers. J. Geol. 1966;74 (1 ):17–37. 10.1086/627137
+25 Peterson DP Fausch KD : Upstream movement by nonnative brook trout (salvelinus fontinalis) promotes invasion of native cutthroat trout (oncorhynchus clarki) habitat. Can. J. Fish. Aquat. Sci. 2003;60 (12 ):1502–1516. 10.1139/f03-128
+26 Rob J : Hyndman and George Athanasopoulos. Forecasting: principles and practice. 3rd ed. OTexts;2021.
+27 Ver Hoef J Peterson E Clifford D : SSN: An R package for spatial statistical modeling on stream networks. J. Stat. Softw. 2014;56 :1–45.
+28 Talagala PD Hyndman RJ Leigh C : A feature-based procedure for detecting technical outliers in water-quality data from in situ sensors. Water Resour. Res. 2019;55 (11 ):8547–8568. 10.1029/2019WR024906
+29 Hill DJ Minsker BS : Anomaly detection in streaming environmental sensor data: A data-driven modeling approach. Environ. Model Softw. 2010;25 (9 ):1014–1022. 10.1016/j.envsoft.2009.08.010
+30 Ba A McKenna SA : Water quality monitoring with online change-point detection methods. J. Hydroinf. 2015;17 (1 ):7–19. 10.2166/hydro.2014.126
+31 Han S Woo SS : Learning sparse latent graph representations for anomaly detection in multivariate time series. Proceedings of the 28th ACM SIGKDD Conference on Knowledge Discovery and Data Mining. 2022; pp.2977–2986.
+32 Chen W Tian L Chen B : Deep Variational Graph Convolutional Recurrent Network for Multivariate Time Series Anomaly Detection. International Conference on Machine Learning. PMLR;2022; pp.3621–3633.
+33 Scharf LL Demeure C : Statistical signal processing: detection, estimation, and time series analysis. Prentice Hall;1991.
+34 Telford WM Telford WM Geldart LP : Applied geophysics. Cambridge University Press;1990.
+35 Cameron : Water level across the Herbert river (Version 1).[Data set]. Zenodo. 2023. 10.5281/zenodo.8053359
+36 Buchhorn K Mentel L : KatieBuc/gnnad: Adding files from paper review (v0.1.2). Zenodo. 2024. 10.5281/zenodo.10823602

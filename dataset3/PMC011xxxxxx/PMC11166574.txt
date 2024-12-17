@@ -1,0 +1,305 @@
+
+==== Front
+Nat Methods
+Nat Methods
+Nature Methods
+1548-7091
+1548-7105
+Nature Publishing Group US New York
+
+38755322
+2266
+10.1038/s41592-024-02266-x
+Article
+Spatial transition tensor of single cells
+http://orcid.org/0000-0002-4585-2923
+Zhou Peijie 1456
+Bocci Federico 1
+Li Tiejun 2
+http://orcid.org/0000-0002-8804-3368
+Nie Qing qnie@uci.edu
+
+13
+1 grid.266093.8 0000 0001 0668 7243 Department of Mathematics, University of California, Irvine, Irvine, CA USA
+2 https://ror.org/02v51f717 grid.11135.37 0000 0001 2256 9319 LMAM and School of Mathematical Sciences, Peking University, Beijing, China
+3 grid.266093.8 0000 0001 0668 7243 Department of Cell and Developmental Biology, University of California, Irvine, Irvine, CA USA
+4 https://ror.org/02v51f717 grid.11135.37 0000 0001 2256 9319 Present Address: Center for Machine Learning Research, Peking University, Beijing, China
+5 Present Address: AI for Science Institute, Beijing, China
+6 grid.11135.37 0000 0001 2256 9319 Present Address: National Engineering Laboratory for Big Data Analysis and Applications, Beijing, China
+16 5 2024
+16 5 2024
+2024
+21 6 10531062
+3 7 2023
+2 4 2024
+© The Author(s) 2024
+https://creativecommons.org/licenses/by/4.0/ Open Access This article is licensed under a Creative Commons Attribution 4.0 International License, which permits use, sharing, adaptation, distribution and reproduction in any medium or format, as long as you give appropriate credit to the original author(s) and the source, provide a link to the Creative Commons licence, and indicate if changes were made. The images or other third party material in this article are included in the article’s Creative Commons licence, unless indicated otherwise in a credit line to the material. If material is not included in the article’s Creative Commons licence and your intended use is not permitted by statutory regulation or exceeds the permitted use, you will need to obtain permission directly from the copyright holder. To view a copy of this licence, visit http://creativecommons.org/licenses/by/4.0/.
+Spatial transcriptomics and messenger RNA splicing encode extensive spatiotemporal information for cell states and transitions. The current lineage-inference methods either lack spatial dynamics for state transition or cannot capture different dynamics associated with multiple cell states and transition paths. Here we present spatial transition tensor (STT), a method that uses messenger RNA splicing and spatial transcriptomes through a multiscale dynamical model to characterize multistability in space. By learning a four-dimensional transition tensor and spatial-constrained random walk, STT reconstructs cell-state-specific dynamics and spatial state transitions via both short-time local tensor streamlines between cells and long-time transition paths among attractors. Benchmarking and applications of STT on several transcriptome datasets via multiple technologies on epithelial–mesenchymal transitions, blood development, spatially resolved mouse brain and chicken heart development, indicate STT’s capability in recovering cell-state-specific dynamics and their associated genes not seen using existing methods. Overall, STT provides a consistent multiscale description of single-cell transcriptome data across multiple spatiotemporal scales.
+
+STT is a method that connects mRNA splicing and cell-state transitions across spatiotemporal scales and at single-cell resolution.
+
+Subject terms
+
+Computational models
+Gene regulatory networks
+Computational biophysics
+https://doi.org/10.13039/100000009 Foundation for the National Institutes of Health (Foundation for the National Institutes of Health, Inc.) U01AR073159 R01AR079150 Nie Qing https://doi.org/10.13039/100000001 National Science Foundation (NSF) MCB2028424 Nie Qing National Institutes of Health grants U01AR073159 and R01AR079150 (Q.N.), National Science Foundation grants DMS1763272 (Q.N.) and MCB2028424 (Q.N.), The Simons Foundation (594598 to Q.N.)NSFC grants No. 12288101(T.L. and P.Z.), No.8206100646 (P.Z.), Start-up grants of Peking University No. 7101303365 (P.Z.), and the High-performance Computing Platform of Peking University (P.Z.).NSFC grants No. 11825102 (T.L.), No. 12288101(T.L. and P.Z.), National Key R&D Program of China under grant No. 2021YFA1003300issue-copyright-statement© Springer Nature America, Inc. 2024
+==== Body
+pmcMain
+
+The advances of single-cell gene expression profile techniques have provided an unprecedented resolution to dissect cell-fate decisions. Metrics such as similarity or distance on a low-dimensional manifold are applied to single-cell RNA sequencing (scRNA-seq) data to infer dynamic properties such as pseudotime ordering1,2, network abstraction3 or cellular random walk analysis4,5. Leveraging both unspliced and spliced counts, the RNA velocity methods6,7 explicitly model the dynamics of messenger RNA (mRNA), projecting the future spliced states of cells onto scRNA-seq data to reveal the directionality of cell-fate determination8, and also to improve trajectory inference9–11, low-dimensional embedding12,13 and gene regulatory network inference14,15.
+
+Spatial transcriptomics measures additional spatial information at individual cells or spots of a small group of cells, allowing analysis of heterogenous cell states in space16,17. To infer temporal dynamics within spatial transcriptomics, SpaceFlow18 uses proximity information to constrain the cell embedding and pseudotime ordering for spatial consistency. SIRV19 develops a spatially resolved RNA velocity approach, by improving estimation of unspliced and spliced mRNA using reference scRNA-seq counterparts to enrich the spatial transcriptomics gene expression matrices.
+
+While RNA velocity has been widely used, fundamental challenges remain for reconstructing robust spatiotemporal dynamics20. For example, multilineages or multiple meta-stable states21–23 in complex spatial tissues cannot be captured by the current models, as spliced and unspliced transcript levels may diverge due to nonlinear gene regulation or multicellular signaling. In addition, the time scale of mRNA splicing is within minutes or hours24,25, during which the current RNA velocity model converges to one global equilibrium, however, cell-state transitions may span from days to weeks, (for example, in hematopoiesis8,20,25). While cell-specific gene expression rates may be used to accommodate a continuous cell-fate commitment process25,26, additional measurements, such as metabolic labeling27–29, are needed25 and difficult to obtain, for example, in spatial transcriptomics. Last, the current major RNA velocity methods are only focused on the velocity of spliced counts, omitting the velocity of unspliced counts that are closely linked to gene regulation15, which could provide further information about ‘attraction force’ into certain cell state.
+
+The multiscale cell attractor theory30–35 provides a natural tool to model dynamics across different time scales and resolutions, as well as account for the multistable states. In such a theory, the temporal change of gene expression and their mutual regulations are modeled as dynamical system composed of a set of differential equations. The stable cell types correspond to multiple locally stable fixed point of dynamical system under mild perturbation of gene regulation (that is, multistable states) where the cell states of expression are ‘trapped’, and the highly plastic transitional cells are modeled as ‘saddle point’ of the system, such that the cell could make state transitions through certain direction. Using such an approach, MuTrans5 coarse-grains scRNA-seq data at different scales to identify attractors and saddle points, allowing description of short-time fluctuations of cells around attractors locally while capturing long-time scale transitions of cells among multiple attractors with saddle points in between. The Gaussian-like kernel in MuTrans confines its scope to equilibrium and ergodic systems4,5. For nonequilibrium systems, using RNA velocity as input, CellRank8 constructs a cellular random walk using a velocity kernel followed by coarse-graining analysis and Dynamo25 fits the discrete RNA velocities using continuous functions for attractor geometry and transition analysis. However, in these methods, the linear RNA velocity model is incompatible with the presence of multistable attractors inherited in the data, leading to inconsistency between the transition velocity and downstream analysis. In addition, such approaches cannot be used directly for spatial transcriptome data.
+
+Here we present a spatial transition tensor (STT) approach to reconstruct cell attractors in spatial transcriptome data using unspliced and spliced mRNA counts, to allow quantification of transition paths between spatial attractors as well as analysis of individual transitional cells. Unlike the linear RNA velocity model with one global equilibrium (Fig. 1a), STT assumes the coexistence of multiple attractors in the joint unspliced (U)–spliced (S) counts space, with cells making transitions between attractor basins (Fig. 1a,b). A four-dimensional transition tensor across cells, genes, splicing states and attractors is constructed, with attractor-specific quantities associated with each attractor basin (Fig. 1b). By iteratively refining the tensor estimation and decomposing the tensor-induced and spatial-constrained cellular random walk (Fig. 1c–e,g), STT connects the scales between local gene expression and splicing dynamics as well as the global state transitions among attractors. Furthermore, STT ranks genes that are mostly relevant to the multistable expression patterns, and categorizes pathways with similar STT properties (Fig. 1g). By studying both nonspatial and spatial datasets, we demonstrate STT’s unique capability to uncover multistable attractors of cells and transition properties occurring at different spatiotemporal scales.Fig. 1 Overview of STT.
+
+a, Comparison between the RNA velocity (linear and single equilibrium) versus STT tensor model (multistable and multiple attractors). b, Definition of transition tensor and induced RNA velocity by averaging cell’s membership in different attractors. c–f, Workflow of the STT. c, The input U and S count matrices. d,e, Iterative scheme between kinetic parameter estimation of transition tensor (d) and dynamics decomposition and coarse-graining (e). f, Output of STT. g, Analysis of spatial transcriptomics data using STT where the spatial-similarity kernel based on spatial cell coordinates is combined with the tensor-induced and gene expression-induced kernel to infer a cell’s membership in attractors. In pathway similarity graph, Dim. denotes the coordinates in reduced dimensions.
+
+Results
+
+Overview of STT
+
+The inputs to STT are the single-cell gene expression matrices of both S and U counts (Fig. 1c), and the cell annotations (or membership) that serve as initial guess on what cell state they belong to. In addition, the spatial coordinates of each cell (or spot) are also required for spatial transcriptomic data. Through an iteration between parameter estimation and dynamics decomposition, STT constructs an attractor-wise velocity tensor named transition tensor of shape RNC×2×K×NG, where NC denotes the number of cells, NG the number of genes and K the number of attractors. Other quantities of tensor-based dynamics, including the memberships of cells in the attractors, transition probabilities and transition paths, are subsequently obtained in this construction (Methods).
+
+STT uses the following stochastic model of gene expression and splicing dynamics1 dUi=(fit,S1,…,SNG−βiUi)dt+σidWi,t,dSi=(βiUi−γiSi)dt+σidZi,t,
+
+where Ui and Si are the unspliced and spiced counts for gene i. The nonlinear function fit,S1,…,SNG models how other genes regulate the production rate of gene i. The system can possess multiple fixed points or attractors representing the different cell states. The parameter βi represents the mRNA splicing rate and γi is the spliced mRNA degradation rate. The independent Wiener process terms Wi,t and Zi,t represent the noise in gene expression. Such stochasticity may induce the noise-induced cell-state transitions among multistable attractors at a longer time scale than splicing dynamics.
+
+When most cells are located within the multiple attractor basins that correspond to the different cell states, with a small fraction of cells making transitions across the saddle points5 (a natural assumption on the cell distribution), the unspliced mRNA production term can be expanded and approximated to its linear expansion, thus introducing the attractor-dependent mRNA transcription rate (Fig. 1d and Methods). Such expansion allows robust estimate of the parameters, and initializes assignment of the attractor-wise velocities for each cell, which we call transition tensors (Fig. 1d and Methods).
+
+By constructing an inner-product velocity kernel (Fig. 1d, Methods and Supplementary Note 1), the tensors provide a cellular random walk description that is asymptotically consistent with continuous stochastic differential equation (SDE) (that is, equation (1)). Combining with the Gaussian kernel of gene expression similarity and cell spatial coordinates (Fig. 1g and Methods), the constructed cellular random walk equips cells in each attractor with consistent velocity, transition direction and similar gene expression. In addition, the constructed random walk encourages cells to be more likely to make transitions to other spatially adjacent cells in the physical space. Through coarse-graining and decomposing the random walk on attractor levels, the cells’ membership functions for different attractors are then obtained (Fig. 1e and Methods). In each iteration between the tensor model construction and the random walk decomposition, the updated membership function improves the parameter estimation in equation (1) by incorporating attractor uncertainty (Methods). The genes, whose dynamics are most consistent with the attractor property in the U–S space, are then identified during iteration (Methods). A monitor module is included, with regularization and early stopping strategies that can improve the robustness of iteration through the user’s control (Methods). Finally, the tensor streamlines to describe the attractor details, as well as the coarse-grained transition paths to depict long-time transitions, are projected on a low-dimensional dynamical manifold to show the cell-state transitions (Fig. 1f and Methods).
+
+Benchmarking STT in recovering multistable cell states
+
+We first applied STT to analyze two synthetic datasets based on simulating multistable systems. In the bistable toggle-switch circuit, the streamlines of averaged velocities over attractors in STT demonstrate clearer structures of the two attractors than the streamlines of RNA velocity and other methods (Fig. 2a and Supplementary Fig. 1). While RNA velocity streamlines computed by scVelo7 and UniTVelo36 tend to diverge from the attractor locations, STT streamlines converge toward the attractors, thus providing a more interpretable representation of the toggle-switch landscape (Fig. 2a and Supplementary Fig. 1). Moreover, STT computes an entropy value to distinguish between stable cells near fixed point and transitional cells across saddle points (Supplementary Fig. 1). As shown in both components of transition tensors with streamlines (Supplementary Fig. 1), only when the unspliced and spliced quantities are considered together can both attractor basins be revealed. Although the spliced tensors are consistent with the standard RNA velocity (Fig. 2a), which depicts transitions between the attractors, the unspliced tensors naturally introduce an ‘attraction force’ that ‘pulls’ cells toward the center of each attractor, as compared to the streamlines of cellDancer37 where the cells are attracted to the ‘ends’ within attractor (Supplementary Fig. 1). The unspliced counts provide a measurement on the level of ‘attraction’ in STT for an attractor of cell state. To further benchmark the accuracy of STT, we compared the cosine similarity between STT unspliced or spliced tensor components and the ground-truth velocities from the model, and found that STT ranked top in estimating both spliced and unspliced velocities (Fig. 2b). In addition, the performance of STT shows a good level of robustness when subsampling the dataset (Supplementary Fig. 1).Fig. 2 Benchmarking of STT in simulation datasets of toggle-switch and EMT circuits.
+
+a, Comparison between streamlines of STT and other methods for toggle-switch dataset. The cells are colored by attractor in STT, or Leiden clustering results in scVelo and UniTVelo. The STT, scVelo and ground-truth results are embedded in PCA on joint spliced and unspliced counts, and UniTVelo result is plotted on the coordinates of spliced counts. b, The box plots across all cells (n = 10,010) of cosine similarity between calculated velocity and ground truth in different methods. The central box represents the interquartile range, from the 25th percentiles (bottom bounds) to 75th percentiles (top bounds), and horizontal line within the box indicates the median (50th percentile). The whiskers stretch out to the values that fall within 1.5 times the interquartile range from the lower and upper quartiles. The dots indicate outliers. c,d, Comparison between streamlines of STT and other methods for synthetic EMT circuit dataset. c, The cells are colored with attractor assignment by STT, and the low-dimensional embedding is the UMAP based on the joint of spliced and unspliced counts. The streamlines are visualized using the averaged velocity over attractors. d, The cells are colored with Leiden clustering output, and the low-dimensional embedding is the UMAP of spliced counts only. The streamlines are visualized using RNA velocity.
+
+Next, we analyzed the simulated gene regulation circuits during epithelial–mesenchymal transition (EMT), where three attractors, denoted as epithelial (E), mesenchymal (M) and intermediate cell state (ICS), may coexist, in some parameter ranges (Methods). Compared to the RNA velocity calculated by scVelo (Fig. 2), the STT average velocities (Fig. 2c) clearly recover these three attractors. Overall, STT is able to reconstruct the complex multistable details in single-cell gene expression datasets.
+
+STT highlights ICSs in fate decision
+
+We next analyzed the scRNA-seq data in the EMT induction experiment of human lung A549 cell lines, including a temporal series of snapshots collected from the first 7 days after TGFB1 treatment38. STT identifies three attractors, namely E, ICS and M, consistent with the order of timepoints in data collection (Fig. 3a,b and Supplementary Fig. 2). Moreover, cells nearby the ICS attractor, mainly collected at 8 h or 1 day after induction (Fig. 3b), have higher entropy values (Fig. 3c), thus indicating that this state is more plastic than epithelial (day 0 and 8 h) and mesenchymal (after day 3) states. This is in good agreement with the proposed phenotypic plasticity of intermediate epithelial and/or mesenchymal states in cancer39.Fig. 3 Multistability of EMT in A549 cell lines with TGFB1 induction.
+
+a, The global transition path analysis of EMT. Cells are embedded in the constructed transition coordinates (trans. coord.) of dynamical manifold and the number indicates fraction of transition flux. Cells are colored by STT attractor. b, Transition coordinates with cells colored by collection time. c, Violin plot of cell-membership entropy in different attractors. d, Absorption probabilities of cells into different attractors using multistability kernel induced random walk by STT. e, Top genes that are consistent with the multistability of attractors in EMT. f, The streamlines of various components of transition tensors, including the attractor-averaged and attractor-specific tensors. The low-dimensional embedding is the UMAP of both spliced and unspliced counts. In the left panel, the cells are colored by the attractor assignment. In the right panel, the cells are colored by their membership in each attractor, and only the tensors of cells whose memberships are greater than 0.2 in the attractors are shown.
+
+Using the transition vector to predict the transition paths connecting attractors in the epithelial–mesenchymal landscape, we find that the transition probability flux from E to M always goes through the ICS (Fig. 3a). In other words, epithelial cells undergoing EMT never directly switch to a mesenchymal state, but rather acquire intermediate traits first. The unspliced and spliced counts often exhibit multistability of the attractors (Fig. 3e and Supplementary Figs. 2 and 3). The genes with high multistability scores possess varying expression levels in both unspliced and spliced counts within various attractors, and show a gradual change during E–ICS–M transitions. While the highly ranked multistable genes such as ITGA11, are not significantly detected by differential gene expression analysis as top-scored marker genes for attractors (Supplementary Fig. 3), they are found important in promoting EMT transitions and tumor progression40. While the tensor streamlines of splicing dynamics demonstrate the overall direction from E to M via ICS, which is also consistent with the UniTVelo results (Supplementary Fig. 2), the gene expression dynamics of unspliced counts as well as in the joint U–S space predicted by STT as well as cellDancer both suggest that cells are ‘attracted’ to the ICS basins during EMT (Fig. 3f and Supplementary Fig. 2). This is also consistent with the CellRank absorption probability analysis based on tensor-induced multistability kernel (Fig. 3d). Together, the tensor components along with the global transition paths analysis highlight the ICS as a distinct attractor basin, serving as the hub state during EMT.
+
+In addition, we applied STT to blood41 and pancreas7 development datasets and found its capability to resolve complex state transitions, and its multistability tensor kernel is consistent with CellRank analysis (Supplementary Figs. 4 and 5).
+
+STT identifies spatial attractors and pathway similarities
+
+We next applied STT to the HybISS spatial dataset of mouse brain development42. To enrich the unspliced and spliced counts for better tensor estimation, we used the SIRV19 algorithm to impute one of the original spatial data slices at 40 μm at E10 and E11. Compared with clustering only based on cellular similarity (Supplementary Fig. 6), STT identifies attractors consistent with spatial locations of different cell states (Fig. 4a) and brain region annotations in original publication (Fig. 4b): the cells within the same attractor tend to have similar spatial coordinates and belong to the same regions. In addition, the cell assignment is found to be robust to the weight of spatial diffusion kernels (Supplementary Fig. 6), attractor initialization (Supplementary Fig. 7), multistability genes filtering (Supplementary Fig. 8) and number of attractors (Supplementary Fig. 9). The local transition tensors in the forebrain and hindbrain attractors (Fig. 4c) are consistent with UniTVelo analysis (Supplementary Fig. 6).Fig. 4 Transition tensor analysis of HybISS mouse brain spatial transcriptomics dataset.
+
+a,b, The spatial annotation of data and detected attractor by STT with cells colored by different categories: attractor (a) and region (b). c, Local transition tensor streamlines in specific attractors 6 and 3. The cells are colored by their memberships in corresponding attractors. d, Similarity of transition tensors across KEGG pathways. The left shows 2D embedding indicating the clustering of similar biological pathways in mouse brain development spatial dynamics, with the averaged tensor streamlines from various pathways displaying different transition dynamics. Pathways that have at least three genes overlapped with STT multistability genes are shown in the low-dimensional embeddings. The right shows the streamlines of specific pathways from different clusters, with cells embedded in spatial coordinates.
+
+To evaluate the biological significance of the tensor streamlines, we performed pathway-specific analysis to evaluate functions associated with the cell-state transitions and pathway regulations (Fig. 4d). We used the Kyoto Encylopedia of Genes and Genomes (KEGG) knowledge database, and calculated the similarity among pathways based on tensor correlations of multistable genes for each pathway (Methods). Indeed, the pathway-specific tensor demonstrates distinct attractor dynamics. The latent embedding and clustering of pathways based on tensor correlation (Fig. 4d) reveal the functional similarity of spatial state transitions between pathways during developmental process. The TGF-beta and WNT pathways, known to exhibit cross-talk and cooperate during embryogenesis43, are from distinct clusters in the latent embedding, and their tensor streamlines are in opposite directions, especially in midbrain and forebrain attractors (Fig. 4d). Two other important pathways in brain development, the Hippo and Thyroid hormone signaling pathways44,45, are also from different clusters of pathway tensors, showing opposite streamlines in midbrain and forebrain regions (Fig. 4d). Overall, STT provides dynamical information for the spatial organizations of cell states and the relations between pathways regulating state transitions during development.
+
+STT reveals spatial attractors and lineage in chicken heart
+
+We applied STT to the spatially resolved chicken heart data measured by 10X Visium technology46. Our analysis is focused on the last temporal point at day 14 from the dataset when the four-chamber development has finalized with completed events of cardiogenesis and explicit spatial boundaries46.
+
+Using SIRV-imputed unspliced and spliced counts19, STT identifies five spatially resolved attractors (Fig. 5a and Supplementary Fig. 10). Among them, attractor 2 coincides with the ‘valves’ region in the original study, and it mainly consists of fibroblast cells (Fig. 5a,b,d,e). Attractor 0 mainly consist of cells from the right ventricle region (Fig. 5e). Attractor 1 mainly localizes in the ‘atria’ region (Fig. 5e) and is composed of erythrocytes. While the remaining attractors (3, 4) are distributed across several connected regions, they all include the cells of annotated phenotype of cardiomyocytes (Fig. 5a,b,d,e). The dynamical manifold reveals those discrete attractors (Fig. 5c) relate to various cell lineages. The attractors 1 and 2, which contain spatially localized lineages of fibroblasts and erythrocytes, all exhibit the ‘attraction force’ as seen in the tensor streamlines (Fig. 5f). In comparison, the streamlines of tensors within attractors 3 and 4 (both containing cardiomyocytes) indicate their transience in space and show a tendency to transit into atrial regions, which is also observed in the ‘attraction’ between unspliced components. This could partly be explained by the existence of another group of myocytes in the atria (Fig. 5b,d). Overall, the observed consistency with spatial regions or cell type annotations indicates STT’s capability to dissect spatially resolved attractors.Fig. 5 Transition tensor analysis of 10X Visium chicken heart spatial data at day 14.
+
+a,b, The spatial spots of the analyzed data, with spots colored by detected attractor by STT regions (a) or annotation in original research (b). c, The constructed dynamical landscape of data, with spots colored by attractors. d, The spatial spots colored by cell type annotations in original research. e, The Sankey plot displaying the relation between STT attractors (left) and spatial region annotations (right). The width of links indicates the number of cells that share the connected attractor label and region annotation label simultaneously. f, Local transition tensor streamlines in specific attractors 1, 2, 3 and 4. The cells are colored by their memberships to corresponding attractors.
+
+STT elucidates region-specific spatial attractors and stabilities
+
+We next analyzed the high-resolution Stereo-seq mouse adult coronal hemibrain dataset47 processed with bin size 60, which revealed the complex domains of neuron cells with various biological functions. Direct application of STT shows several region-specific spatial attractors that are very consistent with the functional annotations of brain regions (Fig. 6a,b). The convergent streamlines of tensors (Fig. 6c) suggest that the multistability of gene expression dynamics is well maintained in regions such as the cortical subplot (attractor 4) and the striatum dorsal region (attractor 10). Streamlines flow outward (Fig. 6c) in thalamus regions (attractor 8) all tensor components, suggesting its relatively high plasticity. The pathway embedding based on their tensor dynamics showed that the previously known interacting pathways such as cGMP–PKG and the calcium signaling pathway48 share similar tensor dynamics (Fig. 6d). It also suggests that cGMP–PKG is different from the oxytocin pathway, in which the streamlines indicate the major differences occurring in the amygdalar nucleus region (Fig. 6d). Overall, the results indicated that STT can discover spatial regions and quantify their stabilities through attractor analysis, even in mature tissues.Fig. 6 Transition tensor analysis of Stereo-seq mouse coronal hemibrain spatial data.
+
+a,b, The spatial location of cells colored with STT attractors (a) and annotation in original research (b). c, Local streamlines of tensors in attractors 4, 8 and 10. d, The 2D embedding of the pathway dynamics (top) and the averaged tensor streamlines of two specific pathways (bottom) with cells colored by attractors and embedded in spatial coordinates. Pathways that have at least eight genes overlapped with STT multistability genes are shown in 2D embedding.
+
+Discussion
+
+Quantifying and modeling the relative abundance between unspliced and spliced counts has enabled an effective mechanistic approach to dissect cell-state transitions from scRNA-seq datasets. To connect the different time scales among gene expression, mRNA splicing and cell lineage dynamics, as well as to study the underlying attractors of these states, we have developed the STT for (1) constructing the attractor-wise transition tensor, (2) analyzing the probabilistic transition paths and transitional cells and (3) inferring the genes that account for the multistability of cell states. This was done through an iterative computation process between (1) parameter inference in transition tensor models and (2) multiscale analysis of tensor-induced stochastic dynamical systems.
+
+Compared with the RNA velocity models, STT is unique in uncovering attractors underlying both the gene expression and the splicing dynamics, as well as quantifying the transitions among them. By assuming multistability, STT is robust to initial state specifications or hidden time correction7,26,36,49. The cell-membership functions quantify transitional cells in estimating the transition tensors, naturally bridging the downstream multiscale dynamical analysis.
+
+To identify transitional cells and infer transition paths, STT leverages the computed transition tensor, instead of direct usage of RNA velocity such as CellRank8 or Dynamo25. The multistable transition tensor is found to be more compatible with the attractor assumption in downstream analysis. The iterative scheme of STT between tensor construction and dynamical dissection is found to better ensure such self-consistency. However, since the attractor assumption does not account for oscillation dynamics, STT needs to be improved to capture the nonequilibrium features of datasets with strong cell cycle effects.
+
+The velocity kernel-based cellular random walk derived from the transition tensor is critical for connecting the modules of tensor inference and dynamical decomposition in STT, allowing better-connected dynamics at different scales. Theoretical analysis has revealed that different choices of velocity kernel lead to various continuum limits in forms of ordinary or SDEs49. In STT, the inner-product kernel is used to construct the cellular random walk that was shown to be consistent with the stochastic chemical Langevin model of gene expression49,50, while the cosine kernel, which correctly recovers the directionality of the velocity field49, is adopted to visualize the local streamlines within attractors. In addition to the differential equation models, it may be interesting to formulate STT in the chemical master equation framework51 of RNA velocity in the future.
+
+As a mechanistic model-based approach, STT may be improved in several aspects. Instead of using attractor-specific zeroth order approximation of nonlinear gene expression rate function in equation (1), higher-order gene interactions could be considered as proposed recently for gene regulatory network inference15. Multimodal information including single-cell epigenomics52 or proteomics data53 can also be incorporated in the multistable dynamical system to enhance the transition tensor calculation. The automatic detection of root and target states in multistable models is always challenging, and the previous knowledge or knowing the properties related to cells’ differentiation potencies54,55 could be helpful.
+
+Overall, STT provides a unified approach to extract spatiotemporal information from single-cell datasets by bridging the processes across different time scales and tissue regions. Our method allows for a multiscale description of tissue spatiotemporal structures, connecting microscopic dynamics of gene expression and splicing, and the macroscopic dynamics of cell-state transitions among emergent attractors.
+
+Methods
+
+Multistability in gene expression and splicing model
+
+We use a simple dynamical model with different parameters around each steady-state to approximate the mRNA splicing dynamics for gene i:dUidt=αc,i−βiUi,dSidt=βiUi−γiSi.
+
+Here, αc,i is the state-dependent unspliced mRNA transcription rate in attractor c, βi is the mRNA splicing rate and γi is the mRNA degradation rate. Assuming that the system is close to steady-state, we have ϵi=αc,i−βiUi,ηi=βiUi−γiSi where ϵi and ηi are independent and identically distributed zero-mean Gaussian variables. Due to the invariance of scales in parameters56, we set γi=1 and the maximum likelihood estimation could be expressed asminαc,β∑c=1K∑k=1NCαc−βUk21k∈Ωc+∑k=1NCβUk−Sk2.
+
+Since the parameters of different genes are estimated independently, for simplicity of notations, here we omit gene subscript i and introduce the subscript k to denote the cell index. The indicator function of attractors 1k∈Ωc is initialized using user-provided cell labels or standard Leiden or Louvain clustering algorithm output, and it is updated using membership function in iterations (described below). The estimation yields the solution:αc(*)=mcβ*,β(*)=∑k=1NCUkSk∑k=1NCUk2+∑c=1K(Uk−mc)21k∈Ωc.
+
+where mc=∑k=1NCUk1k∈ΩcNc. Compared with steady-steady parameter estimation in the standard RNA velocity model, the splicing rate parameter β in the multistable model is not only attractor-type specific, but also depends on both unspliced and spliced counts.
+
+For each cell k with counts (Uk,Sk), its velocity with respect to each attractor c is defined as vk,u,c=αc(*)−β*Uk,vk,s,c=β*Uk−Sk where subscript u and s corresponds to unspliced and spliced counts, respectively. This estimation is repeated for each gene, therefore, leading to a four-dimensional transition tensor vk,l,c,g∈RNC×2×K×NG.
+
+Tensor-based and spatial-constrained transition dynamics
+
+Next, STT constructs the Markov chain transition probabilities among individual cells based on the calculated tensor, gene expression similarity and spatial coordinates if available (Fig. 1g). The transition probability is constructed from three components: P=w1Pv+w2Pc+1−w1−w2Ps, where Pv, Pc and Ps are transition probabilities induced by velocity, similarity and spatial kernels, respectively. Here w1 and w2 are the hyperparameters of the algorithm to balance the effects of different modalities of tensor dynamics, gene expression similarity and spatial closeness. Their effect on output has been tested in Supplementary Fig. 6.
+
+To construct Pv, we first transform the attractor-specific tensor to the attractor-independent velocity V by averaging along the dimension of attractors:Vk,u,g=∑cρk,cvk,u,c,g,Vk,s,g=∑cρk,cvk,s,c,g.
+
+Here ρk,c denotes the membership function of cell k in attractor c. The stable cell j located around the fixed point of the attractor basin d yield ρj,d=1, while transitional cell l near saddle points has multiple positive components in ρl, pointing toward the attractors to which the cell can transition into.
+
+Having calculated the tensor, we next construct the velocity-induced transition probability Pv using the inner-product kernel49 (Supplementary Note 1). The weight of transition propensity from cell k to l is wkl=exp(Vk,uTΔUkl+Vk,sTΔSkl) where ΔUkl=Ul−Uk and ΔSkl=Sl−Sk. The random walk induced by such a kernel is consistent with the SDE model of equation (1) (ref. 49 and Supplementary Note 1). The cell similarity induced transition probability Pc is constructed from the Gaussian kernel of the diffusion map based on gene expression counts2. Last, the spatially constrained transition probability Ps is constructed from the Gaussian kernel of spatial location coordinates, such that cells with similar spatial locations are more likely to make transitions between each other. As a result, such cells are more likely to be assigned into the same attractor basins.
+
+To calculate the membership function in attractors, we use the GPPCA57 algorithm to decompose the constructed random walk transition probability matrix P and coarse-grain the nonequilibrium Markov chains and obtain ρk,c. This algorithm allows for the factoring and ‘coarse-graining’ of nonequilibrium transition probability matrices of cellular random walk, which holds true for most of the velocity-induced dynamics, to obtain the attractor within the data as well as cell’s relevant position (that is, membership) in each attractor. The coarse-grained (cg) transition probability matrix PcgK×K on the attractor level (K is the total number of attractors) is obtained simultaneously using the GPPCA algorithm. Given the cell’s membership function, its transitional entropy can be defined as εi=−∑c=1Kρi,clnρi,c. The larger entropy indicates the higher propensity of the cell to make transitions between attractors.
+
+Iterative scheme for parameter estimation and attractor membership quantification
+
+After obtaining the membership function, the parameters of the tensor model are updated to incorporate the uncertainty of the cells’ positions in attractors. We define a loss functionJαc,β,ρk,c=∑c=1K∑k=1NCαc−βUk2ρk,c+∑k=1NCβUk−Sk2+λ∑c=1NCac2+λβ2,
+
+where λ denotes the strength of regularization term of kinetic parameters. Intuitively, the ‘stable cells’ in attractor c have larger weight values in the regression loss function since the confidence level about steady-state is larger. We analytically solve the optimizerαc(*)=mcβ*,β(*)=∑k=1NCUkSk∑k=1NCUk2+∑c=1K(Uk−mc)2ρk,c+λ,
+
+where mc=∑k=1NCUkρk,c∑k=1NCρk,c+λ.
+
+In turn, the updated tensor with the newly optimized parameters leads to an updated membership function. In STT, we adopt an iterative scheme to update tensor parameters and attractor memberships jointly,αcn+1,βn+1=argminαc,βJαc,β,ρk,cn,
+
+ρk,cn+1=DynamicalAnalysis(αcn,βn)
+
+where the superscript n denotes the number of iterations, and DynamicalAnalysis denotes the described procedure to update membership function. The scheme stops once the membership function does not improve within certain threshold, or the iteration exceeds the allowed maximum number of iterations.
+
+To dissect the multistable dynamics accurately, we also filter the genes in each iteration based on their goodness of fit to model that includes the genes showing multistability. The metric of goodness, or gene multistability score, is defined as 1−Jαc,β,ρk,cNC(VarU+VarS) where NC denotes the number of cells. Only the tensor of filtered genes, whose multistability scores are larger than certain threshold, are used to calculate velocity kernel and therefore update the membership function. The hyperparameters of STT and their values chosen in datasets analyzed are presented in Supplementary Tables 1 and 2.
+
+To allow robust control of the iteration scheme, we incorporated a monitor module that outputs the multistability scores of genes in both training (by default 80% of all sample sizes) and test dataset (20% of all samples). The training dataset was used to fit kinetic parameters (αc,β), and the multistability scores of genes are calculated on test dataset. The monitor module outputs the multistability scores and number of genes pass the threshold. Given the output, the user may choose to interactively (1) modify the threshold set for filtering multistability genes, (2) adjust the weight of tensor-induced kernel against gene expression similarity or spatial kernels to encourage the high-quality transition matrices or (3) determine whether to stop the iteration, therefore facilitating the adaptive accuracy. The interface of monitor module is demonstrated in Supplementary Fig. 1f. We also demonstrate the efficiency and scalability of STT algorithm in Supplementary Table 3 and Supplementary Fig. 10.
+
+Initialization of iteration
+
+To start the iteration, STT requests the input of existing clustering results to create attractor membership by one-hot encoding. The previous biological annotation of the dataset or spatial region segmentation results were recommended as the input. When such information is unavailable, users may adopt clustering algorithms such as Leiden or Louvain to cluster the cells based on expression counts (spliced only or spliced and unspliced jointly) or spatial location of the cells. The robustness to initialization of STT was investigated (Supplementary Fig. 7). Whenever the user prefers alternative clustering methods and/or more systematic analysis, STT provides an option to feed a user-generated clustering output as the input for the initializations of STT.
+
+Visualization of dynamical manifold and transition paths
+
+To visualize the low-dimensional embeddings of cells, STT uses the join state xk=Uk,Sk∈R2NG for each cell k as the input of dimensionality reduction algorithms such as principal component analysis (PCA) or uniform manifold approximation and projection (UMAP). To visualize the dynamical manifold, we define the cell’s position in the two-dimensional (2D) plane as yk=∑c=1Kρk,cμc, where μc is the center of PCA or UMAP embeddings of each attractor and K is the number of attractors. Then, a Gaussian mixture density estimation P(y) is constructed for all yk using an expectation–maximization algorithm, where the initial weights for K components are the stationary distributions of attractor-level, coarse-grained random walk transition probability matrix P derived in the previous section. The surface of dynamical manifold was calculated as ϕy=−lnP(y). The streamlines of the velocity Vk=Vk,u,Vk,s∈R2NG in the 2D plane are calculated using the linear (PCA) or nonlinear (UMAP) projection approach in scVelo with the cosine kernel. Given initial and final states, the transition paths and their proportion of the total transition probability flux are calculated using the transition path theory58 with the PyEMMA package59.
+
+Synthetic datasets and benchmarking
+
+The simulation data (n = 10,010 cells) for the toggle-switch system were generated by the SDE model of a mutually inhibited two-gene circuits with nonlinear gene regulation and/or splicing dynamics and stochastic noise (Supplementary Note 2). Two attractors are present in the system with a saddle point in between. The synthetic dataset (n = 5,000 cells) of EMTs was generated by the SDE model of a seven-gene core circuit during EMT adapted to include mRNA splicing15,60. With different levels of extrinsic signal TGFB, the system has saddle-node bifurcations within a certain parameter range and three attractors may coexist, representing epithelial state, ICS and mesenchymal state (Supplementary Note 2). We simulated different levels of TGFB to model the EMT process. For both datasets, the Euler–Maruyama method was used to simulate the SDE trajectories, with negative gene expression values adjusted to zero during each time step of the trajectory simulation.
+
+Pathway analysis
+
+To analyze the similarities between tensor dynamics in various pathways, we first downloaded the pathway databases, such as KEGG, using the GSEApy package61. Next, for each pathway we identified the genes shared by the pathway databases and the STT multistability analysis. For any selected gene sets that contain a sufficient number of genes, we calculated their cosine-kernel velocity graph using the averaged tensor of both spliced counts and unspliced counts, and then computed the Pearson’s correlation coefficients between pathway-specific velocity graphs. The UMAP dimensionality reduction of pathways was then performed on the principal components of the correlation matrix, and clustering was performed on UMAP with K-means algorithm by silhouette score to choose the optimal number of clusters.
+
+Reporting summary
+
+Further information on research design is available in the Nature Portfolio Reporting Summary linked to this article.
+
+Online content
+
+Any methods, additional references, Nature Portfolio reporting summaries, source data, extended data, supplementary information, acknowledgements, peer review information; details of author contributions and competing interests; and statements of data and code availability are available at 10.1038/s41592-024-02266-x.
+
+Supplementary information
+
+Supplementary Information Supplementary Notes 1 and 2, Tables 1–3 and Figs. 1–10.
+
+Reporting Summary
+
+Peer Review File
+
+Extended data
+
+is available for this paper at 10.1038/s41592-024-02266-x.
+
+Supplementary information
+
+The online version contains supplementary material available at 10.1038/s41592-024-02266-x.
+
+Acknowledgements
+
+This project was supported by National Institutes of Health grant nos. U01AR073159 and R01AR079150 (Q.N.), National Science Foundation grant nos. DMS1763272 (Q.N.) and MCB2028424 (Q.N.), The Simons Foundation (grant no. 594598 to Q.N.), NSFC grants no. 11825102 (T.L.), no. 12288101 (T.L. and P.Z.) and no. 8206100646 (P.Z.), National Key R&D Program of China grant no. 2021YFA1003300 (T.L.), Start-up grants of Peking University grant no. 7101303365 (P.Z.) and the High-performance Computing Platform of Peking University (P.Z.).
+
+Author contributions
+
+Q.N. and P.Z. conceived the project. P.Z. and T.L. designed the algorithm and implemented the code. P.Z. and F.B. performed the simulations, analyzed the data and interpreted the results. Q.N. and P.Z. wrote the paper. All authors revised and approved the paper. Q.N. supervised the project.
+
+Peer review
+
+Peer review information
+
+Nature Methods thanks Jun Ding and Chen Qiao for their contribution to the peer review of this work. Peer reviewer reports are available. Primary Handling Editor: Madhura Mukhopadhyay, in collaboration with the Nature Methods team.
+
+Data availability
+
+All the datasets used in this paper are publicly available. The detailed preprocessing of datasets is described in Supplementary Notes. The simulation datasets of synthetic circuits are available at https://github.com/cliffzhou92/STT/tree/release/data. The EMT dataset of human lung A549 cell lines is available at GSE147405. The pancreas dataset (originally available at GSE132188) and adult human bone marrow datasets (originally available at https://data.humancellatlas.org/explore/projects/091cf39b-01bc-42e5-9437-f419a66c8a45) can be downloaded from the built-in datasets of the scvelo==0.2.4 package (https://scvelo.readthedocs.io/en/stable/api.html). The spatial datasets of mouse brain and chicken heart as well as scRNA-seq datasets used for imputation can be downloaded from https://doi.org/10.5281/zenodo.6798658 (ref. 62). The Stereo-seq mouse brain dataset with unspliced and spliced counts was downloaded from the Spateo package (https://github.com/aristoteleo/spateo-tutorials, https://www.dropbox.com/s/c5tu4drxda01m0u/mousebrain_bin60.h5ad?dl=0). The KEGG database was originally available on the Enrichr webpage (https://maayanlab.cloud/Enrichr/#librariesdownloaded) and downloaded using gseapy==1.0.4. The processed datasets for analysis are also stored at https://disk.pku.edu.cn/link/AAD1681DAD531D47699D459BB46C4651D8.
+
+Code availability
+
+STT is implemented as a Python package available at https://github.com/cliffzhou92/STT/tree/release. The source code for simulation and the notebook files to reproduce all analysis in the paper are also available at https://github.com/cliffzhou92/STT/tree/release/example_notebooks.
+
+Competing interests
+
+The authors declare no competing interests.
+
+Publisher’s note Springer Nature remains neutral with regard to jurisdictional claims in published maps and institutional affiliations.
+==== Refs
+References
+
+1. Qiu X Reversed graph embedding resolves complex single-cell trajectories Nat. Methods 2017 14 979 982 10.1038/nmeth.4402 28825705
+2. Haghverdi L Diffusion pseudotime robustly reconstructs lineage branching Nat. Methods 2016 13 845 848 10.1038/nmeth.3971 27571553
+3. Wolf FA PAGA: graph abstraction reconciles clustering with trajectory inference through a topology preserving map of single cells Genome Biol. 2019 20 59 10.1186/s13059-019-1663-x 30890159
+4. Weinreb C Fundamental limits on dynamic inference from single-cell snapshots Proc. Natl Acad. Sci. USA. 2018 115 E2467 E2476 10.1073/pnas.1714723115 29463712
+5. Zhou P Dissecting transition cells from single-cell transcriptome data through multiscale stochastic dynamics Nat. Commun. 2021 12 5609 10.1038/s41467-021-25548-w 34556644
+6. La Manno G RNA velocity of single cells Nature 2018 560 494 498 10.1038/s41586-018-0414-6 30089906
+7. Bergen V Generalizing RNA velocity to transient cell states through dynamical modeling Nat. Biotechnol. 2020 38 1408 1414 10.1038/s41587-020-0591-3 32747759
+8. Lange M CellRank for directed single-cell fate mapping Nat. Methods 2022 19 159 170 10.1038/s41592-021-01346-6 35027767
+9. Weng G Kim J Won KJ VeTra: a tool for trajectory inference based on RNA velocity Bioinformatics 2021 37 3509 3513 10.1093/bioinformatics/btab364 33974009
+10. Zhang Z Zhang X Inference of high-resolution trajectories in single-cell RNA-seq data by using RNA velocity Cell Rep. Meth. 2021 1 100095 10.1016/j.crmeth.2021.100095
+11. Gupta R Cytopath: simulation-based inference of differentiation trajectories from RNA velocity fields Cell Rep. Meth. 2022 2 100359 10.1016/j.crmeth.2022.100359
+12. Atta L Sahoo A Fan J VeloViz: RNA velocity-informed embeddings for visualizing cellular trajectories Bioinformatics 2022 38 391 396 10.1093/bioinformatics/btab653 34500455
+13. Qiao C Huang Y Representation learning of RNA velocity reveals robust cell transitions Proc. Natl Acad. Sci. USA 2021 118 e2105859118 10.1073/pnas.2105859118 34873054
+14. Liu R Dynamical systems model of RNA velocity improves inference of single-cell trajectory, pseudo-time and gene regulation J. Mol. Biol. 2022 434 167606 10.1016/j.jmb.2022.167606 35489382
+15. Bocci F Zhou P Nie Q spliceJAC: transition genes and state‐specific gene regulation from single‐cell transcriptome data Mol. Syst. Biol. 2022 18 e11176 10.15252/msb.202211176 36321549
+16. Longo SK Integrating single-cell and spatial transcriptomics to elucidate intercellular tissue dynamics Nat. Rev. Genet. 2021 22 627 644 10.1038/s41576-021-00370-8 34145435
+17. Burgess DJ Spatial transcriptomics coming of age Nat. Rev. Genet. 2019 20 317 317 10.1038/s41576-019-0129-z 30980030
+18. Ren H Identifying multicellular spatiotemporal organization of cells with SpaceFlow Nat. Commun. 2022 13 4076 10.1038/s41467-022-31739-w 35835774
+19. Abdelaal, T. et al. SIRV: spatial inference of RNA velocity at the single-cell resolution. Preprint at bioRxiv10.1101/2021.07.26.453774 (2021).
+20. Bergen V RNA velocity—current challenges and future perspectives Mol. Syst. Biol. 2021 17 e10282 10.15252/msb.202110282 34435732
+21. Laurent M Kellershohn N Multistability: a major means of differentiation and evolution in biological systems Trends Biochem. Sci. 1999 24 418 422 10.1016/S0968-0004(99)01473-5 10542403
+22. Ozbudak EM Multistability in the lactose utilization network of Escherichia coli Nature 2004 427 737 740 10.1038/nature02298 14973486
+23. Zhu R Synthetic multistability in mammalian cells Science 2022 375 eabg9765 10.1126/science.abg9765 35050677
+24. Shamir M SnapShot: timescales in cell biology Cell 2016 164 1302 1302.e1 10.1016/j.cell.2016.02.058 26967295
+25. Qiu X Mapping transcriptomic vector fields of single cells Cell 2022 185 690 711. e45 10.1016/j.cell.2021.12.045 35108499
+26. Gu, Y., Blaauw, D. & Welch, J. D. Bayesian inference of RNA velocity from multi-lineage single-cell data. Preprint at bioRxiv10.1101/2022.07.08.499381 (2022).
+27. Battich N Sequencing metabolically labeled transcripts in single cells reveals mRNA turnover strategies Science 2020 367 1151 1156 10.1126/science.aax3072 32139547
+28. Cao J Sci-fate characterizes the dynamics of gene expression in single cells Nat. Biotechnol. 2020 38 980 988 10.1038/s41587-020-0480-9 32284584
+29. Erhard F scSLAM-seq reveals core features of transcription dynamics in single cells Nature 2019 571 419 423 10.1038/s41586-019-1369-y 31292545
+30. Thom R Topological models in biology Topology 1969 8 313 335 10.1016/0040-9383(69)90018-4
+31. Huang S Cell fates as high-dimensional attractor states of a complex gene regulatory network Phys. Rev. Lett. 2005 94 128701 10.1103/PhysRevLett.94.128701 15903968
+32. Zhou JX Quasi-potential landscape in complex multi-stable systems J. R. Soc. Interface 2012 9 3539 3553 10.1098/rsif.2012.0434 22933187
+33. Huang S Processes on the emergent landscapes of biochemical reaction networks and heterogeneous cell population dynamics: differentiation in living matters J. R. Soc. Interface 2017 14 20170097 10.1098/rsif.2017.0097 28490602
+34. E W Li T Vanden-Eijnden E Optimal partition and effective dynamics of complex networks Proc. Natl Acad. Sci. USA 2008 105 7907 7912 10.1073/pnas.0707563105 18303119
+35. Bocci, F. et al. Theoretical and computational tools to model multistable gene regulatory networks. Rep. Prog. Phys. 86, 106601 (2023).
+36. Gao M Qiao C Huang Y UniTVelo: temporally unified RNA velocity reinforces single-cell trajectory inference Nat. Commun. 2022 13 6586 10.1038/s41467-022-34188-7 36329018
+37. Li, S. et al. A relay velocity model infers cell-dependent RNA velocity. Nat. Biotechnol. 42, 99–108 (2023).
+38. Cook DP Vanderhyden BC Context specificity of the EMT transcriptional response Nat. Commun. 2020 11 2142 10.1038/s41467-020-16066-2 32358524
+39. Jia D Quantifying cancer epithelial–mesenchymal plasticity and its association with stemness and immune response J. Clin. Med. 2019 8 725 10.3390/jcm8050725 31121840
+40. Ando T Integrin α11 in non–small cell lung cancer is associated with tumor progression and postoperative recurrence Cancer Sci. 2020 111 200 208 10.1111/cas.14257 31778288
+41. Setty M Characterization of cell fate probabilities in single-cell data with Palantir Nat. Biotechnol. 2019 37 451 460 10.1038/s41587-019-0068-4 30899105
+42. La Manno G Molecular architecture of the developing mouse brain Nature 2021 596 92 96 10.1038/s41586-021-03775-x 34321664
+43. Attisano L Labbé E TGFβ and Wnt pathway cross-talk Cancer Metastasis Rev. 2004 23 53 61 10.1023/A:1025811012690 15000149
+44. Ouyang T Recent advances of the Hippo/YAP signaling pathway in brain development and glioma Cell. Mol. Neurobiol. 2020 40 495 510 10.1007/s10571-019-00762-9 31768921
+45. Bernal J Thyroid hormones and brain development Vitam. Horm. 2005 71 95 122 10.1016/S0083-6729(05)71004-9 16112266
+46. Mantri M Spatiotemporal single-cell RNA sequencing of developing chicken hearts identifies interplay between cellular differentiation and morphogenesis Nat. Commun. 2021 12 1771 10.1038/s41467-021-21892-z 33741943
+47. Qiu, X. et al. Spateo: multidimensional spatiotemporal modeling of single-cell spatial transcriptomics. Preprint at bioRxiv10.1101/2022.12.07.519417 (2022).
+48. Jehle A Garaschuk O The interplay between cGMP and calcium signaling in Alzheimer’s disease Int. J. Mol. Sci. 2022 23 7048 10.3390/ijms23137048 35806059
+49. Li T On the mathematics of RNA Velocity I: theoretical analysis CSIAM Trans. Appl. Math. 2021 2 1 55 10.4208/csiam-am.SO-2020-0001
+50. Gillespie DT The chemical Langevin equation J. Chem. Phys. 2000 113 297 306 10.1063/1.481811
+51. Gorin G RNA velocity unraveled PLoS Comput. Biol. 2022 18 e1010492 10.1371/journal.pcbi.1010492 36094956
+52. Ma S Chromatin potential identified by shared single-cell profiling of RNA and chromatin Cell 2020 183 1103 1116.e20 10.1016/j.cell.2020.09.056 33098772
+53. Gorin G Svensson V Pachter L Protein velocity and acceleration from single-cell multiomics experiments Genome Biol. 2020 21 39 10.1186/s13059-020-1945-3 32070398
+54. Shi J Quantifying Waddington’s epigenetic landscape: a comparison of single-cell potency measures Brief Bioinform. 2020 21 248 261 30289442
+55. Gulati GS Single-cell transcriptional diversity is a hallmark of developmental potential Science 2020 367 405 411 10.1126/science.aax0249 31974247
+56. Marot-Lassauzaie V Towards reliable quantification of cell state velocities PLoS Comput. Biol. 2022 18 e1010031 10.1371/journal.pcbi.1010031 36170235
+57. Reuter B Fackeldey K Weber M Generalized Markov modeling of nonreversible molecular kinetics J. Chem. Phys. 2019 150 174103 10.1063/1.5064530 31067901
+58. Metzner P Schutte C Vanden-Eijnden E Illustration of transition path theory on a collection of simple examples J. Chem. Phys. 2006 125 084110 10.1063/1.2335447 16965004
+59. Scherer MK PyEMMA 2: a software package for estimation, validation, and analysis of Markov models J. Chem. Theory Comput. 2015 11 5525 5542 10.1021/acs.jctc.5b00743 26574340
+60. Tian X-J Zhang H Xing J Coupled reversible and irreversible bistable switches underlying TGFβ-induced epithelial to mesenchymal transition Biophys. J. 2013 105 1079 1089 10.1016/j.bpj.2013.07.011 23972859
+61. Fang Z Liu X Peltz G GSEApy: a comprehensive package for performing gene set enrichment analysis in Python Bioinformatics 2023 39 btac757 10.1093/bioinformatics/btac757 36426870
+62. Abdelaal, T. et al. SIRV: spatial inference of RNA velocity at the single-cell resolution. Zenodo10.5281/zenodo.6798658 (2022).

@@ -1,0 +1,166 @@
+
+==== Front
+J Chem Theory Comput
+J Chem Theory Comput
+ct
+jctcce
+Journal of Chemical Theory and Computation
+1549-9618
+1549-9626
+American Chemical Society
+
+38771939
+10.1021/acs.jctc.4c00116
+Article
+Solvation Free Energies from Machine Learning Molecular Dynamics
+https://orcid.org/0009-0005-3610-3321
+Bonnet Nicéphore *
+https://orcid.org/0000-0002-9764-0199
+Marzari Nicola
+Theory and Simulation of Materials, Ecole Polytechnique Fédérale de Lausanne, 1015 Lausanne, Switzerland
+* Email: nicephore.bonnet@epfl.ch.
+21 05 2024
+11 06 2024
+20 11 48204823
+29 01 2024
+10 05 2024
+29 04 2024
+© 2024 The Authors. Published by American Chemical Society
+2024
+The Authors
+https://creativecommons.org/licenses/by/4.0/ Permits the broadest form of re-use including for commercial purposes, provided that author attribution and integrity are maintained (https://creativecommons.org/licenses/by/4.0/).
+
+The present work proposes an extension to the approach of [Xi, C; et al. J. Chem. Theory Comput.2022,18, 6878] to calculate ion solvation free energies from first-principles (FP) molecular dynamics (MD) simulations of a hybrid solvation model. The approach is first re-expressed within the quasi-chemical theory of solvation. Then, to allow for longer simulation times than the original first-principles molecular dynamics approach and thus improve the convergence of statistical averages at a fraction of the original computational cost, a machine-learned (ML) energy function is trained on FP energies and forces and used in the MD simulations. The ML workflow and MD simulation times (≈200 ps) are adjusted to converge the predicted solvation energies within a chemical accuracy of 0.04 eV. The extension is successfully benchmarked on the same set of alkaline and alkaline-earth ions.
+
+H2020 Marie Sklodowska-Curie Actions 10.13039/100010665 101034260 document-id-old-9ct4c00116
+document-id-new-14ct4c00116
+ccc-price
+==== Body
+pmcIntroduction
+
+Solvation and electrolytic effects play a key role in electrochemical energy conversion devices and advanced water treatment and separation processes.1−3 While implicit solvent models have been often used in first-principles (FP) molecular dynamics (MD) simulations,4,5 they generally cannot capture specific molecular effects that may be important at the solute/solvent interface. Conversely, an explicit treatment of all solvent molecules is often computationally intractable. Alternatively, hybrid approaches involve treating a few inner solvation layers explicitly, and the rest of the solvent implicitly.6,7 Such approaches receive a rigorous statistical treatment within the quasi-chemical theory (QCT) framework of Pratt and co-workers,8−10 whereby solvation properties are expressed as a sum of free-energy contributions, each one involving a fixed number of solvent molecules within the inner solvation shell. In turn, the free-energy contributions can be calculated by various methods, including thermodynamic integration,11 and stochastic sampling and relaxation of solvation structures.10,12,13 However, those methods may remain challenging in terms of computational intensity or accuracy. Alternatively, in a recent work,14 Xi et al. have used an approach to directly calculate the free energy of the hybrid system from first-principles molecular dynamics (FPMD) simulations. Their predictions of alkaline (earth) ion solvation free energies were in good agreement with the experiment. However, their FP trajectories were limited to 15 ps, preventing them from converging the average total energy within less than 0.2–0.3 eV.
+
+In the present work, after contextualizing this approach within the appropriate QCT framework, we introduce a machine learning extension to perform longer MD simulations and improve energy convergence. This extended approach is satisfactorily benchmarked for the same set of cations.
+
+Methodology
+
+General Approach
+
+Given an ion in solution, the inner shell region is defined as the set of points within a distance rc from the ion, and the outer environment as the rest of space (Figure 1). The probability to find exactly n solvent molecules in the inner shell at equilibrium is denoted by Pi(n) when the ion interacts with the solvent, and by P0(n) when the interaction is fictitiously switched off (noninteracting ion). Within QCT, one shows that the ion solvation free energy can be expressed as101
+
+where k is Boltzmann’s constant, T is the temperature, and ΔGi(n) is the solvation free energy with an inner shell constrained to contain exactly n solvent molecules. In practice, this formula is useful if the probability distributions Pi(n) and P0(n) have sufficient overlap so that their ratio can be reliably estimated for some value of n. This is the case for the small solutes considered in the present study, while for larger solutes, other formulas are typically used.10
+
+Figure 1 Hybrid solvation model comprising an explicit inner shell region and an implicit outer environment.
+
+First, the probability ratio in eq 1 is addressed. In principle, Pi(n) and P0(n) must be obtained at a fixed chemical potential of the solvent molecules, as achieved for instance via grand canonical Monte Carlo simulations.15 Here, instead, we find an estimate of the probability distributions by running MD simulations in the canonical ensemble. The ion is placed at the center of a cubic box filled with 57 water molecules, representing a concentration of ≈1 M, and the volume of the simulation box is adjusted to the absolute molar volume of the ion as given by ref (16). A FPMD simulation of 1 ps (equilibration) + 10 ps is carried out in periodic-boundary conditions (PBC) at 300 K. Then, for an inner shell strictly enclosed within the simulation box, the probabilities Pi(n) and P0(n) are obtained by counting the corresponding configurations over the 10 ps sampling period. The validity of this approximation is discussed a posteriori (see Results section).
+
+Next, the term ΔGi(n) is addressed. It is by definition obtained as2
+
+where Gion+water(n) and Gwater(n) are, respectively, the free energies of the ion + water system and water system subject to the n-molecules inner shell constraint, and Gion is the free energy of the ion in vacuum. Referring to the n water molecules of the inner shell as the water cluster, we further decompose the free energies into3
+
+4
+
+where EX and SX are the enthalpy and entropy of the system X (ion + water cluster, or water cluster only) in vacuum, ΔGsolvX is its solvation free energy in the outer environment, and ZPEionaq is the zero-point energy of the solvated ion. Likewise, the unsolvated ion free energy is obtained as Gion = Eion + ZPEionvac – TSion, where Eion, ZPEionvac and Sion are, respectively, its enthalpy, zero-point energy, and entropy.
+
+In their work,14 Xi et al. use an inner water cluster of 18 molecules, shown to encompass the first and second solvation layers of the ion. They obtain EX + ΔGsolvX as the average total energy ⟨EtotX⟩ of a FPMD simulation. The total energy EtotX of each MD step is calculated as the DFT energy of the explicit system X embedded in a continuum dielectric medium, capturing the effect of the outer solvation environment. The continuum model of Andreussi et al.5 is used as implemented in the Environ package17 of Quantum ESPRESSO.18 In the MD simulation, a confining potential wall is applied around the water cluster to prevent its diffusion into the outer solvation environment. The radius of this spherical wall is dynamically adjusted to maintain the wall pressure around a preset value. The entropies SX and zero-point energy ZPEionaq are calculated based on the vibrational spectra obtained from the force–force correlation functions in a quasi-harmonic approximation. Finally, the energy of the unsolvated ion is calculated by DFT, and for a monatomic ion, ZPEionvac = 0 and its entropy is obtained from the perfect gas translational partition function.
+
+The present work follows the same general approach but with some notable differences as listed below:EX alone is calculated as the average total energy ⟨EtotX⟩ of the MD simulation, while ΔGsolvX is treated separately (see second bullet). To allow for longer MD simulation times, the total energy EtotX is obtained from a machine-learned (ML) potential energy of the explicit system (see details below).
+
+Instead of using the continuum dielectric medium, the effect of the outer environment is treated analytically. ΔGsolvX is taken as the sum ΔGhydX + ΔGdielX, where ΔGhydX is the free energy of hydration, originating from hydrogen bonds created around the cluster, and ΔGdielX is the free energy change coming from dielectric screening by the outer solvation environment. Following Born’s equation (in atomic units),19
+
+5
+
+where z is the electric charge of X and ϵr is the relative permittivity of the solvent in the bulk (here taken to be 78). As a decoupling hypothesis, ΔGhydX is assumed, at a given density, to depend only on the cluster size (and not on its charge). Then, for a given cluster radius, and ΔGhydcluster cancel out in the expression of Gion+water(n) – Gwater(n).In line with the QCT approach, MD simulations are performed at a fixed radius rc of the potential wall acting on the oxygen atoms of the water molecules. The value of rc = 5.05 Å is used to set the density of the 18-molecules water cluster to 1 kg/L.
+
+Machine-Learned Total Energy Function
+
+The total energy function EtotX(ν), where ν is any configuration of the system X, is ML from a set of DFT calculations. For the latter, the Perdew–Burke–Ernzerhof (PBE) exchange correlation functional20 is used here in combination with pseudopotentials of the SSSP PBE efficiency 1.1.2 library for ionic cores.21 The system is placed in a 16 Å × 16 Å × 16 Å box, and the electrostatic potential of periodic images is removed by the parabolic electrostatic correction of Dabo et al.22 implemented in Environ.
+
+The machine learning architecture is the E(3)-equivariant graph neural network (NN) Nequip of Batzner et al.23 Two NN models (NN-1 and NN-2) are used, with respective cutoff radii of the convolution filter of 5 and 6 Å, and respective numbers of interaction blocks of 2 and 3. The models are similar for all other parameters: a maximum rotation order of 2; a multiplicity of the features of 8; no odd parity; a “default” radial NN comprising 8 basis radial functions, 3 layers, and 64 hidden neurons. Each NN model is trained over 100 epochs with the Adam optimizer, putting equal weights on forces and the total energy per atom in the cost function. The optimized model is then exported and used in LAMMPS24 to perform MD simulations.
+
+The overall ML workflow (Figure 2) consists of 3 main stages:Stage 1 (first row): an initial FPMD trajectory is produced in PBC with Quantum ESPRESSO. A high temperature (700 K) is used to widen the sampling of bond length distributions and thus improve the robustness of the subsequent NN. From this trajectory, 150 random snapshots of the inner water cluster are extracted, and recalculated with DFT in open-boundary conditions (OBC) using the parabolic correction.22 This data set is then used to train the first model NN-1.
+
+Stage 2 (second row): a MD trajectory of 200 ps is produced with LAMMPS at a temperature of 300 K using the NN-1 model. From this trajectory, 1500 random snapshots are recalculated with DFT in OBC, and then used to train the more accurate NN-2 model.
+
+Stage 3 (third row): a new MD trajectory of 200 ps is produced using the NN-2 model. A new selection of 150 random snapshots is recalculated with DFT. If the LAMMPS energies compare well with DFT energies, the workflow is considered converged, and the relevant thermodynamic quantities are extracted from the last MD simulation.
+
+Figure 2 Computational workflow to produce a MD trajectory converged with respect to cross-validation DFT calculations.
+
+Results
+
+The methodology has been applied to 5 alkaline (Li+ to Cs+) and 5 alkaline-earth (Be2+ to Ba2+) cations.
+
+For n = 18 and rc = 5.05 Å, we find P0(n) ≈ 0.24, and the Pi(n) values are reported in Table 1. According to eq 1, the P0(n)/Pi(n) ratio then contributes a maximum free energy shift of −0.02 eV. Although approximate, this result indicates that given the small size of the solute, the P0(n) and Pi(n) distributions largely overlap, and for the n and rc values chosen here, the corresponding free energy contribution is small. In the following, we thus approximate ΔGsolvion ≈ ΔGi(n).
+
+Table 1 Pi(n) Values for Alkaline(-Earth) Ions with n = 18 and rc = 5.05 Å
+
+i	Li+	Na+	K+	Rb+	Cs+	Be2+	Mg2+	Ca2+	Sr2+	Ba2+	
+Pi(n)	0.16	0.25	0.19	0.24	0.24	0.19	0.12	0.16	0.10	0.22	
+
+For ΔGi(n), the calculation workflow has been converged within a chemical accuracy of 0.04 eV, by checking that (i) the mean LAMMPS and DFT absolute energy difference is less than 0.04 eV over the last cross-validation set, and (ii) the mean total energy ⟨EtotX⟩ of the last MD simulation is converged within 0.04 eV.
+
+The calculated solvation energies are reported in Table 2. Our results are in general good agreement with the previously calculated values of Xi et al. and experimental values. For alkaline-earth cations, the agreement with experiment is also improved, leaving only Be2+ and Mg2+ slightly above the reported experimental range.
+
+Table 2 Calculated and Experimental25−31 Absolute Values of the Free Energies of Solvationa
+
+cation	calc. (Xi et al.)	calc. (this work)	exp.	
+Li+	5.46	5.05	4.92–5.57	
+Na+	4.31	4.10	3.78–4.47	
+K+	3.42	3.31	3.06–3.73	
+Rb+	3.03	3.15	2.85–3.49	
+Cs+	2.90	2.86	2.59–3.26	
+Be2+	26.82	25.71	24.82–25.07	
+Mg2+	20.45	19.60	18.97–19.21	
+Ca2+	16.74	16.34	15.60–16.59	
+Sr2+	15.34	14.80	14.30–15.08	
+Ba2+	14.00	13.40	12.95–13.74	
+MRE	4.3%	1.8%	 	
+a The MRE is the mean relative error of the calculated value vs the average experimental value. The same standard state correction is applied as in eq 20 of ref (14).
+
+Conclusions
+
+The hybrid solvation method of Xi et al. has been re-expressed in the QCT framework and extended/modified to run longer MD simulations at a fraction of the computational cost. The extension consists mainly in using a FP-based ML force field in the MD, leveraging the data-efficient O(3)-equivariant NN Nequip architecture. Another modification is to treat the outer solvation environment analytically, in contrast with the implicit continuum medium of the original approach. The extended approach is tested by running 200 ps MD simulations on alkaline(-earth) cations and converging the mean energy within chemical accuracy (0.04 eV). The calculated solvation free energies are in good agreement with previously calculated values and experimental values.
+
+Data Availability Statement
+
+MD trajectories, energies and forces used to obtain the solvation energies of Table 2 are available on Materials Cloud (DOI: 10.24435/materialscloud:a0-jh).
+
+The authors declare no competing financial interest.
+
+Acknowledgments
+
+N.B. acknowledges funding from the European Union’s Horizon 2020 research and innovation programme under the Marie Skłodowska-Curie grant agreement no. 101034260. This work was supported by the Swiss National Supercomputing Centre (CSCS) grant under project ID s1192.
+==== Refs
+References
+
+Akhade S. A. ; Jayathilake B. S. ; Weitzner S. E. ; Eshelman H. V. ; Hamilton J. ; Feaster J. T. ; Wakerley D. W. ; Wang L. ; Lamaison S. ; Lee D. U. ; et al. Electrolyte-guided design of electroreductive CO coupling on copper surfaces. ACS Appl. Energy Mater. 2021, 4 , 8201–8210. 10.1021/acsaem.1c01427.
+Surendralal S. ; Todorova M. ; Neugebauer J. Impact of water coadsorption on the electrode potential of H-Pt(111)-liquid water interfaces. Phys. Rev. Lett. 2021, 126 , 166802 10.1103/physrevlett.126.166802.33961474
+Ritt C. L. ; Liu M. ; Pham T. A. ; Epsztein R. ; Kulik H. J. ; Elimelech M. Machine learning reveals key ion selectivity mechanisms in polymeric membranes with subnanometer pores. Sci. Adv. 2022, 8 , eabl5771 10.1126/sciadv.abl5771.35030018
+Fattebert J. L. ; Gygi F. First-principles molecular dynamics simulations in a continuum solvent. Int. J. Quantum Chem. 2003, 93 , 139–147. 10.1002/qua.10548.
+Andreussi O. ; Dabo I. ; Marzari N. Revised self-consistent continuum solvation in electronic-structure calculations. J. Chem. Phys. 2012, 136 , 064102 10.1063/1.3676407.22360164
+Hormann N. G. ; Guo Z. ; Ambrosio F. ; Andreussi O. ; Pasquarello A. ; Marzari N. Absolute band alignment at semiconductor-water interfaces using explicit and implicit descriptions for liquid water. npj Comput. Mater. 2019, 5 , 100 10.1038/s41524-019-0238-4.
+Simm G. N. ; Turtscher P. L. ; Reiher M. Systematic microsolvation approach with a cluster-continuum scheme and conformational sampling. J. Comput. Chem. 2020, 41 , 1144–1155. 10.1002/jcc.26161.32027384
+Randall L. R. ; Laviolette R. A. Quasi-chemical theories of associated liquids. Mol. Phys. 1998, 94 , 909–915. 10.1080/002689798167485.
+Beck T. ; Paulaitis M. ; Pratt L. R. The Potential Distribution Theorem and Models of Molecular Solutions; Cambridge University Press, 2006.
+Roux B. ; Yu H. Assessing the accuracy of approximate treatments of ion hydration based on primitive quasichemical theory. J. Chem. Phys. 2010, 132 , 234101 10.1063/1.3436632.20572683
+Frenkel D. ; Smit B. Understanding Molecular Simulation: From Algorithms to Applications; Elsevier, 2001.
+Bryantsev V. S. ; Diallo M. S. ; Goddard III W. A. Calculation of solvation free energies of charged solutes using mixed cluster/continuum models. J. Phys. Chem. B 2008, 112 , 9709–9719. 10.1021/jp802665d.18646800
+Wu W. ; Kieffer J. New hybrid method for the calculation of the solvation free energy of small molecules in aqueous solutions. J. Chem. Theory Comput. 2019, 15 , 371–381. 10.1021/acs.jctc.8b00615.30500197
+Xi C. ; Zheng F. ; Gao G. ; Song Z. ; Zhang B. ; Dong C. ; Du X. W. ; Wang L. W. Ion solvation free energy calculation based on ab initio molecular dynamics using a hybrid solvent model. J. Chem. Theory Comput. 2022, 18 , 6878–6891. 10.1021/acs.jctc.1c01298.36253911
+Deng Y. ; Roux B. Computation of binding free energy with molecular dynamics and grand canonical Monte Carlo simulations. J. Chem. Phys. 2008, 128 , 115103 10.1063/1.2842080.18361618
+Marcus Y. The Standard Partial Molar Volumes of Ions in Solution. Part 4. Ionic Volumes in Water at 0–100 °C. J. Phys. Chem. B 2009, 113 , 10285–10291. 10.1021/jp9027244.19585994
+http://www.quantum-environ.org/ (accessed April 29, 2024).
+https://www.quantum-espresso.org/ (accessed April 29, 2024).
+Atkins P. W. ; De Paula J. Atkins’ Physical Chemistry, 8th ed.; W.H. Freeman and Company: New York, 2006.
+Perdew J. P. ; Burke K. ; Ernzerhof M. Generalized gradient approximation made simple. Phys. Rev. Lett. 1996, 77 , 3865–3868. 10.1103/PhysRevLett.77.3865.10062328
+https://www.materialscloud.org/discover/sssp/table/efficiency (accessed April 29, 2024).
+Dabo I. ; Kozinsky B. ; Singh-Miller N. ; Marzari N. Electrostatics in periodic boundary conditions and real-space corrections. Phys. Rev. B: Condens. Matter Mater. Phys. 2008, 77 , 115139 10.1103/physrevb.77.115139.
+Batzner S. ; Musaelian A. ; Sun L. ; Geiger M. ; Mailoa J. P. ; Kornbluth M. ; Molinari N. ; Smidt T. E. ; Kozinsky B. E(3)-equivariant graph neural networks for data-efficient and accurate interatomic potentials. Nat. Commun. 2022, 13 , 2453 10.1038/s41467-022-29939-5.35508450
+https://www.lammps.org/ (accessed April 29, 2024).
+Randles J. E. B. The real hydration energies of ions. Trans. Faraday Soc. 1956, 52 , 1573–1581. 10.1039/tf9565201573.
+Kastenholz M. A. ; Hunenberger P. H. Computation of methodology-independent ionic solvation free energies from molecular simulations. II. The hydration free energy of the sodium cation. J. Chem. Phys. 2006, 124 , 224501 10.1063/1.2201698.16784292
+Marcus Y. Thermodynamics of solvation of ions: Part 5. Gibbs free energy of hydration at 298.15 K. J. Chem. Soc., Faraday Trans. 1991, 87 , 2995–2999. 10.1039/FT9918702995.
+Marcus Y. Ion Solvation; Wiley, 1985.
+Kelly C. P. ; Cramer C. J. ; Truhlar D. G. Single-ion solvation free energies and the normal hydrogen electrode potential in methanol, acetonitrile, and dimethyl sulfoxide. J. Phys. Chem. B 2007, 111 , 408–422. 10.1021/jp065403l.17214493
+Rosseinsky D. R. Electrode Potentials and Hydration Energies. Theories and Correlations. Chem. Rev. 1965, 65 , 467–490. 10.1021/cr60236a004.
+Conway B. E. The evaluation and use of properties of individual ions in solution. J. Solution Chem. 1978, 7 , 721–770. 10.1007/BF00643580.

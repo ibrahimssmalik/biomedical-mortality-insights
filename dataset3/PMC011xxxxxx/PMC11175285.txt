@@ -1,0 +1,370 @@
+
+==== Front
+Sensors (Basel)
+Sensors (Basel)
+sensors
+Sensors (Basel, Switzerland)
+1424-8220
+MDPI
+
+10.3390/s24113611
+sensors-24-03611
+Article
+Place Recognition through Multiple LiDAR Scans Based on the Hidden Markov Model
+https://orcid.org/0000-0003-1015-5834
+Gui Linqiu Conceptualization Methodology Software Validation Formal analysis Investigation Data curation Writing – original draft Writing – review & editing Visualization 1†
+Zeng Chunnian Conceptualization Resources Funding acquisition 2
+https://orcid.org/0000-0002-6088-4982
+Luo Jie Methodology Validation Supervision Project administration 2*†
+Yang Xu Software Data curation 2
+Seow Chee Kiat Academic Editor
+Hesse Henrik Academic Editor
+1 School of Information Engineering, Wuhan University of Technology, Wuhan 430070, China; guilinqiu@whut.edu.cn
+2 School of Automation, Wuhan University of Technology, Wuhan 430070, China; zengchn@whut.edu.cn (C.Z.); yx_auto@whut.edu.cn (X.Y.)
+* Correspondence: luo_jie@whut.edu.cn; Tel.: +86-1862-790-3668
+† These authors contributed equally to this work.
+
+03 6 2024
+6 2024
+24 11 361110 4 2024
+30 5 2024
+30 5 2024
+© 2024 by the authors.
+2024
+https://creativecommons.org/licenses/by/4.0/ Licensee MDPI, Basel, Switzerland. This article is an open access article distributed under the terms and conditions of the Creative Commons Attribution (CC BY) license (https://creativecommons.org/licenses/by/4.0/).
+Autonomous driving systems for unmanned ground vehicles (UGV) operating in enclosed environments strongly rely on LiDAR localization with a prior map. Precise initial pose estimation is critical during system startup or when tracking is lost, ensuring safe UGV operation. Existing LiDAR-based place recognition methods often suffer from reduced accuracy due to only matching descriptors from individual LiDAR keyframes. This paper proposes a multi-frame descriptor-matching approach based on the hidden Markov model (HMM) to address this issue. This method enhances the place recognition accuracy and robustness by leveraging information from multiple frames. Experimental results from the KITTI dataset demonstrate that the proposed method significantly enhances the place recognition performance compared with the scan context-based single-frame descriptor-matching approach, with an average performance improvement of 5.8% and with a maximum improvement of 15.3%.
+
+place recognition
+global descriptor
+hidden Markov model
+Key R&D Program Project in Hubei Province, China: Research on Key Technologies of Robot Collaboration2023BAB090 National Key Research and Development Program of China2023YFB3406803 This research was funded by the Key R&D Program Project in Hubei Province, China: Research on Key Technologies of Robot Collaboration, No. 2023BAB090, and National Key Research and Development Program of China (2023YFB3406803).
+==== Body
+pmc1. Introduction
+
+One of the core technologies for the achievement of autonomous driving systems in closed environments for unmanned ground vehicles (UGV), such as cars, ground robots, etc., is the LiDAR localization technology based on the prior map [1,2]. When the UGV system is in startup or tracking is lost, estimating the initial pose in the prior map is necessary [3]. Excellent initial pose estimation is a prerequisite for UGV to perform autonomous tasks and a guarantee for their safe operation. Initial pose estimation is typically accomplished using place recognition and point cloud registration techniques. Among them, place recognition utilizes the similarity between the current and map environments to archive. Therefore, the commonly used place recognition is processed by matching the global descriptor of the current LiDAR scan to the descriptor database of an a priori map, which was established previously, to find the optimal match with the maximum similarity score.
+
+Existing LiDAR-based place recognition techniques only match the descriptor from a single keyframe with a prior map [4,5,6]. However, this method encounters several issues, such as limited feature information and susceptibility to error matching in similar environments, resulting in low place recognition accuracy, a high failure rate in initial pose estimation, and low system robustness. In some practical applications, researchers attempt to improve the accuracy by multiplying single-frame descriptor matches using consecutive keyframes during operation and selecting the result with the highest similarity score for place recognition. Nevertheless, this approach essentially involves simply repeating single-frame descriptor matching, offering a limited accuracy improvement.
+
+This paper proposes a multi-frame descriptor-matching place recognition method based on the hidden Markov model (HMM) to address the above challenge. This method extends single-frame descriptor-matching place recognition to a technique that involves matching descriptors across multiple frames. During vehicle movement, the global descriptor information and pose transformation information from multiple consecutive keyframes online are used to model the HMM. We denote the pose as the state and node of HMM. The global descriptor-matching results will define the selection of hidden states and their probabilities. The pose transformations define the transition probability matrix for hidden states based on the spatial consistency [7]. The emission probabilities of the system are defined based on the established model, and the optimal matching is found by maximizing the emission probabilities to complete place recognition. This method effectively leverages more real-time keyframe information, significantly enhancing the place recognition accuracy and mitigating potential error-matching issues.
+
+We propose a place recognition method based on multiple descriptor matching, which utilizes the HMM model to integrate constraints from the SC descriptor and LiDAR odometry obtained from consecutive LiDAR keyframes online, aiming to maximize the emission probability for place recognition. Our approach significantly enhances the place recognition accuracy and reduces potential issues related to error matching compared to a single descriptor match.
+
+We validate our system based on the open-source KITTI dataset, and the results show that our method effectively improves the accuracy of place recognition.
+
+2. Related Work
+
+2.1. Initial Localization
+
+Initial localization refers to estimating a robot or vehicle’s starting position and orientation within its environment. Initial estimation is crucial for the robot to begin mapping and navigating its surroundings accurately. Chen and Vizzo [8] proposed a Monte Carlo localization framework and utilized the Monte Carlo method to match the current LiDAR scan to a pre-built map for initial localization. Wasisto, Isro, and Istiqomah [9] utilized the adaptive Monte Carlo localization method for initial localization. However, the Monte Carlo method is computationally intensive; the real-time performance could be better. Many methods [4,10,11,12] are implemented or combine the initial localization through place recognition-based rough and point cloud-based fine matching. Our previous studies [10] utilized the intensity scan context algorithm for place recognition and the normal distributions transform (NDT) algorithm for point cloud registration. However, these methods only match the descriptor from a single keyframe with the prior map; this paper expands it to multiple descriptor matches for place recognition, which improves the place recognition accuracy. In addition, we use the NDT algorithm for point cloud registration.
+
+2.2. Place Recognition
+
+Place recognition methods are used to calculate the similarity between the current and historical environments. Numerous global place recognition techniques have been developed for mobile robots. Vision-based approaches typically employ the Bag-of-Words (BoW) model [13], which assesses the likeness between the current scene and the global map based on a pre-trained visual vocabulary [14,15]. Nevertheless, visual sensors are highly susceptible to variations in illumination and viewpoint. Despite efforts to mitigate this issue, visual-based methods often lack robustness in various scenarios. LiDAR-based approaches have garnered significant interest due to LiDAR’s resilience to variations in lighting and viewpoint. LiDAR-based place recognition methods utilizing LiDAR can roughly be categorized into three types: feature-based, global descriptor-based, and learning-based methods.
+
+Feature-based methods involve extracting and matching point cloud features, similarly to the BoW method. Steder and Grisetti [16] matched a provided 3D scan with a database by leveraging point features, which were extracted through an improved Laplacian of Gaussian (LoG) method [17], and they evaluated the potential transformations based on the comparison of salient points within the scans. Zhuang and Cao [18] employed an image model called the bearing angle (BA) to transform LiDAR scans into 2D images. They then extracted ORB features and utilized a BoW approach for place recognition. Guo and Borges [19] proposed coupling the conventional geometric information from the LiDAR with its calibrated intensity return to achieve feature-based place recognition and proposed an ISHOT method to extract features, which is an improvement of SHOT [20]. However, the extraction of features usually requires extensive calculation.
+
+Learning-based methods are drawing more attention at present. Uy et al. [21] extracted point cloud descriptors using deep learning, which combined the networks of PointNet [22] and NetVLAD [23]. Chen et al. [24] proposed OverlapNet, which uses different types of information, such as the intensity, normality, and semantics generated from LiDAR scans, to provide overlaps and relative yaw angle estimates between paired 3D scans. Zhou and Zhao [25] proposed an NDT-Transformer that learns a global descriptor from a set of 3D NDT cell representations. Luo et al. [26] utilized the NetVLAD network based on a bird’s eye view to achieve place recognition. They also proposed a rotation-invariant network called BEVPlace. Komorowski et al. [27] proposed a descriptor, named MinkLoc3D, to compute a discriminative 3D point cloud descriptor based on a sparse voxelized point cloud representation and sparse 3D convolutions. A shortcoming of these methods is that they require massive amounts of data and a long training period.
+
+Compared to the above two methods, global descriptor matching is more efficient. Global descriptors utilize the geometric information of the environment for place recognition, which usually involves projecting 3D data into a 2D image matrix. Muhammad and Lacroix [28] introduced Z-projection, which combines 2D slice images along the z-axis to create a 2D image. Maximum intensity projection (MIP) selects each pixel’s highest gray level pixel value in the z-direction. M2DP [29] enhances this by considering information along the x- and y-directions perpendicular to the z-axis, improving the accuracy and reducing information loss and artifacts. The scan context (SC) descriptor [4] and its advancements [30] are considered state-of-the-art global descriptors. They convert LiDAR data into a 2D scan image, extract local features for representation, and employ a circular sequence for similarity matching.
+
+SC employs a two-stage search algorithm for place recognition. Initially, it retrieves candidates using ring keys generated by SC, ensuring invariance to LiDAR viewpoint changes. Subsequently, the similarity score between the current scan and candidates is measured based on the SC distance. Finally, the optimal place index is selected among the candidates based on the similarity score. Much work has been conducted based on SC, aiming to replace the ring key to enhance its rotation-invariant retrieval abilities. For example, the original developer of SC [5] utilized a LeNet [31]-like network to retrieve the place index. Xu and Yin [32] transformed the features into the frequency domain and utilized the magnitude of the spectrum as the place descriptor, which was theoretically rotation-invariant. They both utilized SC to calculate the distance for the similarity score. Our method is applied for place recognition based on the SC method’s two-step search approach. Thus, it is compatible with SC and its extended variants. As a result, this work utilizes an SC descriptor as the global descriptor for discussion and experimental analysis.
+
+3. System Overview
+
+3.1. Definition and Notation
+
+The mathematical symbols used in this paper are defined in the abbreviation table.
+
+We define the skew-symmetric matrix of a vector ω∈R3 using (·)∧, as defined in Equation (1). Similarly, we can map a skew-symmetric matrix to a vector in R3 using the operator (·)∨. (1) ω∧=ω1ω2ω3∧=0−ω3ω2ω30−ω1−ω2ω10
+
+where ω, ω1, ω2, ω3 are used for indicators. Moreover, we expand (·)∧ and (·)∨ to define the mapping between a special Euclidean group and its Lie algebra:(2) ξ∧=ρϕ∧=ϕ∧ρ0⊤0∈R4×4
+
+where ρ and ϕ are the position and posture components of ξ. Thus, the the exponential mapping between SO(3) and so(3), SE(3) and se(3) can be described as (3) R=exp(ϕ∧)ϕ=ln(R)∨T=exp(ξ∧)ξ=ln(T)∨
+
+3.2. System Structure
+
+This work proposes an initial localization method. We match multiple global descriptors built from consecutive keyframes with a prior map for place recognition during the operation of the LiDAR SLAM system and then obtain the pose-by-point cloud registration. We follow the scan context (SC) [4] as a global descriptor in this work. Given that this study exclusively focuses on LiDAR keyframe poses, without addressing the velocity or IMU bias in real-time SLAM methods, we define the state as represented in Equation (4), where p represents the position and ϕ signifies the posture. (4) x=pϕ
+
+The structure of the proposed framework is shown in Figure 1; it mainly consists of five parts: the prior map, the candidate selection, the LiDAR odometry constraint, the SC constraint and the hidden Markov model (HMM).
+
+The prior mapwas built previously and includes the SC database and point cloud map (PCM). While the robot is engaged in online movement, we utilize the multiple consecutive keyframes to build an SC descriptor and estimate the transformation. Then, we match the online SC to the SC database to search the candidates via candidate selection and calculate the similarity score via the SC constraint. We compare the online transformation to the prior map via the LiDAR odometry constraint. Moreover, we build the HMM model by combining the candidate selection and the SC constraint and achieve place recognition. Finally, we use the pose of the matched keyframe in the prior map, which is the place recognition result of the HMM, as an initial guess for point cloud registration and obtain the initial pose.
+
+4. Prior Map
+
+We established a prior map during the previous mapping process by following the keyframe-based LiDAR SLAM method [11,12,12]. For calculation efficiency, the prior map only preserves the data of all LiDAR keyframes. We adopt a simple but widely used approach in which we register a LiDAR frame as a keyframe when its pose exceeds a user-defined threshold compared to the previous keyframe. A lower threshold results in the selection of more keyframes and the more frequent sampling of the environment. This enhances the position recognition accuracy but also increases the search time during the recognition process. We set the threshold as 1 m, following the method of LIO-SAM [12].
+
+4.1. PCM
+
+The PCM is represented as a set of LiDAR keyframe scans, denoted as Fn, transformed into the corresponding map frame using their pose transformations in the map frame. Hence, we denote the state set and transformation set of these keyframes as M:(5) M=xnM|n=0,1,2,...,NM−1TM=TnM|n=0,1,2,...,NM−1
+
+where xnM denotes the state of the keyframe in the prior map, TnM denotes the pose transformation of the keyframe scans in the map frame, and NM denotes the keyframe number. xnM and TnM can be obtained from the mapping process.
+
+4.2. SC Descriptor Database
+
+Subsequently, we construct SC descriptors for all keyframes, assembling the descriptor database for rough scan matches in online place recognition. Our creation of the SC descriptor follows the methodology outlined in the original paper [4], which we briefly introduce below.
+
+Figure 2 shows the schematic diagram of the SC. The main idea of the SC is to project the 3D scan into a 2D coordinate from a bird’s eye view and divide it into azimuthal and radial bins in the sensor coordinate. Thus, the SC can be regarded as an egocentric place descriptor. The center of a scan acts as a global key point. Assume that Ns and Nr are the number of sectors and rings. We can easily create the feature image, as well as the SC description, represented as a Nr×Ns matrix I. The feature value of each bin is the maximum height of its points. Assuming that the point set of the bin in the x ring and y sector is Px,y, the feature value is (6) I(x,y)=maxp∈Px,yz(p),ifPx,y≠∅0,ifPx,y=∅
+
+where z(·) is a function that returns the z-coordinate value of a point p. Furthermore, through the feature image I, the rotation-invariant sub-descriptor ring key vector k can be created as (7) k=RingKey(I)=(r10Ns,r20Ns,...,rNr0Ns)
+
+where ri denotes the row vector of the SC, and ∗0 denotes the L0 norm. The ring key vector can be seen as part of the SC. In this way, all keyframes can form the SC database set IM, which will be used for online place recognition. It can be denoted as (8) IM=InM|n=0,1,2,...,NM−1KM=knM=RingKey(InM)|InM∈IM
+
+where InM∈RNr×Ns and knM∈RNr.
+
+5. Online Place Recognition-Based HMM
+
+5.1. HMM Model
+
+The hidden Markov model (HMM) is a statistical model used to describe a Markov process with unobservable states, and it is mainly used in dealing with three problems: evaluation, decoding, and training [33]. Among them, the decoding problem is to estimate the optimal sequence of hidden states under the observation and transition probability, and we use it to model the place recognition process in this work.
+
+The place recognition is processed by matching the scan context of the current LiDAR frame to the scan context database and finding the optimal match with the minimum distance. Our work extends the matching of individual LiDAR frames to multiple matches across consecutive LiDAR frames during motion, aiming to enhance the accuracy. This problem can be described as finding matches for those LiDAR frames in the descriptor database to maximize the emission probability of the whole process. The LiDAR frames to be matched can be seen as the nodes of the HMM, and the matches of each LiDAR frame can be seen as the hidden states of each node. We also compare the transformation between two nodes to the transformation between the hidden states of these two nodes. The transformation between two nodes can be obtained from the online LiDAR odometry, and the transformation of the hidden states can be obtained from the prior map. We take the comparison error as the constraint to reduce the false matches, and it can be normalized as the transition probability. As a result, the above process can be modeled as an HMM decoding problem and is illustrated in Figure 3.
+
+While the robot is engaged in online movement, the state set of multiple consecutive keyframes to be matched can be modeled as an HMM and denoted as (9) χ=xn|n=0,1,2,...,Nχ−1
+
+where xn denotes the state of the nodes in the HMM, and Nχ denotes the number of nodes. We build SC descriptors for all nodes through the method described in Section 4.2. The SC descriptor and LiDAR odometry are both obtained from online LiDAR scans and can be regarded as observations, and we mark them, respectively, as (10) O={I,T}I=In|n=0,1,2,...,Nχ−1T=T^n,n+1|n=0,1,2,...,Nχ−2
+
+where In denotes the SC descriptor matrix of the nodes, and T^n,n+1 denotes the transformation between the nodes. As a result, the problem of place recognition is to determine the nodes’ states in the prior map M, and the problem can be modeled as (11) result=arg maxχP(χ|O)=arg maxχ∏n=0NχP(xn|In)∏n=0Nχ−1P(xn,xn+1|T^n,n+1)
+
+where P(xn|In) indicates the state estimation by the SC descriptor, and P(xn,xn+1|T^n,n+1) indicates the state estimation by online transformation.
+
+5.2. Candidate Selection
+
+The states in prior map M can be seen as the hidden states of each node. However, considering the computational efficiency, we only take a fixed number of hidden states as the candidates for each node, and they are selected via the ring key match [4].
+
+Assume that the ring key descriptor of node xn is kn:(12) kn=RingKey(In)
+
+We match the kn with the descriptor database KM by the KD-tree to search the candidates with the highest similarity. The hidden state candidates of node xn can be marked as (13) Sin,i=1,2,...,Ncd
+
+where Ncd denotes the candidate number.
+
+5.3. SC Constraint
+
+The hidden state Sin corresponds to one state in prior map M, assuming it as xmM. Then, we calculate the scan context distance d between the node xn and the candidates Sin. Their scan context descriptor can be written as In and ImM. Because the scan context is very sensitive to rotation, we calculate the distance between In and ImM with all column shifts to find the best alignment, while determining the column shift is the same task as roughly aligning the point cloud of the LiDAR scan for yaw rotation at a 2πNs resolution; the minimum value can be seen as the final distance. (14) d=D(In,ImM)=minh∈[Ns]dIn,Shift(ImM,h)h*=arg maxh∈[Ns]dIn,Shift(ImM,h)
+
+where Shift(I,h) is defined as the I shifted for the h column clockwise. h* is denoted as the best column shift, and it can be used as in Section 5.4 to calculate the estimated pose of the hidden states. d indicates the similarity score between the scan context and the two places. The relationship between d and the similarity is the opposite; as a result, we use a natural exponential function to normalize d as the probability (15) Pin=P(xn=Sin|In)=1eλ·d
+
+where the parameter λ will affect the weight between the SC and odometry constraint, and it can be selected by practical application. The λ is generally within 1∼10, and we set it as 5 in this work. Through Equations (14) and (15), we can calculate the probabilities for all hidden states and form the hidden state probability vector for node xn as (16) Bn=[P1n,P2n,...,PNcdn]
+
+5.4. LiDAR Odometry Constraint
+
+Assume that the transformation between two continuous nodes [xn,xn+1] is Tn,n+1, and its Lie algebra is ξn,n+1. The observation of Tn,n+1 is T^n,n+1, denoted in Equation (10), and we denote the corresponding Lie algebra as ξ^n,n+1, so we have (17) ξ^n,n+1=ξn,n+1+δξ^n,n+1
+
+where δξ^n,n+1 is the noise; it obeys the zero mean multivariate Gaussian distribution and can be described by the covariance matrix Q∈R6×6. Under the observation T^n,n+1, the posterior probability density of Tn,n+1 can be written as (18) P(ξn,n+1|ξ^n,n+1)=N(ξn,n+1;ξ^n,n+1,Q)=12πQexp{−12ξn,n+1−ξ^n,n+1Q2}
+
+We utilize Equation (18) to analyze the transformation between the hidden states of two nodes, assuming that they are Sin and Sjn+1. From Section 4, we know that the corresponding pose can be obtained from the prior map, denoted as TiM=[Ri|pi] and TjM=[Rj|pj]. Combined with the column shift from Equation (14) as hi* and hj*, the estimated transformation can be written as (19) T˜i=[Rot_z(hi*·2πNs)Ri|pi]T˜j=[Rot_z(hj*·2πNs)Ri|pj]Rot_z(ψ)=cosψ−sinψ0sinψcosψ0001
+
+where Rot_z(⋅)∈SO(3) denotes the rotation matrix around the z-axis, and the input variable is the rotation angle in radians. ψ is used for the indicator. Thus, the transformation between them can be written as (20) T˜ij=T˜i−1T˜jξ˜i,j=ln(T˜ij)∨
+
+Then, we substitute ξ˜i,j into Equation (18) to calculate the probability:(21) Pi,jn,n+1=P(ξ˜i,j|ξ^n,n+1)
+
+This can be seen as the transition probability between the two hidden states. Through the above process, we can obtain the transition probabilities between all candidates of the two nodes and form the transition probability matrix:(22) An,n+1=P0,0n,n+1P1,0n,n+1...PNcd,0n,n+1P0,1n,n+1P1,1n,n+1...PNcd,1n,n+1............P0,Ncdn,n+1P1,Ncdn,n+1...PNcd,Ncdn,n+1
+
+5.5. Place Recognition and Point Cloud Registration
+
+After obtaining the hidden state probability and the transition probability between the hidden states of all nodes, combining Equation (11), we can obtain the emission probability of the HMM. We find an optimal path to maximize the overall emission probability, and the node states can indicate the recognized place. Reflected on the image, as shown in Figure 3, it represents the overall “length” of the selected hidden state line from x0 to xNχ−1. Due to the small numerical value of the number of states, we use an exhaustive method to find the optimal path of the HMM (with the highest overall probability). At this point, the hidden states of each node are the matching results.
+
+After obtaining the matching results, we obtain the rough pose of the online keyframe. We use this pose as the initial guess for point cloud registration. Based on the point cloud registration algorithm, we match the LiDAR point cloud of the online keyframe with the prior map PCM to obtain an accurate 6-degree-of-freedom pose estimation. In this work, we utilize the normal distributions transform algorithm [34] for point cloud registration.
+
+The overall procedure is represented in pseudocode in Algorithm 1.
+
+Algorithm 1 Online Place Recognition Procedure	
+Input online LiDAR keyframe scans Fn, SC and ring key descriptor of prior map IM and KM
+Output Initial Pose 1: KFNum = 0
+
+2: while 1 do
+
+3:   if Received keyframe scans Fn then
+
+4:     KFNum++
+
+5:     Build SC and ring key descriptor for Fn by Equations (6) and (7)
+
+6:     Select candidates by ring key-based global place retrieval
+
+7:     Calculate the probability for all hidden states by Equation (15).
+
+8:     Form the hidden state probability vector Bn.
+
+9:     if KFNum>=2 then
+
+10:       Calculate the transformation between Fn−1 and Fn through F-LOAM [11]
+
+11:       Calculate the transition probability matrix An,n+1
+
+12:     end if
+
+13:     if KFNum>=Nχ then
+
+14:       Place recognition through HMM.
+
+15:       Obtain initial pose through point cloud registration.
+
+16:       return initial pose.
+
+17:     end if
+
+18:   end if
+
+19: end while
+
+	
+
+6. Experiments
+
+6.1. Experiment Preparation
+
+To validate our approach, we performed experiments using the KITTI dataset (https://www.cvlibs.net/datasets/kitti/, accessed on 10 June 2022), which is public and widely acknowledged as a benchmark dataset for the evaluation of autonomous driving systems. It comprises 22 sequences, with over 43,000 scans captured using a Velodyne HDL-64E LiDAR launched by Velodyne Lidar, Inc. (San Jose, CA, USA). This dataset encompasses various outdoor scenarios, such as urban roads, country roads, and highways. Sequences 0–10 also provide GNSS-INS ground truth pose information. We specifically utilized sequences 05, 06, and 08 from the KITTI Odometry dataset for our experiments. These sequences feature paths with a significant number of overlapping areas, making them suitable for path recognition experiments. To perform the place recognition experiments, we divided the dataset into two distinct parts, target and source, and we matched the keyframes in the source part with those in the target one. In Table 1, we provide details regarding the period, length, and number of keyframes for each part; we also provide the period in the original dataset in parentheses.
+
+We used the state-of-the-art feature-based LiDAR odometry method proposed in F-LOAM [11] to provide the LiDAR odometry for the target and source data. To display the dataset’s overlapping areas, we show the point cloud map and the target and source pose in Figure 4.
+
+The proposed method is implemented in C++ and integrated into Ubuntu 16.04 and the robot operating system (ROS) on an NVIDIA Jetson TX2. The Jetson TX2 is an embedded artificial intelligence computing platform launched by NVIDIA (Santa Clara, CA, USA); it comes with a built-in GPU and CPU, with 8 GB of memory by Samsung Electronics (Suwon, Republic of Korea) and 32 GB of storage capacity by SanDisk (Milpitas, CA, USA). The TX2 contains a dual-core NVIDIA Denver 2 64-bit CPU and quad-core Arm (Cambridge, UK) Cortex-A57 MPCore processor, the operating frequency of the Denver 2 is 2 GHz and that of the Cortex-A57 is 2 GHz. A physical image of the TX2 is shown in Figure 5.
+
+6.2. Precision Recall Evaluation
+
+First, we establish SC descriptors for the target and source keyframes separately. The number of sectors and rings will affect the resolution of the SC descriptor, influencing the balance of the computational efficiency and the quality of the SC descriptors. We set the number of sectors and rings for the SC descriptor as 20 and 60, which follow the original paper [4]. The sampling range will affect the quality of the SC descriptor. Due to occlusion, distant point clouds are sparse. When the sampling distance is too large, it can cause many bins to have no point clouds, decreasing the quality of the SC descriptors. However, when the sampling distance is too small, the utilization of environmental information becomes smaller, also resulting in a decrease in the quality of the SC descriptors. We set the sampling range to 80 m according to the dataset’s sampling environment.
+
+Then, we match the source descriptor with the target descriptor individually to find the optimal match. As this work is an extension of the SC, the SC has already been compared to algorithms such as M2DP, Z-projection, and ESF in [4]. Therefore, this work only conducts a comparative analysis with the SC. We denote the proposed method in this work as HMM. We also conduct a comparative analysis with Mul SC, which utilizes the simple repetition of single-frame descriptor matching for the nodes in the HMM and chooses the one with the best similarity score. Thus, Mul SC can be used in an ablation experiment for the HMM.
+
+The hidden states are the candidates for the SC match, which is selected by the ring key. Thus, the hidden state number Ncd will affect the balance of the computational efficiency and the accuracy of place recognition in the SC matching process. We set the hidden state number Ncd as 5 for all methods according to the experimental situation. The selection of the node number Nχ and the distance between nodes will impact the performance of the HMM. Specifically, Nχ will affect how much environmental information we use in our methods. When Nχ is larger, we will use more environmental information, and the precision will improve; however, it requires a long operation distance for place recognition, and each node must be correctly identified or the recall will be reduced. The distance between the nodes also affects the accuracy of place recognition. When the distance between the nodes is relatively small and less than the sampling distance, adjacent nodes have overlapping areas in their environmental sampling. Consequently, as the distance between the nodes increases, the environmental difference between the two nodes becomes greater, and more environmental information is utilized by the HMM. However, if the distance becomes too large, the overlapping areas diminish, causing the environmental information used to increase slowly or not at all, while the required operation distance for place recognition increases. In this work, we set the node number Nχ for the HMM and Mul SC as 3 and the distance between the nodes as 5 m according to the experimental situation.
+
+We use the precision–recall curve and the corresponding area under the curve (AUC) to evaluate place recognition. The precision and recall are defined as (23) Precision=TP/(TP+FP)Recall=TP/(TP+FN)
+
+where TP, FP, and FN denote the number of place recognition results that are true positives, false positives, and false negatives, respectively. The prediction results’ classification is shown in Table 2.
+
+The detection is considered a true positive if the ground truth distance between the query and the matched node is less than 5 m. The precision–recall curve is shown in Figure 6. The AUC is shown in Table 3.
+
+Accuracy represents the probability of correctly predicting a loop, while recall represents the probability that the predicted loop is correct. In an ideal environment, both the accuracy and recall can reach 1 simultaneously, but, in reality, it is difficult for both to reach 1 simultaneously. Therefore, a higher precision–recall curve indicates a better method. Additionally, a larger area under the curve (AUC) signifies better performance. From Figure 6, it can be seen that the precision–recall curves of the HMM are all above those of the other methods, and almost all of them can completely contain the other curves. Moreover, Table 3 shows that the AUC of the HMM is the largest for each sequence. Therefore, our method can improve the performance of place recognition compared to the original SC method, with an average performance improvement of 5.8% and with a maximum improvement of 15.3%. The experimental results show that the method proposed in this paper can not only achieve place recognition, but the vast majority of the results are also correct. This is of great significance for the initial localization.
+
+6.3. Time Consumption
+
+The time consumption is shown in Table 4. We provide the values of the maximum (Max), mean (Mean), and standard deviation (Std). The Max and Mean values show that the time consumption of the HMM and Mul SC is the same, and both values are Nχ times the SC. Due to the fact that the ring key search and SC match time of the Mul SC and HMM methods are also consumed during their respective keyframe cycles, which is the same as in the SC method, the increased computational complexity of the HMM method mainly lies in the HMM recognition. From the comparison of the time consumption of Mul SC and the HMM, it can be seen that the time is mainly spent on the ring key search and SC matching, while HMM recognition requires very little computation, accounting for approximately 0.6% of the total time. Therefore, compared to the original SC method, the additional computational cost of the HMM method is very small.
+
+6.4. Running Distance
+
+Due to the fact that the method proposed in this work requires the system to run for a certain distance to estimate the initial pose, similar to some Monte Carlo-based place recognition methods [8,9], this paper evaluates the required distance. Figure 7 shows the HMM running distance; it can be seen that the maximum distance is less than 16 m. According to actual engineering experience, the convergence distance of the 3D Monte Carlo localization method is usually around 10–50 m. Thus, the proposed method only requires a short running distance to achieve good results.
+
+7. Conclusions
+
+In this paper, we utilize the HMM algorithm to expand single SC matching to multiple SC matching for place recognition while a robot is moving. Compared to the original method, our method showed higher place recognition performance across the dataset sequences, with an average performance improvement of 5.8% and with a maximum improvement of 15.3%. We improved the SC matching performance under an acceptable running distance of 16 m, and it only increased the time consumption by approximately 0.6%. Therefore, our method improves the performance of existing methods.
+
+Although our method improves the performance, the manual selection of the number of nodes and the distance between the nodes significantly impacts it, making it inefficient in practical operation. In future work, we plan to extend our method to adaptively select the number of nodes and the distance between nodes based on the environment. In this way, our method can become more efficient and widely used.
+
+Our method can also be extended to LiDAR surveying scenes with non-moving objects, leveraging the HMM framework to detect and distinguish between static and dynamic elements within the scene, as demonstrated in the study by Chau et al. [35]. Further analysis of this application will be conducted in future work.
+
+Author Contributions
+
+Conceptualization, L.G. and C.Z.; Data curation, L.G. and X.Y.; Formal analysis, L.G.; Funding acquisition, C.Z.; Investigation, L.G.; Methodology, L.G. and J.L.; Project administration, J.L.; Resources, C.Z.; Software, L.G. and X.Y.; Supervision, J.L.; Validation, L.G. and J.L.; Visualization, L.G.; Writing—original draft, L.G.; Writing—review and editing, L.G. All authors have read and agreed to the published version of the manuscript.
+
+Institutional Review Board Statement
+
+Not applicable.
+
+Informed Consent Statement
+
+Not applicable.
+
+Data Availability Statement
+
+Data are contained within the article.
+
+Conflicts of Interest
+
+The authors declare no conflicts of interest.
+
+Abbreviations
+
+SO(3)	Special Orthogonal Group	
+SE(3)	Special Euclidean Group	
+so(3)	Lie Algebra of SO(3)	
+se(3)	Lie Algebra of SE(3)	
+p∈R3	Position Vector	
+R∈SO(3)	Rotation Matrix	
+T∈SE(3)	Transformation Matrix	
+ϕ∈so(3)	Lie Algebra of R	
+ξ∈se(3)	Lie Algebra of T	
+
+Figure 1 The structure of the system. I and T denote the observation of the SC and LiDAR odometry and are defined in Equation (10). P(xn|In) and P(xn,xn+1|T^n,n+1) indicate the state estimation by the SC descriptor and LiDAR odometry and are defined in Equation (11). The system mainly comprises five components. Firstly, the candidate selection model searches for candidates for each online keyframe in the prior map using ring key descriptors, which are rotation-invariant. Next, the SC constraint model calculates the SC similarity scores of the candidates, while the LiDAR odometry constraint model computes the LiDAR odometry between the candidates of adjacent keyframes. The HMM model combines the SC and LiDAR odometry constraints for online states to achieve place recognition. Finally, we utilize the HMM results as an initial guess for point cloud registration and obtain the initial pose.
+
+Figure 2 The schematic diagram of the SC descriptor [4]. The figure on the left illustrates the sampling of LiDAR scans using rings and sectors from a bird’s eye view, with the red color representing the point cloud of the LiDAR scan.. The middle figure illustrates the SC matrix. The figure on the right illustrates the ring key descriptor created from the SC.
+
+Figure 3 The structure of the HMM. x denotes the state of the online keyframe. I denotes the SC descriptor. T denotes the transformation between adjacent keyframes. S denotes the hidden state. A denotes the transition probability matrix, defined in Equation (22). The arrows between the hidden states illustrate the matrix, with the “length” of the arrow illustrating the spatial consistency between the actual transformation T and the transformation between hidden states. B denotes the hidden state probability vector, which is calculated through the similarity score of the SC match and is defined in Equation (16). x will be selected from the hidden states and minimize the path’s overall “length”.
+
+Figure 4 The dataset illustration. The first, second, and third lines represent the 00, 05, and 08 sequences of KITTI, respectively. The red represents the target, while the blue represents the source. The figures on the left show the target PCM, while the middle figures show the source PCM. The figures on the right show the paths of both.
+
+Figure 5 Physical image of TX2. The TX2 consists of a core board and a peripheral board. The core board houses the chips, memory, and storage. The peripheral board can be customized according to the functionality, primarily comprising a power supply and interface extensions.
+
+Figure 6 The precision–recall curve. The left, middle, and right images represent the 00, 05, and 08 sequences of KITTI, respectively. The horizontal axis represents the recall rate, while the vertical axis represents the precision rate. We have plotted the precision–recall curves for the SC, Mul SC, and HMM methods. The precision–recall curves for the HMM method consistently lie above those of the other methods, and, in almost all cases, they completely encompass the other curves.
+
+Figure 7 HMM running distance. We use a box chart to show the distribution of the running distance, and it can be seen that the average running distance is about 10 m, with a maximum of no more than 16 m.
+
+sensors-24-03611-t001_Table 1 Table 1 KITTI dataset details.
+
+Sequence	Sub-Map	Time Period (s)	Length (m)	Keyframes	
+KITTI-00	Target	110 (0–110)	768.99	476	
+Source	150 (110–260)	1123.99	679	
+KITTI-05	Target	125 (0–125)	970.91	538	
+Source	162 (125–287)	1330.38	687	
+KITTI-08	Target	110 (0–110)	919.30	500	
+Source	100 (110–210)	696.50	420	
+
+sensors-24-03611-t002_Table 2 Table 2 Classification of prediction results.
+
+Classification	Predict True	Predict False	
+Actual True	True Positive (TP)	False Negative (FN)	
+Actual False	False Positive (FP)	True Negative (TN)	
+
+sensors-24-03611-t003_Table 3 Table 3 Area under the curve (AUC) (ratio).
+
+Sequence	SC	Mul SC	HMM	
+KITTI 00	0.9549	0.9667	0.9722	
+KITTI 05	0.9707	0.9675	0.9919	
+KITTI 08	0.7754	0.8193	0.8946	
+Bold indicates the best result of all methods.
+
+sensors-24-03611-t004_Table 4 Table 4 Time consumption (ms).
+
+Sequence	SC	Mul SC	HMM	
+Max	Mean	Std	Max	Mean	Std	Max	Mean	Std	
+KITTI 00	1.0132	0.8372	0.0250	2.8615	2.5116	0.0498	2.8789	2.5295	0.0500	
+KITTI 05	1.0016	0.8265	0.0200	2.7973	2.4782	0.0375	2.8164	2.4953	0.0376	
+KITTI 08	1.0894	0.9492	0.0249	3.1127	2.8477	0.0501	3.1322	2.8652	0.0500	
+
+Disclaimer/Publisher’s Note: The statements, opinions and data contained in all publications are solely those of the individual author(s) and contributor(s) and not of MDPI and/or the editor(s). MDPI and/or the editor(s) disclaim responsibility for any injury to people or property resulting from any ideas, methods, instructions or products referred to in the content.
+==== Refs
+References
+
+1. Ding W. Hou S. Gao H. Wan G. Song S. LiDAR Inertial Odometry Aided Robust LiDAR Localization System in Changing City Scenes Proceedings of the 2020 IEEE International Conference on Robotics and Automation (ICRA) Paris, France 31 May–31 August 2020 4322 4328
+2. Pan L. Ji K. Zhao J. Tightly-coupled multi-sensor fusion for localization with LiDAR feature maps Proceedings of the 2021 IEEE International Conference on Robotics and Automation (ICRA) Xi’an, China 30 May–5 June 2021 IEEE Piscataway, NJ, USA 2021 5215 5221
+3. Thrun S. Probabilistic robotics Commun. ACM 2002 45 52 57 10.1145/504729.504754
+4. Kim G. Kim A. Scan context: Egocentric spatial descriptor for place recognition within 3d point cloud map Proceedings of the 2018 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) Madrid, Spain 1–5 October 2018 IEEE Piscataway, NJ, USA 2018 4802 4809
+5. Kim G. Park B. Kim A. 1-day learning, 1-year localization: Long-term lidar localization using scan context image IEEE Robot. Autom. Lett. 2019 4 1948 1955 10.1109/LRA.2019.2897340
+6. Shan T. Englot B. Duarte F. Ratti C. Rus D. Robust place recognition using an imaging lidar Proceedings of the 2021 IEEE International Conference on Robotics and Automation (ICRA) Xi’an, China 30 May–5 June 2021 IEEE Piscataway, NJ, USA 2021 5469 5475
+7. Mangelson J.G. Dominic D. Eustice R.M. Vasudevan R. Pairwise consistent measurement set maximization for robust multi-robot map merging Proceedings of the 2018 IEEE International Conference on Robotics and Automation (ICRA) Brisbane, QLD, Australia 21–25 May 2018 IEEE Piscataway, NJ, USA 2018 2916 2923
+8. Chen X. Vizzo I. Läbe T. Behley J. Stachniss C. Range image-based LiDAR localization for autonomous vehicles Proceedings of the 2021 IEEE International Conference on Robotics and Automation (ICRA) Xi’an, China 30 May–5 June 2021 IEEE Piscataway, NJ, USA 2021 5802 5808
+9. Wasisto I. Istiqomah N. Trisnawan I.K.N. Jati A.N. Implementation of Mobile Sensor Navigation System Based on Adaptive Monte Carlo Localization Proceedings of the 2019 International Conference on Computer, Control, Informatics and its Applications (IC3INA) Tangerang, Indonesia 23–24 October 2019
+10. Feng H. Luo J. Gui L. Huang H. A new approach of initial localization for unmanned vehicles based on 3d descriptor and normal distributions transform Proceedings of the 2022 8th International Conference on Control, Automation and Robotics (ICCAR) Xiamen, China 8–10 April 2022 IEEE Piscataway, NJ, USA 2022 242 247
+11. Wang H. Wang C. Chen C.L. Xie L. F-loam: Fast lidar odometry and mapping Proceedings of the 2021 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) Prague, Czech Republic 27 September–1 October 2021 IEEE Piscataway, NJ, USA 2021 4390 4396
+12. Shan T. Englot B. Meyers D. Wang W. Ratti C. Daniela R. LIO-SAM: Tightly-coupled Lidar Inertial Odometry via Smoothing and Mapping Proceedings of the IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) Las Vegas, NV, USA 24 October–24 January 2021 IEEE Piscataway, NJ, USA 2020 5135 5142
+13. Gálvez-López D. Tardos J.D. Bags of binary words for fast place recognition in image sequences IEEE Trans. Robot. 2012 28 1188 1197 10.1109/TRO.2012.2197158
+14. Qin T. Li P. Shen S. Vins-mono: A robust and versatile monocular visual-inertial state estimator IEEE Trans. Robot. 2018 34 1004 1020 10.1109/TRO.2018.2853729
+15. Campos C. Elvira R. Rodríguez J.J.G. Montiel J.M. Tardós J.D. Orb-slam3: An accurate open-source library for visual, visual–inertial, and multimap slam IEEE Trans. Robot. 2021 37 1874 1890 10.1109/TRO.2021.3075644
+16. Steder B. Grisetti G. Burgard W. Robust place recognition for 3D range data based on point features Proceedings of the 2010 IEEE International Conference on Robotics and Automation Anchorage, AK, USA 3–7 May 2010 IEEE Piscataway, NJ, USA 2010 1400 1405
+17. Lindeberg T. Feature detection with automatic scale selection Int. J. Comput. Vis. 1998 30 79 116 10.1023/A:1008045108935
+18. Cao F. Zhuang Y. Zhang H. Wang W. Robust place recognition and loop closing in laser-based SLAM for UGVs in urban environments IEEE Sens. J. 2018 18 4242 4252 10.1109/JSEN.2018.2815956
+19. Guo J. Borges P.V. Park C. Gawel A. Local descriptor for robust place recognition using lidar intensity IEEE Robot. Autom. Lett. 2019 4 1470 1477 10.1109/LRA.2019.2893887
+20. Salti S. Tombari F. Di Stefano L. SHOT: Unique signatures of histograms for surface and texture description Comput. Vis. Image Underst. 2014 125 251 264 10.1016/j.cviu.2014.04.011
+21. Uy M.A. Lee G.H. Pointnetvlad: Deep point cloud based retrieval for large-scale place recognition Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition Salt Lake City, UT, USA 18–23 June 2018 4470 4479
+22. Qi C.R. Su H. Mo K. Guibas L.J. Pointnet: Deep learning on point sets for 3d classification and segmentation Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition Honolulu, HI, USA 21–26 July 2017 652 660
+23. Arandjelovic R. Gronat P. Torii A. Pajdla T. Sivic J. NetVLAD: CNN architecture for weakly supervised place recognition Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition Las Vegas, NV, USA 27–30 June 2016 5297 5307
+24. Chen X. Läbe T. Milioto A. Röhling T. Vysotska O. Haag A. Behley J. Stachniss C. OverlapNet: Loop closing for LiDAR-based SLAM arXiv 2021 2105.11344
+25. Zhou Z. Zhao C. Adolfsson D. Su S. Gao Y. Duckett T. Sun L. Ndt-transformer: Large-scale 3d point cloud localisation using the normal distribution transform representation Proceedings of the 2021 IEEE International Conference on Robotics and Automation (ICRA) Xi’an, China 30 May–5 June 2021 IEEE Piscataway, NJ, USA 2021 5654 5660
+26. Luo L. Zheng S. Li Y. Fan Y. Yu B. Cao S.Y. Li J. Shen H.L. BEVPlace: Learning LiDAR-based place recognition using bird’s eye view images Proceedings of the IEEE/CVF International Conference on Computer Vision Paris, France 1–6 October 2023 8700 8709
+27. Komorowski J. Minkloc3d: Point cloud based large-scale place recognition Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision Waikoloa, HI, USA 3–8 January 2021 1790 1799
+28. Muhammad N. Lacroix S. Loop closure detection using small-sized signatures from 3D LIDAR data Proceedings of the 2011 IEEE International Symposium on Safety, Security, and Rescue Robotics Kyoto, Japan 1–5 November 2011 IEEE Piscataway, NJ, USA 2011 333 338
+29. He L. Wang X. Zhang H. M2DP: A novel 3D point cloud descriptor and its application in loop closure detection Proceedings of the 2016 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) Daejeon, Republic of Korea 9–14 October 2016 IEEE Piscataway, NJ, USA 2016 231 237
+30. Kim G. Choi S. Kim A. Scan context++: Structural place recognition robust to rotation and lateral variations in urban environments IEEE Trans. Robot. 2021 38 1856 1874 10.1109/TRO.2021.3116424
+31. Weyand T. Kostrikov I. Philbin J. Planet-photo geolocation with convolutional neural networks Proceedings of the Computer Vision–ECCV 2016: 14th European Conference Amsterdam, The Netherlands 11–14 October 2016 Proceedings, Part VIII 14 Springer Berlin/Heidelberg, Germany 2016 37 55
+32. Xu X. Yin H. Chen Z. Li Y. Wang Y. Xiong R. Disco: Differentiable scan context with orientation IEEE Robot. Autom. Lett. 2021 6 2791 2798 10.1109/LRA.2021.3060741
+33. Deng Q. Söffker D. A review of HMM-based approaches of driving behaviors recognition and prediction IEEE Trans. Intell. Veh. 2021 7 21 31 10.1109/TIV.2021.3065933
+34. Magnusson M. The Three-Dimensional Normal-Distributions Transform: An Efficient Representation for Registration, Surface Analysis, and Loop Detection Ph.D. Thesis Örebro Universitet Örebro, Sweden 2009
+35. Chau W.Y. Loong C.N. Wang Y.H. Chiu S.W. Tan T.J. Wu J. Leung M.L. Tan P.S. Ooi G.L. Understanding the dynamic properties of trees using the motions constructed from multi-beam flash light detection and ranging measurements J. R. Soc. Interface 2022 19 20220319 10.1098/rsif.2022.0319 35919983

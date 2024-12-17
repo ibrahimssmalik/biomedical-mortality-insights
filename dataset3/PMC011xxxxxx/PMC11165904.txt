@@ -1,0 +1,358 @@
+
+==== Front
+Algorithms Mol Biol
+Algorithms Mol Biol
+Algorithms for Molecular Biology : AMB
+1748-7188
+BioMed Central London
+
+265
+10.1186/s13015-024-00265-3
+Research
+Metric multidimensional scaling for large single-cell datasets using neural networks
+Canzar Stefan stefan.canzar@ur.de
+
+3
+Do Van Hoan 4
+Jelić Slobodan 1
+Laue Sören 2
+Matijević Domagoj 1
+Prusina Tomislav 2
+1 https://ror.org/05sw4wc49 grid.412680.9 0000 0001 1015 399X School of Applied Mathematics and Informatics, University of Osijek, Osijek, Croatia
+2 https://ror.org/00g30e956 grid.9026.d 0000 0001 2287 2617 Department of Informatics, Universität Hamburg, Hamburg, Germany
+3 https://ror.org/01eezs655 grid.7727.5 0000 0001 2190 5763 Faculty of Informatics and Data Science, University of Regensburg, Regensburg, Germany
+4 https://ror.org/04wgyjv21 grid.440802.a 0000 0004 0574 1625 Center for Applied Mathematics and Informatics, Le Quy Don Technical University, Hanoi, Vietnam
+11 6 2024
+11 6 2024
+2024
+19 2110 12 2021
+22 5 2024
+© The Author(s) 2024
+https://creativecommons.org/licenses/by/4.0/ Open Access This article is licensed under a Creative Commons Attribution 4.0 International License, which permits use, sharing, adaptation, distribution and reproduction in any medium or format, as long as you give appropriate credit to the original author(s) and the source, provide a link to the Creative Commons licence, and indicate if changes were made. The images or other third party material in this article are included in the article's Creative Commons licence, unless indicated otherwise in a credit line to the material. If material is not included in the article's Creative Commons licence and your intended use is not permitted by statutory regulation or exceeds the permitted use, you will need to obtain permission directly from the copyright holder. To view a copy of this licence, visit http://creativecommons.org/licenses/by/4.0/. The Creative Commons Public Domain Dedication waiver (http://creativecommons.org/publicdomain/zero/1.0/) applies to the data made available in this article, unless otherwise stated in a credit line to the data.
+Metric multidimensional scaling is one of the classical methods for embedding data into low-dimensional Euclidean space. It creates the low-dimensional embedding by approximately preserving the pairwise distances between the input points. However, current state-of-the-art approaches only scale to a few thousand data points. For larger data sets such as those occurring in single-cell RNA sequencing experiments, the running time becomes prohibitively large and thus alternative methods such as PCA are widely used instead. Here, we propose a simple neural network-based approach for solving the metric multidimensional scaling problem that is orders of magnitude faster than previous state-of-the-art approaches, and hence scales to data sets with up to a few million cells. At the same time, it provides a non-linear mapping between high- and low-dimensional space that can place previously unseen cells in the same embedding.
+
+Keywords
+
+Metric multidimensional scaling
+Neural networks
+Large-scale data
+Dimensionality reduction
+Single-cell RNA-seq
+Clustering
+http://dx.doi.org/10.13039/501100001659 Deutsche Forschungsgemeinschaft SFB-TRR 338/1 2021-452881907 Canzar Stefan Universität Regensburg (3161)Open Access funding enabled and organized by Projekt DEAL.
+
+issue-copyright-statement© BioMed Central Ltd., part of Springer Nature 2024
+==== Body
+pmcBackground
+
+Single-cell RNA sequencing (scRNA-seq) experiments provide quantitative measurements for thousands of genes across tens to hundreds of thousands or even millions of cells. The high-dimensionality as well as the sheer size of scRNA-seq data sets pose particular challenges for downstream analysis methods such as clustering and trajectory inference methods. An essential step in single-cell data processing is the reduction of data dimensionality to remove noise in gene expression measurements [1]. One of the most popular methods for dimensionality reduction of single-cell data is principle component analysis (PCA). PCA aims to maximize the variance in the reduced space and can be computed efficiently by a singular value decomposition. The existence of efficient implementations [2] has contributed to its routine application to large single-cell data sets. PCA is used, for example, in state-of-the-art clustering methods Seurat [3], SC3 [4], and CIDR [5], and cell lineage inference methods such as TSCAN [6] and Waterfall [7].
+
+Metric Multidimensional Scaling (metric MDS), on the other hand, aims to find an embedding that preserves pairwise distances between points, which can improve the accuracy of various types of downstream analyses of single-cell data compared to, e.g., PCA. In a comprehensive comparison of 18 dimensionality reduction methods on 30 scRNA-seq datasets, MDS often outperformed other methods or achieved comparable results [1]. The evaluation in Sun et al. [1] included approaches developed specifically for scRNA-seq, such as deep-learning based methods scScope [8] and DCA [9]. MDS yielded accurate and highly stable clusterings for both low and high number of embedding dimensions, and performed well when inferring lineages using Monocle3 [10].
+
+The high computational cost of metric MDS has hindered its wide application to single-cell data sets. In PHATE [11], for example, metric MDS is paired with a sampling-based approach to cope with its computational complexity. In the experiments in Sun et al. [1], however, most dimensionality reduction methods, including MDS, showed a performance loss when combined with a sub-sampling procedure.
+
+Surprisingly, no algorithm is known that can solve metric MDS efficiently with more than a few thousand cells. Here, we provide the first such algorithm. Our contributions are two-fold: First, we provide a simple two-layer neural network approach that can solve the metric MDS problem for (single-cell) data sets with up to a few million data points (cells). This is orders of magnitude larger than current state-of-the-art methods can handle. Second, our approach for the first time learns a non-linear mapping of the high-dimensional points into the low-dimensional space, which can be used to place previously unseen cells in the same low-dimensional embedding.
+
+Preliminaries
+
+MDS comes in three different versions: (1) classical MDS, (2) metric MDS, and (3) non-metric MDS, aka ordinal scaling. While we focus here on metric MDS, it is important to understand all three methods and their differences.
+
+Suppose we are given n data points xi∈Rm that we want to embed into Rk where k<m. Let yi be the corresponding point of xi in the low-dimensional space Rk.
+
+Classical MDS Classical MDS tries to map these data points into Rk while trying to preserve the pairwise inner products ⟨xi,xj⟩. Specifically, it solves the optimization problemminy1,y2,…,yn∈Rk∑i,jxi,xj-yi,yj2
+
+Metric MDS Metric MDS tries to preserve the pairwise distances between the points, i.e., it solves the optimization problemminy1,y2,…,yn∈Rk∑i,jwijxi-xj-yi-yj2,
+
+where ‖.‖ denotes the Euclidean norm and wij≥0 are some given weights.
+
+Non-metric MDS Non-metric MDS embeds the data into low-dimensional Euclidean space by preserving only the relative distance ordering, i.e, it solves the optimization problemminy1,y2,…,yn∈Rk,f∑i,jwij(fxi-xj-yi-yj2,
+
+where f is a monotonically increasing function. Note, only the ordering of the pairwise distances is important here which should be preserved and not the actual distances.
+
+All three formulations differ only in the objective functions that are minimized. While this seems like a minor difference, it has a substantial impact on its computability. It can be shown that classical MDS is equivalent to PCA when the input points are given explicitly and hence can be solved efficiently by a singular value decomposition. Thus, it can be solved efficiently for large data sets, having millions of cells. The computational complexity of metric MDS is fundamentally different. It has been shown that metric MDS is NP-hard when the target dimension is one [12] and it is believed that it is NP-hard in general. Hence, no efficient algorithm is likely to exist for solving this problem optimally. However, even finding a local minima is very time consuming. The most popular algorithm for solving this problem is the SMACOF algorithm [13]. However, its running time grows quadratically in the number of data points n. It can only be applied to solve this problem with up to a few thousand data points.
+
+There is one more important difference between classical MDS and metric MDS; it can be shown that in classical MDS the optimal solution corresponds to a linear mapping of the high-dimensional space Rn into the low-dimensional Euclidean space Rk. This is not true for metric MDS. The optimal solution for metric MDS does not correspond to a linear mapping. Asking for a linear mapping leads to suboptimal solutions. Having a mapping from the input space Rm into the output space Rk is important for new, unseen data points. For instance, one can compute the mapping on a training set and apply the same mapping to the test set as it is common practice for other low-dimensional embedding and preprocessing methods like PCA. The SMACOF algorithm does not provide such a mapping.
+
+Often, the input points are not given explicitly, but instead, their pairwise distances or pairwise scalar products are given. In this case, such a mapping cannot be provided.
+
+Related work
+
+Multidimensional scaling has a long history [14]. Classical MDS was first studied by Torgerson [15] and independently by Gower [16]. They used an eigenvector decomposition to solve the problem. Later, Kruskal [17] defined the problem of metric MDS as an optimization problem and used a steepest descent approach for solving it. Leeuw [13] improved the running time of Kruskal’s algorithm by using an iterative majorization approach. This algorithm is referred to as SMACOF algorithm. Surprisingly, it still represents the state-of-the-art for solving the metric MDS problem. The non-metric MDS problem was introduced by Kruskal [17] and Guttman [18]. It is mainly used in the psychometric area.
+
+The research on MDS can be split up into two branches; improving statistical performance and improving speed. Here, we focus on the latter one. The books by Cox and Cox [19], and Borg and Groenen [20] provide an in-depth coverage on the statistical properties and applications of MDS. See also the book by Burges [21] for a comparison of MDS to other embedding techniques.
+
+When the input points are given explicitly, then classical MDS can be shown to be equivalent to PCA. Hence, computational speed is no issue in this case. When the input is instead a distance matrix, Qu and Cai [22] and Yang et al. [23] used a divide-and-conquer approach for scaling up classical MDS to larger data sets. However, their approach only works for the classical MDS problem.
+
+A technique called landmark MDS was introduced by Silva and Tenenbaum [24]. The idea behind this approach is to select only a subset of the input points, called landmarks, compute the distance matrix between these points, and use only these points for the embedding. Hence, it can scale to larger data sets at the expense of ignoring the majority of the input points in the embedding process. This approach is also used in Isomap by Tenenbaum et al. [25]. Williams [26] provided a similarity between kernel PCA and metric MDS. However, they are both similar but not equivalent due to their computational complexity (P vs. NP).
+
+As already stated, classical MDS can be solved to optimality via a linear mapping. This is not true for the metric MDS. Sammon [27] set the weights wij=1/‖xi-xj‖ in the metric MDS problem and used a steepest descent algorithm for embedding the data. However, unlike the title suggests, it does not provide a mapping from the input space Rm to the target space Rk.
+
+There have also been some early attempts on solving the metric MDS problem using neural networks. This includes works by Mao and Jain [28] and Ridder and Duin [29]. However, their approaches scaled to very small data sets with up to a few hundred data points only. While the neural network approach later was used for other non-linear embedding and dimensionality reduction methods and gave rise to autoencoders, see, e.g., the seminal work by Hinto and Salakhutdinov [30], they have never been used successfully for solving reasonably-sized metric MDS problems. Wezel et al. [31] used a neural network approach for classical MDS and considered non-metric MDS in Wezel and Kosters [32]. However, they did not consider the metric MDS problem.
+
+Multidimensional scaling and linear mappings
+
+In this section we will introduce projected metric MDS as an intermediate version of MDS that combines the optimization objective of metric MDS with the linear mapping obtained from classical MDS.
+
+When applying MDS to a given input set, it is often important to also obtain the corresponding mapping, i.e., the mapping that maps the whole input space Rm to the output space Rk. This is for instance necessary when MDS is used as a preprocessing step. One usually computes the embedding on the given training data set and applies the same mapping to the test data set, i.e., to new, unseen data points without recomputing the whole problem again. This is common practice in preprocessing steps like PCA and also necessary in order to not induce a shift in the distribution of the test data. Hence, it is important to obtain such a mapping along with the actual embedding.
+
+Let X∈Rn×m be the matrix where the ith row is the ith input point xi∈Rm. We define the distance matrix DX∈Rn×n as (DX)ij=‖xi-xj‖. Let DX2 be the elementwise squared distance matrix, i.e., (DX2)ij=‖xi-xj‖2. Let Y and DY be defined accordingly for the output points yi.
+
+Classical MDS minimizes the error on the pairwise scalar products, i.e., ∑i,j(⟨xi,xj⟩-⟨yi,yj⟩)2. It has been shown that the optimal solution leads to a linear mapping which is obtained by the top-k eigenvectors of the Gram matrix X⊤X. The following computation shows that classical MDS can be translated into an optimization problem where approximately the error on the squared distances is minimized.
+
+The objective function of classical MDS can be rewritten in matrix notation asminY‖X⊤X-Y⊤Y‖F2.
+
+It holds that X⊤X=-12HDX2H, where H=I-1nee⊤ is a centering matrix with I being the identity matrix and e∈Rn the all-ones vector.
+
+Hence, the objective function of classical MDS can be rewritten asminY12HDX2-DY2HF2.
+
+Note, this is very similar, however not equivalent tominY12‖DX2-DY2‖F2,
+
+i.e., to the problem of minimizing the error on the squared distances. Compare this to the metric MDS problem that solvesminY12‖DX-DY‖F2.
+
+Hence, classical MDS can be seen as approximately minimizing the error of the squared distances while metric MDS tries to minimize the error of the distances. Thus, classical MDS can be a bit more sensitive to outliers in the data. One could then ask for an intermediate approach between classical and metric MDS; one could try to minimize the error on the distances while asking for a linear mapping. This gives rise to the projected metric MDS problem.
+
+Definition 1
+
+(projected metric MDS) Given some input data X∈Rn×m, projected metric MDS solves the following optimization problemminP,Y‖DX-DY‖F2st.Y=XP.
+
+Matrix P∈Rm×d along with the constraint forces the mapping to be linear. The following theorem relates the optimal solution of projected metric MDS to the optimal solution of metric MDS.
+
+Theorem 1
+
+Let X∈Rn×m be an input data matrix with centered rows, Y∗∈Rn×k the solution of metric MDS and P∗∈Rm×k the solution of the projected metric MDS. Then, the following inequality holds:‖DX-DXP∗‖F-‖DX-DY∗‖F‖DY∗‖F≤n-r+2,
+
+where r=rank(X).
+
+In order to prove the theorem, we will need two technical lemmas (Lemma 1 and Lemma 2) and Proposition 1, where we show how to compute a projection matrix P such that the projected points are close to the given ones in a least-square sense. We show that this optimization problem has a closed formula solution and use this result as a way to generate a feasible solution for the projected metric MDS instance. After this we are ready to state the proof of Theorem 1.
+
+Definition 2
+
+We say that rows of data matrix X are centered if1 ∑i=1nxij=0,∀j∈{1,…,d}.
+
+Lemma 1
+
+If X∈Rn×m is centered, then for each P∈Rm×k matrix XP is centered.
+
+Proof
+
+Since X is centered, we have1TX=0,
+
+where 1∈Rn is vector of ones. From associativity of matrix multiplication we have that0=1TX=1TXP=1TXP,
+
+which implies that XP is centered. □
+
+Lemma 2
+
+Let X∈Rn×m be a matrix with centered rows. Then‖DX‖F2=2n‖X‖F2.
+
+Proof
+
+Since(DX)ij2=xi-xjTxi-xj=xiTxi+xjTxj-2xiTxj
+
+and rows of X are centered, we have∑i=1n∑j=1n(DX)ij2=∑i=1n∑j=1nxiTxi+xjTxj-2xiTxj=∑i=1n∑j=1nxiTxi+∑i=1n∑j=1nxjTxj-2∑i=1nxiT∑j=1nxj=2nXF2.
+
+□
+
+Proposition 1
+
+Let X∈Rn×m be an input data matrix, Y~∈Rn×k for some k<m, and a singular value decomposition of X given by the following:2 X=U1U2Σ~000V1TV2T
+
+where U=[U1U2], U1∈Rn×r, U2∈Rn×(n-r) and V=[V1V2], V1∈Rm×r, V2∈Rm×(m-r) are orthogonal matrices. Σ~∈Rr×r is a diagonal matrix that contains r non-zero singular values such that σ1≥σ2≥…≥σr>0, where r is a rank of matrix X.
+
+The solution of the following optimization problem3 minP‖Y~-XP‖F2
+
+is given by4 P~=V1Σ~-1U1TY~,
+
+whose objective value is5 ‖Y~-XP~‖F2=‖U2TY~‖F2.
+
+Proof
+
+The objective function in (3) can be rewritten as follows:6 Y~-XPF2=Y~-UΣVTPF2=UTY~-UΣVTPF2
+
+7 =‖UTY~-ΣVTP‖F2,
+
+where last equality follows from unitary invariance of Frobenius norm. We introduce substitution8 Z1Z2=V1TPV2TP,
+
+such that the objective in (7) is‖Y~-XP‖F2=U1TY~U2TY~-Σ~Z10F2=U1TY~-Σ~Z1U2TY~F2,
+
+where U1TY~-Σ~Z1 can be set to zero matrix when Z1 is a solution of the following equation:Σ~Z1=U1TY~.
+
+Indeed, Z1=Σ~-1U1TY~, while Z2 can be set to 0 since it does not affect the objective value. Substitution of Z1 from (8) gives the solution (4) whose objective value is given in (5).
+
+□
+
+Now we are ready to state the proof of Theorem 1
+
+Proof of Theorem 1
+
+In order to prove the inequality, we first bound (DY~-DXP~)ij2.9 DY~-DXP~ij2=DY~ij-DXP~ij2=DY~ij2-2DY~ijDXP~ij+DXP~ij2=y~i22-2y~iTy~j+y~j22+P~Txi22-2xiTP~P~Txj+P~Txj22-2y~i22-2y~iTy~j+y~j22·P~Txi22-2xiTP~P~Txj+P~Txj22
+
+Now, from Cauchy-Schwartz inequality follows that y~iTy~j≤|y~iTy~j|≤‖y~i‖2‖y~j‖2 which gives10 y~i22-2y~iTy~j+y~j22≥y~i22+y~j22-2y~i2y~j2=y~i2-y~j22,
+
+and analogously11 P~Txi22-2xiTP~P~Txj+P~Txj22≥P~Txi2-P~Txj22.
+
+From (9), (10), and (11) follows that12 DY~-DXP~ij2≤y~i22-2y~iTy~j+y~j22+P~Txi22-2xiTP~P~Txj+P~Txj22-2y~i2-y~j22P~Txi2-P~Txj22=y~i22-2y~iTy~j+y~j22+P~Txi22-2xiTP~P~Txj+P~Txj22-2y~i2-y~j2P~Txi2-P~Txj2≤y~i22-2y~iTy~j+y~j22+P~Txi22-2xiTP~P~Txj+P~Txj22-2y~i2-y~j2P~Txi2-P~Txj2≤y~i22-2y~i2P~Txi2+P~Txi22+y~j22-2y~j2P~Txj2+P~Txj22-2y~iTy~j-2xiTP~P~Txj+2y~j2P~Txi2+2y~i2P~Txj2=y~i2-P~Txi22+y~j2-P~Txj22-2y~iTy~j-2xiTP~P~Txj+2y~j2P~Txi2+2y~i2P~Txj2
+
+which after summing up both sides gives13 ∑i=1n∑j=1nDY~-DXP~ij2≤∑i=1n∑j=1ny~i2-P~Txi22+∑i=1n∑j=1ny~j2-P~Txj22-2∑i=1ny~iT∑j=1ny~j-2∑i=1nP~TxiT∑j=1nP~Txj+2∑i=1nP~Txi2∑j=1ny~j2+2∑i=1ny~i2∑j=1nP~Txj2.
+
+Now, from |‖x‖-‖y‖|≤‖x-y‖ and Lemma 1 we obtain the following bound14 DY~-DXP~F2≤∑i=1n∑j=1ny~i-P~Txi22+∑i=1n∑j=1ny~j-P~Txj22+2nXP~FnY~F+2nXP~FnY~F=2nY~-XP~F2+4nXP~FY~F
+
+Now, from Proposition 1 we conclude that15 ‖XP~‖F=‖U1Σ~V1TV1Σ~-1U1TY~‖F=‖Y~‖F
+
+and16 ‖DY~-DXP~‖F2≤2n‖U2TY~‖F2+4n‖Y~‖F2≤2n‖U2‖F2‖Y~‖F2+4n‖Y~‖F2=2n(n-r)‖Y~‖F2+4n‖Y~‖F2
+
+Inequality (16) and Lemma 2 imply17 ‖DY~-DXP~‖F2≤(n-r+2)‖DY~‖F2.
+
+Finally, from triangle inequality and (16) we conclude thatDX-DXP~F≤DX-DY~F+DY~-DXP~F≤DX-DY~F+n-r+2DY~F
+
+which completes the proof. □
+
+While the theorem proves that the objective function values of projected metric MDS and metric MDS do not differ too much, in practice they still might provide substantially different solutions. See Fig. 1 for an example. Hence, we conclude that it is really necessary to have a nonlinear mapping between the input and the output space. This motivates the neural network approach introduced below.Fig. 1 We use an open box example (a) in order to illustrate the power of nonlinear mapping, such as metric MDS (d), over the linear mapping, such as PCA (b) and projected metric MDS (c)
+
+The neural network approach
+
+Here we will describe the neural network architecture that we used as well as the algorithm for computing the metric MDS mapping. We use a simple fully-connected neural network with a single hidden layer and a tanh activation function. The size of the input layer corresponds to the dimension of the input data n, while the size of the output layer corresponds to the dimension k of the output data. The size of the hidden layer is chosen as an estimate of the intrinsic dimension of the input data set. In practice, we estimated the intrinsic dimension by computing a SVD of the input data and selecting the top k singular values that retain at least 95% of the data variance.
+
+The motivation for our simple neural network architecture comes from the fact that any feedforward neural network with only a single hidden layer and any infinitely differentiable sigmoidal activation function, i.e., a function that retains the “S” shape can uniformly approximate any continuous function on a compact set, see, e.g., [33]. Furthermore, any mapping from the input points to the output points can be extended to a continuous mapping from Rn to Rk, provided that the set of input points is finite and no two input points share the same coordinates, i.e., xi≠xj for i≠j. Hence, a neural network should be able to approximate that mapping arbitrarily well. Due to the simplicity, differentiability, and the small number of parameters compared to the number of input points and features, there is little chance of overfitting. As can be seen in the experiments, the found mapping generalizes well on test data.
+
+Algorithm 1 NN approach for metric MDS problem
+
+We adopt the standard batch stochastic gradient descent approach and partition the input data set into a set of batches. We optimize the weights in our simple neural network following the idea of the Siamese neural network approach, see, e.g., [34]. The basic idea of this approach is that in each learning step the neural net is shown two points, say xi and xj. The outputs are stored for both points, say yi and yj respectively and the distance ‖yi-yj‖ between the output vectors are calculated. A loss function is defined in terms of the squared difference of this distance and the distance between the points in the input space ‖xi-xj‖, for all pairs of input points in the current batch. The weights of the neural network are updated using the Adam optimizer. Since the data is shuffled after each epoch, we sample the input distance matrix uniformly at random which provides an unbiased estimate of it. We set the batch size to 256 points which provides a good tradeoff between memory consumption and number of iterations needed to converge. All the steps of our simple but efficient approach are summarized in Algorithm 1.
+
+Experiments
+
+We implemented the neural network (NN) approach and compared it to other methods for solving MDS.1 Specifically, we compared it to the SMACOF algorithm which still represents the state-of-the-art for solving the metric MDS problem. However, due to its inherent quadratic runtime and space complexity, it is prohibitive to run it on data sets with more than a few thousand data points. To still assess the quality of our neural network approach, we also compared it to a random projection (RP) approach. In the random projection approach, a random Gaussian matrix is used for projecting the points into a low-dimensional Euclidean space. The well-known Johnson-Lindenstrauss lemma [35] states that such a random projection can embed any n-point data set into a low-dimensional Euclidean space of dimension at most Olognε2 while incurring a multiplicative distortion error of no more than 1+ε for any small ε>0 in the worst case. Dasgupta [36] showed that in general this approach works surprisingly well when trying to embed a data set while preserving inter-cluster distances. We also compared our neural network approach to PCA to demonstrate that the preservation of distances as explicitly optimized for in mMDS cannot be obtained as a by-product of a much simpler optimization model (here classical MDS). Finally, we also compared it to the projected metric MDS problem that we have defined above. We solved the projected metric MDS problem using a quasi-Newton method combined with a smoothing technique. Note that this approach also does not scale well to large data sets.
+
+We ran the experiments on a Ryzen 9 3900X CPU with 12 cores running at 3.8 GHz, 64 GB DDR4 RAM and a RTX 2080 graphics card using an Ubuntu 19.10. operating system. All implementations were done in Python 3.7. We used PyTorch 1.5.1 for the neural network approach. We used the implementation of the random projection, PCA, and SMACOF algorithm from scikit-learn 0.22.1.Fig. 2 The loss of the metric MDS problem for different values of the target dimension for train and test data sets. The loss function is displayed on a logarithmic scale. Due to its quadratic running time, SMACOF was run only on the smallest USPS data set
+
+Fig. 3 Comparison of the loss function of the metric MDS problem for random projections (RP), PCA, and our neural network (NN) approach
+
+Comparison of loss and running time of metric MDS
+
+Figure 2 shows the metric MDS loss achieved by the different methods on the USPS, MNIST, CIFAR10, and SVHN data sets for different embedding dimension k. For each data set, we computed the embedding on the train data set and then applied the mapping of the input space to the lower-dimensional output space provided by each method (except SMACOF) to new, unseen data points from the test data set. Since the SMACOF algorithm does not provide such a mapping we recomputed the embedding of combined train data and test data and reported the loss of SMACOF on the test data set in Fig. 2b. On the smallest USPS data set our neural network approach is typically at least as good as the SMACOF algorithm, which we could not run on other (larger) data sets due to its prohibitive running time. As expected, both methods yielded substantially smaller loss across data sets than the remaining methods that do not explicitly optimize the same objective. Note that the metric MDS loss function is plotted on a logarithmic scale.
+
+Figure 3 shows consistent results on three word embedding data sets that represent words as vectors that geometrically capture the semantics of the words. More precisely, the Glove data set consists of 2 data sets: glove.6B learned word vectors on Wikipedia 2014 dump (size 400 K), and glove.840B learned word vectors on Common Crawl corpus (size 2.2.M). The FastText data set wiki-news-300d-1 M holds 1 M word vectors trained on Wikipedia 2017 dump, UMBC webbase corpus and statml.org news dataset. We had to exclude SMACOF from this comparison due to its quadratic running time.
+
+We also report the running time of our approach in Table 1 and compare it to the running time of the SMACOF algorithm when embedding the different data sets into dimension k=12. We observed that neither the running time of SMACOF nor of our approach depends on the dimension k. Since the SMACOF algorithm can handle only small data sets we subsampled the MNIST data set. We always ran our approach for 1000 epochs on all data sets. Table 1 shows that the running time of the SMACOF algorithm grows quadratically in the number of data points. In contrast, our approach shows an approximately linear dependence, which allows it to be applied to large data sets where it is orders of magnitude faster than the current state-of-the-art approach.Table 1 Running times of SMACOF and our neural network based approach on data sets of different size
+
+Dataset	Size	n	SMACOF	NN	
+USPS	7291	256	0:11:28	0:05:14	
+MNIST_5	5000	784	0:21:41	0:03:43	
+MNIST_10	10000	784	1:22:12	0:04:09	
+MNIST_15	15000	784	3:05:47	0:05:47	
+MNIST_20	20000	784	5:38:38	0:07:11	
+MNIST_25	25000	784	8:47:28	0:08:53	
+MNIST_30	30000	784	12:40:55	0:10:20	
+MNIST	60000	784	–	0:21:21	
+CIFAR10	50000	3072	–	0:27:45	
+SVHN	73257	3072	–	0:50:56	
+FastText	999994	300	–	2:52:18	
+Glove.6B	400000	100	–	1:02:32	
+Glove.840B	2196016	300	–	6:07:24	
+The dimension of the output space k was fixed to 12 in this experiment. Times are presented in format hh:mm:ss. Missing values indicate that the solver did not finish within 24 h
+
+Metric MDS based clustering of scRNA-seq data
+
+A comprehensive comparison of method for clustering single-cell RNA sequencing (scRNA-seq) data based on generic as well as scRNA-seq specific dimensionality reduction methods, including classical MDS, has been performed in Sun et al. [1]. Here, we demonstrate the utility of metric MDS for the clustering of scRNA-seq data. The unsupervised clustering of scRNA-seq data allows to identify known as well as novel cell types based on the cell’s transcriptomes. Seurat [37] is the most widely used computational method for clustering of scRNA-seq. It is based on the Louvain clustering algorithm and relies on a prior preprocessing of the data that includes, among others, a dimensionality reduction step using principle component analysis (PCA). A major advantage of metric MDS over PCA is its flexibility with respect to the distance metric that is used in the underlying optimization problem. We therefore compared the standard Seurat clustering pipeline to a pipeline in which we replaced the PCA step by our metric MDS approach but kept all other computational steps identical. In metric MDS we experimented with 3 different distance metrics, the Euclidean, cosine, and correlation based distance.
+
+We compared the PCA and metric MDS based clustering approaches on all but one real data sets that were used in Duò et al. [38] to benchmark clustering methods using cell phenotypes defined independently of scRNA-seq. Following [38], we labeled cell types based on FACS sorting in the Koh data set, and grouped cells according to genetic perturbation and growth medium in the Kumar data set. In data set Zhengmix4eq (Zhengmix4uneq), the authors in Duò et al. [38] randomly mixed equal (unequal) proportions of presorted B cells, naive cytotoxic T cells, CD14 monocytes, and regulatory T cells. Data set Zhengmix8eq additionally included equal proportions of CD56 NK cells, naive T cells, memory T cells, and CD4 T helper cells. We excluded a single data set in which ground truth labels correspond to collection time points that all methods in Duò et al. [38] failed to reconstruct. In agreement with recent clustering benchmarks [38, 39] we used the Adjusted Rand Index (ARI) [40] and Normalized Mutual Information (NMI) [41] to quantify the similarity of inferred to ground truth clusterings.Table 2 Average scores of ARI and NMI metrics across 5 real data sets
+
+Metrics	Correlation	Cosine	Euclidean	Seurat (PCA)	
+ARI	0.9177	0.9179	0.8681	0.8180	
+NMI	0.9325	0.9302	0.8880	0.8757	
+Clusterings are obtained from embeddings computed by mMDS using correlation, cosine and euclidean distance
+
+Fig. 4 Comparison of metric MDS and PCA
+
+On average, metric MDS yielded more accurate clusterings than when applying PCA, independent of the specific distance metric used (Table 2). Clusterings obtained from embeddings computed by metric MDS using correlation or cosine based distances were most accurate, and achieved a substantial improvement compared to PCA on the three most difficult (with respect to PCA performance) data sets (Fig. 4a). Performance metric NMI provided a consistent picture of method performance. A visualization of the two embeddings highlights the better separation of cell types by metric MDS compared to PCA on data set Zhengmix4eq (Fig. 4b), especially between naive cytotoxic and regulatory T cells. Note that this is consistent with findings in Sun et al. [1] where MDS performed well in clustering visualization compared to, e.g., PCA and t-SNE.
+
+mMDS can improve spatial domain detection
+
+In addition to measuring gene expression in single cells, spatially resolved transcriptomics (SRT) provides information about the relative location of cells in a tissue section [42]. Compared to clustering (non-spatial) scRNA-seq data, spatial clustering can reveal higher-order tissue structures, i.e. spatial domains, which inform many downstream tasks such as marker gene detection and the comparison of health and disease states [43]. Many existing computational approaches to identify spatial domains rely on PCA to pre-process SRT data. Here, we used 12 tissue sections from the human dorsolateral prefrontal cortex assayed with the 10x Visium platform [44] to illustrate the utility of mMDS compared to commonly used PCA in pre-processing SRT data. We compared the spatial domains inferred by methods CCST [45] and SpaGCN [46] to the six cortical layers and white matter that were manually annotated in the original publication. Both methods rely on PCA for initial dimensionality reduction, which we have replaced in a separate run by mMDS using identical target dimensions (200 for CCST, 50 for SpaGCN). Figure 5 quantifies the similarity of inferred and true clusterings using the Adjusted Rand Index. Both methods detect cortical layers more accurately when using our mMDS approach in place of PCA.Fig. 5 Accuracy of spatial domain detection by methods CCST and SpaGCN when pre-processing 10x Visium data either using metric MDS or PCA
+
+Conclusion
+
+We presented a two-layer neural network approach for solving the metric multidimensional scaling problem. Our approach provides two advantages over previous state-of-the-art approaches; it is orders of magnitude faster and scales to much larger data sets with up to a few million data points and may thus represent a viable alternative to the widely used PCA in single-cell analysis. At the same time it provides a mapping of the input space to the output space. This allows to apply the same embedding to new, unseen data, which prevents inducing a shift in the data distribution for test data.
+
+On datasets used in a previous benchmark study, we demonstrated the utility and flexibility of metric MDS in the analysis of scRNA-seq data. Our algorithm allows for the first time to apply metric MDS to large scRNA-seq data sets produced by the highest-throughput sequencing technologies. It thus provides a powerful alternative to methods routinely used to represent noisy gene expression measurements in a low-dimensional subspace useful for the exploration and analysis of scRNA-seq data.
+
+Acknowledgements
+
+V. H. D. thanks the Vietnam Institute for Advanced Study in Mathematics (VIASM) for the financial support.
+
+Author contributions
+
+All authors conceived the algorithm, contributed to the interpretation of results and the writing of the manuscript. All authors read and approved the final manuscript.
+
+Funding
+
+Open Access funding enabled and organized by Projekt DEAL. This work was supported by the Deutsche Forschungsgemeinschaft SFB-TRR 338/1 2021-452881907 (to S.C.).
+
+Data availability
+
+All datasets used in this manuscript are publicly available and have been cited appropriately.
+
+Code availability
+
+The source code is publicly available at https://github.com/dmatijev/nnMDS.
+
+Declarations
+
+Competing interests
+
+The authors declare that they have no competing interests.
+
+1 The source code is publicly available via https://github.com/dmatijev/nnMDS.git.
+
+Publisher's Note
+
+Springer Nature remains neutral with regard to jurisdictional claims in published maps and institutional affiliations.
+==== Refs
+References
+
+1. Sun S Zhu J Ma Y Zhou X Accuracy, robustness and scalability of dimensionality reduction methods for single-cell RNA-seq analysis Genome Biol 2019 20 1 269 10.1186/s13059-019-1898-6 31823809
+2. Baglama J Reichel L Augmented implicitly restarted Lanczos bidiagonalization methods SIAM J Sci Comput 2005 27 1 19 42 10.1137/04060593X
+3. Butler A Hoffman P Smibert P Papalexi E Satija R Integrating single-cell transcriptomic data across different conditions, technologies, and species Nat Biotechnol 2018 36 5 411 20 10.1038/nbt.4096 29608179
+4. Kiselev VY Kirschner K Schaub MT Andrews T Yiu A Chandra T SC3: consensus clustering of single-cell RNA-seq data Nat Methods 2017 14 483 10.1038/nmeth.4236 28346451
+5. Lin P Troup M Ho JWK CIDR: ultrafast and accurate clustering through imputation for single-cell RNA-seq data Genome Biol 2017 18 1 59 10.1186/s13059-017-1188-0 28351406
+6. Ji Z Ji H TSCAN: pseudo-time reconstruction and evaluation in single-cell RNA-seq analysis Nucleic Acids Res 2016 44 13 e117 7 10.1093/nar/gkw430 27179027
+7. Shin J Berg DA Zhu Y Shin JY Song J Bonaguidi MA Single-cell RNA-seq with waterfall reveals molecular cascades underlying adult neurogenesis Cell Stem Cell 2015 17 3 360 72 10.1016/j.stem.2015.07.013 26299571
+8. Deng Y Bao F Dai Q Wu LF Altschuler SJ Scalable analysis of cell-type composition from single-cell transcriptomics using deep recurrent learning Nat Methods 2019 16 4 311 4 10.1038/s41592-019-0353-7 30886411
+9. Eraslan G Simon LM Mircea M Mueller NS Single-cell Theis FJ RNA-seq denoising using a deep count autoencoder Nat Commun 2019 10 1 390 10.1038/s41467-018-07931-2 30674886
+10. Cao J Spielmann M Qiu X Huang X Ibrahim DM Hill AJ The single-cell transcriptional landscape of mammalian organogenesis Nature 2019 566 7745 496 502 10.1038/s41586-019-0969-x 30787437
+11. Moon KR van Dijk D Wang Z Gigante S Burkhardt DB Chen WS Visualizing structure and transitions in high-dimensional biological data Nat Biotechnol 2019 37 12 1482 92 10.1038/s41587-019-0336-3 31796933
+12. Pliner V Metric unidimensional scaling and global optimization J Classif 1996 13 1 3 18 10.1007/BF01202579
+13. de Leeuw J Barra JR Applications of convex analysis to multidimensional scaling Recent developments in statistics 1977 Amsterdam North Holland Publishing Company 133 46
+14. Groenen PJ Borg I Blasius J Greenacre M Past, present, and future of multidimensional scaling Visualization and verbalization of data 2014 Boca Raton CRC Press 95 117
+15. Torgerson WS Theory and methods of scaling 1958 New York Wiley
+16. Gower JC Some distance properties of latent root and vector methods used in multivariate analysis Biometrika 1966 53 3–4 325 38 10.1093/biomet/53.3-4.325
+17. Kruskal JB Multidimensional scaling by optimizing goodness of fit to a nonmetric hypothesis Psychometrika 1964 29 1 1 27 10.1007/BF02289565
+18. Guttman L A general nonmetric technique for finding the smallest coordinate space for a configuration of points Psychometrika 1968 33 4 469 506 10.1007/BF02290164
+19. Cox T Cox M Multidimensional scaling 2001 2 Boca Raton Chapman Hall
+20. Borg I Groenen PJ Modern multidimensional scaling: theory and applications 2005 Berlin Springer Science & Business Media
+21. Burges CJ Dimension reduction: a guided tour 2010 Hanover Now Publishers Inc
+22. Qu TG Cai ZX A divide-and-conquer based multidimensional scaling algorithm Pattern Recognit Artif Intell 2014 27 961 9
+23. Yang T, Liu J, Mcmillan L, Wang W. A fast approximation to multidimensional scaling. In: Proceedings of the IEEE Workshop on Computation Intensive Methods for Computer Vision. 2006.
+24. de Silva V Tenenbaum JB Sparse multidimensional scaling using landmark points 2004 Stanford Stanford University
+25. Tenenbaum JB De Silva V Langford JC A global geometric framework for nonlinear dimensionality reduction Science 2000 290 5500 2319 23 10.1126/science.290.5500.2319 11125149
+26. Williams CK. On a connection between kernel PCA and metric multidimensional scaling. In: Advances in Neural Information Processing Systems (NIPS); 2001. p. 675–81.
+27. Sammon JW A nonlinear mapping for data structure analysis IEEE Trans Comput 1969 100 5 401 9 10.1109/T-C.1969.222678
+28. Mao J Jain AK Artificial neural networks for feature extraction and multivariate data projection IEEE Trans Neural Netw 1995 6 2 296 317 10.1109/72.363467 18263314
+29. Ridder DD Duin RP Sammon’s mapping using neural networks: a comparison Pattern Recognit Lett 1997 18 1307 16 10.1016/S0167-8655(97)00093-7
+30. Hinton GE Salakhutdinov RR Reducing the dimensionality of data with neural networks Science 2006 313 5786 504 7 10.1126/science.1127647 16873662
+31. Wezel M, Kok J, Kosters W. Two Neural Network Methods for Multidimensional Scaling. In: European Symposium on Artificial Neural Networks (ESANN); 1997.
+32. Wezel M Kosters W Nonmetric multidimensional scaling: neural networks versus traditional techniques Intell Data Anal 2004 8 601 13 10.3233/IDA-2004-8606
+33. Cybenko G Approximation by superpositions of a sigmoidal function Math Control Signal Syst 1989 2 4 303 14 10.1007/BF02551274
+34. Chopra S, Hadsell R, LeCun Y. Learning a similarity metric discriminatively, with application to face verification. In: Conference on Computer Vision and Pattern Recognition (CVPR’05); 2005. p. 539–46.
+35. Johnson WB Lindenstrauss J Extensions of Lipschitz maps into a Hilbert space Contemp Math 1984 26 189 206 10.1090/conm/026/737400
+36. Dasgupta S. Experiments with random projection. In: Conference on Uncertainty in Artificial Intelligence (UAI); 2000. p. 143–51.
+37. Satija R Farrell JA Gennert D Schier AF Regev A Spatial reconstruction of single-cell gene expression data Nat Biotechnol 2015 33 5 495 502 10.1038/nbt.3192 25867923
+38. Duò A Robinson MD Soneson C A systematic performance evaluation of clustering methods for single-cell RNA-seq data F1000Research 2018 7 1141 10.12688/f1000research.15666.2 30271584
+39. Freytag S Tian L Lönnstedt I Ng M Bahlo M Comparison of clustering tools in R for medium-sized 10x Genomics single-cell RNA-sequencing data F1000Research 2018 7 1297 10.12688/f1000research.15809.1 30228881
+40. Hubert L Arabie P Comparing partitions J Classif 1985 2 1 193 218 10.1007/BF01908075
+41. Studholme C Hill DLG Hawkes DJ An overlap invariant entropy measure of 3D medical image alignment Pattern Recognit 1999 32 1 71 86 10.1016/S0031-3203(98)00091-0
+42. Moffitt JR Lundberg E Heyn H The emerging landscape of spatial profiling technologies Nat Rev Genet 2022 23 12 741 59 10.1038/s41576-022-00515-3 35859028
+43. Yuan Z Zhao F Lin S Zhao Y Yao J Cui Y Benchmarking spatial clustering methods with spatially resolved transcriptomics data Nat Methods 2024 21 4 712 22 10.1038/s41592-024-02215-8 38491270
+44. Maynard KR Collado-Torres L Weber LM Uytingco C Barry BK Williams SR Transcriptome-scale spatial gene expression in the human dorsolateral prefrontal cortex Nat Neurosci 2021 24 3 425 36 10.1038/s41593-020-00787-0 33558695
+45. Li J Chen S Pan X Yuan Y Shen HB Cell clustering for spatial transcriptomics data with graph neural networks Nat Comput Sci 2022 2 6 399 408 10.1038/s43588-022-00266-5 38177586
+46. Hu J Li X Coleman K Schroeder A Ma N Irwin DJ SpaGCN: integrating gene expression, spatial location and histology to identify spatial domains and spatially variable genes by graph convolutional network Nat Methods 2021 18 11 1342 51 10.1038/s41592-021-01255-8 34711970

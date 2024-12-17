@@ -1,0 +1,486 @@
+
+==== Front
+Sensors (Basel)
+Sensors (Basel)
+sensors
+Sensors (Basel, Switzerland)
+1424-8220
+MDPI
+
+10.3390/s24113266
+sensors-24-03266
+Article
+LJCD-Net: Cross-Domain Jamming Generalization Diagnostic Network Based on Deep Adversarial Transfer
+https://orcid.org/0009-0001-4231-7271
+Zhang Zhichao Conceptualization Methodology Software Investigation Writing – original draft Visualization *
+Deng Zhongliang Conceptualization Methodology Writing – review & editing Visualization Project administration
+https://orcid.org/0000-0002-5597-5150
+Liu Jingrong Software Validation Data curation Supervision
+Ding Zhenke Conceptualization Validation Investigation Writing – review & editing
+Liu Bingxun Methodology Formal analysis Resources Project administration
+Nurmi Jari Academic Editor
+School of Electronic Engineering, Beijing University of Posts and Telecommunications, Beijing 100876, China; dengzhl@bupt.edu.cn (Z.D.); dingzk@bupt.edu.cn (Z.D.);
+* Correspondence: kxdzc@bupt.edu.cn; Tel.: +86-156-5305-0820
+21 5 2024
+6 2024
+24 11 326609 4 2024
+08 5 2024
+14 5 2024
+© 2024 by the authors.
+2024
+https://creativecommons.org/licenses/by/4.0/ Licensee MDPI, Basel, Switzerland. This article is an open access article distributed under the terms and conditions of the Creative Commons Attribution (CC BY) license (https://creativecommons.org/licenses/by/4.0/).
+Global Navigation Satellite Systems (GNSS) offer comprehensive position, navigation, and timing (PNT) estimates worldwide. Given the growing demand for reliable location awareness in both indoor and outdoor contexts, the advent of fifth-generation mobile communication technology (5G) has enabled expansive coverage and precise positioning services. However, the power received by the signal of interest (SOI) at terminals is notably low. This can lead to significant jamming, whether intentional or unintentional, which can adversely affect positioning receivers. The diagnosis of jamming types, such as classification, assists receivers in spectrum sensing and choosing effective mitigation strategies. Traditional jamming diagnosis methodologies predominantly depend on the expertise of classification experts, often demonstrating a lack of adaptability for diverse tasks. Recently, researchers have begun utilizing convolutional neural networks to re-conceptualize a jamming diagnosis as an image classification issue, thereby augmenting recognition performance. However, in real-world scenarios, the assumptions of independent and homogeneous distributions are frequently violated. This discrepancy between the source and target distributions frequently leads to subpar model performance on the test set or an inability to procure usable evaluation samples during training. In this paper, we introduce LJCD-Net, a deep adversarial migration-based cross-domain jamming generalization diagnostic network. LJCD-Net capitalizes on a fully labeled source domain and multiple unlabeled auxiliary domains to generate shared feature representations with generalization capabilities. Initially, our paper proposes an uncertainty-guided auxiliary domain labeling weighting strategy, which estimates the multi-domain sample uncertainty to re-weight the classification loss and specify the gradient optimization direction. Subsequently, from a probabilistic distribution standpoint, the spatial constraint imposed on the cross-domain global jamming time-frequency feature distribution facilitates the optimization of collaborative objectives. These objectives include minimizing both the source domain classification loss and auxiliary domain classification loss, as well as optimizing the inter-domain marginal probability and conditional probability distribution. Experimental results demonstrate that LJCD-Net enhances the recognition accuracy and confidence compared to five other diagnostic methods.
+
+jamming diagnosis
+GNSS
+5G networks
+deep domain generalization
+pseudo-labeling
+adversarial training
+National Key Research and Development Program of China2022YFB3904702 This research was funded by the National Key Research and Development Program of China (grant number: 2022YFB3904702).
+==== Body
+pmc1. Introduction
+
+The Global Navigation Satellite System (GNSS) provides a wide-area, all-weather, real-time positioning and timing (PNT) service that estimates the position, navigation, and timing worldwide [1]. Currently, with the ongoing development of implicit application requirements, particularly for intelligent spatiotemporal networks, petrochemicals, and other multi-category application scenarios and service objects, there is an urgent need to establish a unified precise positioning and timing service system for the precise navigation and control of various types of less-manned and unmanned equipment. The demand for positioning continues to deepen from regional high precision to wide area high precision and high credibility [2].
+
+Regardless of whether positioning is conducted via GNSS or a 5G communication navigation fusion signal [3], the terminal-side signal of interest (SOI) receives extremely low power, and intentional and unintentional jamming where the frequency bandwidth overlaps or is in close proximity to the SOI bandwidth and can have a destructive impact on the acquisition, tracking, and localization phases of the positioning receiver [4]. As illustrated in Figure 1, the two primary types of human-induced jamming are suppressive and deceptive. The former type possesses high power, preventing the receiver from locating by obstructing its ability to lock onto the SOI. The latter, by transmitting SOI in a specified format and amplifying the signal to an optimal power level, manipulates the receiver to lock on to the wrong signal, generating a false position solution. Typically, the spoofers are located in the vicinity of the localization receiver [5].
+
+The objective of jamming detection and identification is to provide alerts and identify the type of jamming when a positioning receiver encounters disruptions. This process holds significant importance for enhancing the precision and dependability of a SOI in intricate positioning scenarios. However, the conventional methods of jamming recognition are constrained by empirical feature-based classification techniques that exhibit sensitivity to feature selection. Furthermore, these methods often lack adaptability across diverse tasks. Given that the core parameters of various jamming types vary, and their impacts on the signal’s time-frequency spectrum, power spectrum, or correlation peak diagram post-capture differ [6], it becomes imperative to develop specific parameter estimation and identification algorithms tailored for each type of jamming. Adaptive frequency-domain or time-domain filtering methods are commonly used for continuous wave (CW) jamming mitigation. Both frequency domain finite impulse response (FIR) and infinite impulse response (IIR) filtering techniques can effectively reduce jamming at specific frequencies. However, these methods necessitate prior knowledge of the jamming signal’s structure [6,7]. Ref. [8] examines the model of an array antenna’s reception signal, utilizing the correlation of the steering vector to identify and mitigate various forms of spoofing jamming. Most existing jamming diagnosis methods rely on manually selected feature parameters based on the distribution law of specific type jamming signals. Consequently, these algorithm models are limited to a single applicable scenario, leading to a substantial design workload and a lack of universality.
+
+In recent years, the deepening of machine learning theory research has led to a surge in interest in deep learning, a method renowned for its robust information representation capabilities [9]. This approach has been successfully employed in various fields such as anomaly detection, image classification, and semantic segmentation. Ref. [10] proposed a new method for jamming identification using a residual network constructed in the time domain. The method converts the time domain signals into one-dimensional data as inputs to the network, but the amount of data is small and the network generalization ability is poor. However, the assumption of independent and identically distributed signals may frequently be violated in industrial application scenarios [11,12]. This is exemplified by the irregular relative motion between the interfering source and the localization receiver, which alters both the frequency and magnitude of jamming features. Furthermore, the integration of multipath factors [13] results in a shift in the relative positions of sample features on the spectrogram as the number of reflections within the same time frame increases. This leads to a decrease or even failure in the diagnostic performance of the original trained model when dealing with jamming samples exhibiting unknown distribution changes. In essence, training data with fully labeled source domain and unlabeled test data from the target domain share similar but distinct distributions. The inherent differences between the source and target domains can induce domain drift under varying working conditions, resulting in a reduction in model performance when applied for inference in the target domain after training in the source domain [14,15,16].
+
+Domain adaptation (DA) seeks to address the issue of disparate source and target distributions [17]. DA assumes that the target data are available during the training process. However, in practical scenarios, it may be challenging to secure evaluation samples during this phase. Furthermore, in large-scale cross-modal and variable power jamming contexts, a single source domain transfer learning model tends to garner limited information. This leads to a marked deficiency in diagnostic accuracy. Merging cross-source domain data indiscriminately can disrupt the source distribution. Weakening the model’s ability to acquire precise knowledge, this compromises both the diagnostic efficacy of the model and its overall stability.
+
+Domain generalization (DG) has garnered increased attention as a means to mitigate reliance on target domain data, offering the potential to extend trained models across multiple sources to unseen targets [18]. Using local Fisher discriminant analysis, multiple source domains are represented as points on the Grassmann manifold, and their average subspace is built to uncover generic diagnostic knowledge [19]. Current research in multisource domain generalization predominantly spans mechanical, medical, remote sensing, and other fields. To our understanding, this represents the inaugural work on deep adversarial domain generalization within the realm of jamming diagnosis.
+
+We attempted to collect enough jamming information data in the laboratory for jamming diagnosis in real localization scenarios. Although DG methods show great potential for jamming diagnosis in unknown scenarios, existing methods focus on learning a large amount of shared knowledge with fully labeled source domain data during the training phase [20]. In practice, the number of unlabeled samples is much larger than labeled samples. Existing studies [21,22,23] have shown that the diagnostic performance of DG slips when the number of complete labeled sources used for training is limited.
+
+To address the above challenges, in this paper, we design a deep adversarial migration-based cross-domain jamming generalization diagnostic network (LJCD-Net), which aims to diagnose the target jamming using the generalized knowledge learned from a fully labeled source domain and multiple unlabeled domains (auxiliary domains). Figure 2 provides a comparative analysis of the prevalent transfer learning methods in current image processing fields, juxtaposing them with the approach proposed in this study. In contrast to conventional DA and DG methodologies, this study introduces a novel pseudo-label weighting strategy. This approach offers significant labeling guidance for unsupervised auxiliary samples without necessitating target labeling data. By optimizing the implicitly distributed adversarial learning model, the dual classifier is compelled to produce more accurate predictions. Consequently, this reduces the prevalence of fuzzy samples and propels features away from classification boundaries, thereby achieving highly discriminative and dependable jamming diagnosis.
+
+LJCD-Net is executed in two distinct phases: auxiliary domain labeling design based on uncertainty bootstrapping and dual classifier adversarial learning based on implicit distribution alignment. In the initial stage, the short-time Fourier transform (STFT) is used to obtain the time-frequency local distribution of the jamming signal. The global attention mechanism residual module is introduced to amplify the global interaction representation, which reduces network degradation while focusing model training on the global spatial features and high-response channels of the time-frequency map. By estimating the uncertainty-weighted classification loss of pseudo-labels after knowledge aggregation, the classification loss of source domain samples is optimized while giving high-reliability labels to auxiliary domain samples. The second stage consists of two modules, domain alignment and category alignment. The domain discriminator distinguishes whether the samples belong to the auxiliary domain or the source domain, in order to maximize the confusion of different domain edge distributions to complete the domain alignment. The two interfering classifiers in the category alignment module design opposite loss gradient directions in their respective sample sets based on the quality of the decisions made in different samples, and the feature generator tries to reconcile the contradiction between the two interfering classifiers, and extracts shared domain-invariant features through the anti-training losses in the classifier stopping update phase. Meanwhile, the category adversarial metrics factor is designed based on the prediction results to improve the confidence of the classification discriminative ability, with the goal of obtaining the desired classification boundaries in the testing phase. Specifically, the contributions generated by this paper are summarized below. In order to solve the problem of data distribution gap in cross-domain jamming sensing scenarios of the model, a cross-domain jamming generalization diagnosis method based on deep adversarial transfer is proposed. It utilizes a fully labeled source domain and multiple unlabeled auxiliary domains to generate shared feature representations with generalization capabilities that do not rely on interfering samples on the target domain;
+
+Aiming at the problem of a lack of supervision of auxiliary domain samples and unreliable pseudo-label labeling methods in the generalization model, an auxiliary domain label weighting strategy based on uncertainty guidance is proposed. The estimation of the uncertainty of unsupervised samples is used to quantify their reliability weight to alleviate the negative impact caused by low-confidence pseudo-labels;
+
+A dual-classifier adversarial learning method based on implicit distribution alignment is proposed to solve the problems of poor discriminability and low confidence in model classification. This method spatially constrains the time-frequency feature distribution of cross-domain global jamming from a probability distribution perspective. The construction of a domain-level discriminative and class-confrontational implicit alignment module minimizes source domain classification loss, auxiliary domain classification loss, inter-domain edge probability, and conditional probability distribution, effectively reducing domain disagreements between different jamming modes.
+
+The rest of the paper is organized as follows: Section 2 introduces a typical jamming signal model. Section 3 describes the proposed cross-domain jamming generalized diagnostic model in detail, including the generation of jamming time-frequency images, the design of pseudo-label weighting of samples in the auxiliary domain, and the implementation of implicit adversarial learning for dual classifiers. Section 4 describes in detail the dataset setup method. Section 5 evaluates the diagnostic performance of LJCD-Net in AM, FM, chirp, pulse, narrowband, and spoofing jamming under different conditions and experimentally analyzes the proposed method. Finally, the paper is summarized in Section 6.
+
+2. Signal Models
+
+After passing through the antenna, the SOI is converted down to the intermediate frequency at the radio frequency front end (RF). The instantaneous noise-free sampling signal at the nth moment is modeled as: (1) SI[n]=∑k=1KAkdknT−τkcknT−τk×cos2πfI+fdknT+ϕk
+
+In the formula, T=1/fs is the sampling period, fS is the sampling frequency, fI represents the intermediate frequency, k represents the number of satellites received, Ak and τk represent the amplitude and delay of the kth SOI, respectively, ck(·) and dk(·) represents the pseudo-random spreading code and the navigation message bit stream, respectively, and fdk and ϕk represent the Doppler frequency shift and phase deviation of the kth signal, respectively.
+
+After RF, we consider the baseband signal, i.e., fI=0. The instantaneous noise-free sampled signal at the nth moment is modeled as: (2) y[n]=∑k=1KAkhk[n]dknT−τkcknT−τk×cos2πfdknT+ϕk+z[n]+v[n]
+
+where hk[n] is the channel parameter of the kth link, z[n] is the suppressed or spoofed jamming component, v[n] is an independent identically distributed Gaussian noise obeying a mean of 0 and a variance of σ2=N0fs/2, and N0 is the one-sided power spectral density of the noise. Furthermore, let p[n] and q[n] denote the channel coefficient vectors for suppressed and spoofed links, respectively.
+
+This article explores research on five typical suppressive jammings. However, the influence of fading channels, Doppler frequency offset, and phase shift deviation on a SOI has been largely overlooked by scholars. Beyond a SOI, positioning receivers are also influenced by other environmental factors in the test environment, such as spoofing and obstruction from proximate fading environments like urban canyons and mountains. We have broadened the scope of jamming diagnosis to include not only typical suppressive jamming but also the quantity of spoofing and SOI. The latter serves as a measure of the complexity of the positioning environment; an increased number of obstacles results in fewer available signals. This paper proposes a more realistic signal model, incorporating Doppler, phase shift, and channel fading into the jamming diagnosis network. z[n] represents any of the following disturbances:(1) AM Jammer: continuous Wave (CW) jamming encompasses both mono and poly AM signals. This typically pertains to signals with a bandwidth of no more than 10 KHz, expressed as: (3) zam[n]=Pp[n]⊗∑k=1MaRpkexpj2πfpknT+θpk
+
+where Ma is the number of AM polytones, P is the jamming gain coefficient calculated from the jamming-to-SOI power ratio (JSR), ⊗ is the convolution operator due to multipath fading in the interfering link, and Rpk, fpk, and θpk denote the amplitude, frequency, and phase corresponding to the kth AM jamming component, respectively.
+
+(2) FM Jammer: The carrier frequency of the jamming is a time-dependent variable, denoted as: (4) zfm[n]=Pp[n]⊗∑k=1Mfa·expj2πfmknT+βksin2πfmknT
+
+Among them, Mf is the number of multi-tone carriers in FM jamming, fmk is the frequency of the kth jamming, and βk is the modulation index of the kth carrier.
+
+(3) Chirp Jammer: The instantaneous intermediate frequency oscillates across a frequency band in a brief period, subsequently initiating another cycle of change. Two prevalent forms of chirp jamming are identified: linear chirp and sine wave chirp. (5) zcp[n]=Pp[n]⊗expj2πfpnT+πafmax−fminTswpθc
+
+where fp is the initial sweep frequency, fmin and fmax are the minimum and maximum sweep frequency points, Tswp is the time taken from fmin to fmax, a is a random number with the value of 1 or −1 for determining the sweep direction, and θc is the initial phase of the chirp jamming.
+
+(4) Narrowband (NB) noise Jammer: The power in the in-band spectrum significantly surpasses that of the SOI. Generally, the jamming bandwidth tends to be less than the primary lobe bandwidth of the SOI. The spectrum is articulated as follows: (6) Ω(f)=μ,f−f0<B/20,otherwise
+
+where μ, f0, and B are the amplitude, center frequency, and bandwidth of NB jamming, respectively. Filter the stationary random process to obtain the time series representation of narrow-band jamming ω[n], with znb[n]=Pp[n]⊗ω[n].
+
+(5) Pulse Jammer: Multiple “duty cycles” are consistently transmitted within a repetitive temporal framework, characterized by their brief duration, expansive spectrum bandwidth, and potent burst power. This is represented as a sequence of Gaussian-shaped pulse pairs. (7) zpl[n]=Pp[n]⊗∑k=1MpαkunT−ηkexpj2πfknT−ηk
+
+where u(·) represents the pulse waveform, Mp represents the number of pulses in the duration time, and αk, fk, and ηk denote the amplitude, frequency, and time delay of the kth pulse, respectively.
+
+(6) Spoofing signals: A spectrum jamming that matches the real SOI, usually with the same PRN pseudocode sequence as the SOI, but with false navigation message bits stored. Due to spatial heterogeneity, spoofing jamming and SOI often experience different delays and Doppler frequency offsets. The expression is as follows: (8) zsp[n]=∑k=1KRkqk[n]⊗d^knT−δkcknT−δk×cos2πfkpnT+ψk
+
+where Rk is the gain factor determined by the spoofing-to-noise power ratio, qk[n] is the channel coefficient vector corresponding to the kth PRN code transmitted by the spoofing link, d^k denotes the false navigation message information sent, and δk, fkp, and ψk are the delay, Doppler shift, and phase deviation, respectively, for spoofing to interfere with the kth PRN code sequence.
+
+In the absence of jamming, the true signal received contains only the true SOI and white thermal noise. Since the SOI entering the antenna is much weaker than the thermal noise before the spreading correlation, the spectrum of the mixed signal is then determined by the thermal noise.
+
+3. Proposed Cross-Domain Jamming Generalization Diagnosis Network
+
+The ability of deep learning networks to cope with dynamic changes in the sample space and unknown scenarios becomes a key measure of the level of intelligent diagnosis. Scene heterogeneity causes domain divergence in cross-domain sample distribution, resulting in poor model generalization performance when labeled data are used for cross-domain jamming scene perception. To address this issue, this section mainly introduces the details of our proposed network model. The cross-domain jamming generalization diagnosis model based on deep adversarial migration is shown in Figure 3, and the model is divided into a time-frequency image generation unit, a feature extraction module, a pseudo-label generation module, and a dual classifier adversarial verdict module.
+
+In summary, we estimate the uncertainty weight of unlabeled samples based on the knowledge aggregation results of neighbour samples, reweight the classification loss and specify the direction of gradient optimization, giving high-quality pseudo-labeling to auxiliary domain jamming samples in heterogeneous scenarios. Upon comparing the classification outcomes, the focus of prediction attention is directed toward the classifier’s performance across various samples. The two classifiers execute gradient optimization in contrasting directions, contingent on their respective preferred classification clusters. Meanwhile, the adversarial metric factor is designed as the category difference measure to explicitly unify the two major tasks of improving diagnostic discriminate and reliability and to reduce the feature differences while ensuring that the content features are not contaminated. Meanwhile, the domain-level discriminate module implicitly pairs the edge probability distribution between its source domain and multiple auxiliary domains by designing the domain categorization loss and domain confusion loss.
+
+3.1. Problem Definition
+
+This paper proposes a transfer learning method for cross-domain jamming diagnosis, which can generalize the models trained on multiple source domains and auxiliary domains with different statistical characteristics to unknown scenarios. The research is based on the following assumptions. (1) The samples in the source domain are sufficient to establish a satisfactory diagnostic model. (2) The sample label set in the auxiliary domain and the target domain is a subset of all sample label sets in the source domain.
+
+In LJCD-Net, obtain a fully labeled source domain DLS=xLSj,yLSjj=1M(j=1,2,…,M) and N unlabeled auxiliary domains DUAnn=1N=xUAnjj=1Mn=1N(n=1,2,…,N), DUAn denotes the nth unlabeled auxiliary domain, xLSj and yLSj are the jth sample and label in the source domain, respectively, xUAnj denotes the jth sample in the auxiliary domain, and M is the number of samples contained in each domain. The auxiliary domain after pseudo-labeling is DPLAnn=1N=xPLAnj,yPLAnjj=1Mn=1N, and yPLAnj denotes the jth sample pseudo-label after weighting in the auxiliary domain. Furthermore, denote DT=xiT,yiTi=1NTi=1,2,…,NT as the target domain with NT samples, which is inaccessible during training. For illustration, the sample space and label space of the source and auxiliary domains are uniformly denoted xjSj=1N and YjSj=1N, and xT and yT denote the sample space and label space of the target domain, respectively. Due to the domain divergence, the data space is made to drift, i.e., xjS≠xT. The aim of this study is to learn a mapping relation with generalization ability using DLS and DUAnn=1N, which is capable of accomplishing the task of jamming diagnosis in unknown scenarios based on the existing data and labels.
+
+3.2. Time-Frequency Image Generator Unit
+
+The deep residual module, which incorporates convolutional layers, typically accepts a two-dimensional image as its input. Initially, we conducted a short-time Fourier transform (STFT) on the one-dimensional digital signals received at the receiver. This process converted these signals into a two-dimensional time-frequency spectral matrix, which was subsequently fed into the network for training and processing. The STFT splits the window of observed signals into small segments and assumes that the signals in each of the short segments are smooth.
+
+Time-domain features elucidate the intensity and phase of a signal over time, illustrating the distribution of signal energy along the temporal axis. Conversely, frequency-domain features illuminate the frequency components, relative amplitude, minimum frequency, maximum frequency, and signal bandwidth of the signal. STFT employs a window function to depict the local time-frequency characteristics of the signal. The size of this window dictates the scale of the local features that are captured.
+
+Taking any antenna branch signal y(n) as an example, the Hamming window [24] w(n) is chosen to segment the signal to obtain the signal yF(n) after the Fth added window: (9) yF(n)=y(Fδ+n)w(n)
+
+Among them, n=0,1,…,wS, wS is the length of the Hamming window, and δ is the separation distance. The form of w(n) is as follows: (10) w(n)=k−(1−k)cos2πnωs−1Rωw(n)
+
+where Rωw(n) is a rectangular window of width wS. Following the above steps, the signal overlap length ws−δ between neighbouring windows, and the number of windows NF=L−ωs+δδ. Thus, the original signal is segmented into ws−δ segmented signals yF(n) of length ws, F=1,…,NF. Perform Fourier transform on the segmented local signal to obtain the windowed signal power spectrum: (11) fF(k)=∑n=0ωS−1yF(n)e−j2πkn/N,k=1,…,N/2−1
+
+In the formula (N/2−1) is the number of points of Fourier transform. The longer the selected rectangular window, the higher the frequency resolution after transformation, but the lower the time resolution. The appropriate window length should be selected based on the time-frequency domain characteristics of the actual signal. Figure 4 shows the time-frequency spectrum of each type of interference.
+
+fF(k) takes absolute values to obtain the linear spectrum S(k,F), which is further normalized to obtain G(k,F): (12) G(k,F)=S(k,F)−min(S)max(S)−min(S)
+
+The normalized linear spectrum yields a grayscale time-frequency map, and the color mapping yields an RGB time-frequency image. The size can be dynamically adjusted according to the network structure requirements in Section 3.3.
+
+3.3. Feature Extraction Module
+
+The feature extraction module is responsible for mapping the data to the feature space, and the spectrum matrix is sent to the feature extraction module as an equivalent two-dimensional image. The conventional structure of the convolutional neural network (CNN) is overly simplistic, rendering it insufficient for extracting stable jamming modal features from complex time-frequency images, we have segmented the feature extraction module into three distinct components: a two-dimensional CNN, a global attention module (GAM) [15], and a residual network.
+
+Two-dimensional CNN is used to map low-dimensional jamming features in the time-frequency domain to high-dimensional space, and then the rectified linear unit (ReLU) nonlinear activation layer and downsampling pooling layer are introduced: (13) Htf=MaxPoolσΛ·Xtf+b
+
+where Htf denotes the corresponding jamming feature in the time-frequency domain after downsampling, Λ is the trade-off weight, b is the bias that measures the fitting ability of the network, σ(·) is the Sigmoid function, maxpool(·) is the max-pooling layer operation, and Xtf is the output of the time-frequency image generation module in Section 3.1.
+
+GAM is introduced to perceive jamming information, as shown in Figure 5. The goal is to design an interactive feature that reduces information loss and amplifies the global dimension. The attention process is described as: (14) Ftf=MsMcHtf⊗Htf⊗McHtf⊗Htf
+
+Ms and Mc represent the spatial attention mechanism unit and channel attention mechanism unit, ⊗ denotes the element-by-element multiplication. The feature matrix derived from the time-frequency image via the convolutional network encompasses channels of varying significance. Consequently, the optimization of these features is achieved through the adjustment of weights to filter the feature channels. (15) Mc(f)=σ(MLP(AvgPool(f))+MLP(MaxPool(f)))
+
+f denotes the input feature vector and AvgPool denotes the average pooling layer. The vectors that represent features are derived through both the average and global maximum pooling, the spatial interdependence of cross-dimensional channels is enhanced using a two-layer multilayer perceptron (MLP).
+
+Spatial attention is focused on identifying valuable image spaces, and we use two convolutional layers for spatial information fusion, each expressed as: (16) Ms′(f)=f7×7([AvgPool(f);MaxPool(f)])
+
+Ms′(f) is consistent with the spatial feature dimension, and the segmented feature vector F″ characterizes the importance of features in different regions of the image. The model training focuses on the global spatial features of the time-frequency map and the high-response channel by integrating the spatial channel attention mechanism. This effectively suppresses the occurrence of negative migration while ignoring the regions of the time-frequency map with lower mobility.
+
+Enhancing the depth of the network enhances its diagnostic performance. The residual structure is employed to counteract the gradient degradation that occurs during the training phase. Furthermore, the relationship between the input and output feature vectors is also considered: (17) Fr−tf=FFtf,Wi+Ftf
+
+where Fr−tf denotes the jamming features extracted from the residual structure. F·,Wi is the residual mapping to be learnt.
+
+3.4. Auxiliary Domain Label Weighting Module Based on Uncertainty Guidance
+
+Direct semi-supervised learning using hard pseudo-labels will lead to error propagation and convergence on the accuracy of the pseudo-labels. Figure 6 illustrates an uncertainty-guided high-quality pseudo-labeling weighting method (UGLW) for assisting domain samples in learning shared domain-invariant features in two steps.
+
+One of the optimization objectives of UGLW is to minimize the source domain data state prediction error, defined as the cross-loss entropy: (18) LACi=−1nl∑i=1nl∑j=1Klyi=jlogfxi∣θj
+
+where fxi∣θ is the probability distribution predicted by unlabeled samples, fxi∣θj is the jth element of the probability vector, θ denotes the parameter on which the classifier can be trained, nl is the number of labeled samples, and l{·} is the judgment function, which returns 1 if the condition is true and 0 otherwise.
+
+Pseudo-labeling is the process of assigning labels to unlabeled samples for further training. First use the source classification network to output a rough pseudo-label of the pseudo-labeled image sample: (19) pi=argmaxj∈Lfxi∣θj
+
+L is the number of categories, and the generated pseudo-labels are returned as labeled data to help model training. New markers are recomputed at the beginning of each epoch, and the loss function is defined as: (20) LAJP=−1nul∑i=nl+1nl+nul∑j=1Klpi=jlogfxi∣θj
+
+nul is the number of unlabeled samples.
+
+The characteristics of semantically similar images should be situated within the adjacent feature space. This requirement is fulfilled by extracting the comparison vectors of analogous features from comparable samples. The knowledge aggregation method, which utilizes a soft-voting mechanism, is illustrated in step 1 of Figure 6. Specifically, given an unlabeled image xa and a weakly enhanced image ttf randomly drawn from the distribution Ttf, the vector zn=fattfxa is obtained after feature extraction of the weakly enhanced image ttfxa. Library K contains a set of randomly selected feature and prediction vector pairs zi′,pi′i=1M. To maintain the stability of the feature information, the slowly transforming momentum model ga′(·)=ha′fa′(·) is used to update the storage in the library. The cosine distance between the features of xa and the features in the library Neighbour is then calculated to confirm the update. (21) Dcos=1−A·B∥A∥∥B∥=1−∑j=1nAj×Bj∑j=1nAj2×∑j=1nBj2
+
+In the comparison framework, A and B represent the two feature vectors. The M samples exhibiting the smallest distance are chosen as neighbours. The pseudo-labels of xa are then optimized by leveraging the knowledge derived from these neighbouring samples: (22) p^a(m)=1C∑i∈Jpi(m)
+
+J denotes the set of neighbours for the chosen augmented samples, while m signifies the averaging operation applied to each class. To enhance the quality of pseudo-tags, markers with the highest number of classes are identified yA=argmaxp^a(m).
+
+Given the fact that high-quality pseudo-labels are resistant to changes during training iterations, two classifiers, C1 and C2, are designed. These classifiers share the same structure but differ in their initial parameters. Both C1 and C2 are trained concurrently under identical conditions to yield two sets of predictions, denoted as p^ia1 and p^ia2. The consistency of pseudo-labels across the same sample is predominantly observed in both sets of collections. Samples exhibiting disparate pseudo-labels are deemed to have been erroneously predicted at least once and, consequently, they are excluded from this backpropagation process, denoted as: (23) Ii=1,ifp^ia1;θ1∩p^ia2;θ2≠⌀0,otherwise
+
+where θ1 and θ2 denote the parameters of C1 and C2, respectively, and θ1≠θ2. As shown in step 2 in Figure 6, the samples participate in the training only when ℶi=1.
+
+To further improve the predictive ability of the model, the reliability weights of the unsupervised samples are quantified by estimating their uncertainty, where high-confidence pseudo-labeled samples are assigned more trust as a direction of gradient optimization, defining the weights of each pseudo-labeled sample xa,yA as (24) ωi=1+Ly˜Ai−1L−11+(L−1)epochepochs
+
+where epoch is the current training round, and epochs are the pre-determined total rounds, which together form the scale factor (epoch/epochs) that adaptively adjusts the thresholds as the training progresses, accelerating the gradient optimization path toward high-quality labeling, and y˜Ai denotes the probability that the pseudo-labeled sample xa belongs to the target category: (25) y˜Ai=MaxC1,C2p^ia1∞,p^ia2∞
+
+The weights obtained are reassigned to the loss function, thereby modulating the influence of pseudo-labeled samples on the training content for each calendar element. This is probabilistically guided by the classification loss. (26) LAJP=−1nul∑i=nl+1nl+nulωi∑j=1Klpi=jlogfxi∣θj=−1nul∑i=nl+1nl+nulωi×∑j=1Klpi=jlogfxi∣θj
+
+As a result, low-quality labels receive low weights in backpropagation, and high-quality samples will be given larger weights.
+
+The model leverages high-quality pseudo-labels in a timely manner during the training phase. To circumvent the a posterior collapse problem, we follow the state-of-the-art strategy of optimizing the subsequent regular terms: (27) LAdiv=Exa∈Xa∑i=1nl+nulp˜qlogp˜q,p˜q=Exa∈Xaσfattfxa
+
+The overall loss function used for weighted training of LJCD-Net pseudo-labeled samples is. (28) LUGLW=LACi+αPLAJP+αdivLAdiv
+
+where αP and αdiv represent the trade-off parameters that can be further optimized. The pseudo-labels generated are utilized to facilitate the learning of inter-domain knowledge, taking into account the preferences of clusters as delineated in Section 3.5.
+
+In particular, in semi-supervised learning, the number of fully labeled samples is much less than the number of unlabeled samples, resulting in the unsupervised term dominating the loss function and the model paying more attention to samples with pseudo-labeling. In order to overcome this problem, in the same batch of training, the numbers of source domain and auxiliary domain samples are set to fixed numbers n1 and n2, respectively, and the model is updated through multiple iterations to meet the supervision term in the loss function, ensuring supervised learning robustness of the process.
+
+3.5. Adversarial Learning of Dual Classifiers Based on Implicit Distributional Alignment
+
+After obtaining high-quality pseudo-labels for the auxiliary domain samples, LJCD-Net designs a domain discriminator and category adversarial implicit alignment module, where the two adaptive units learn shared domain-invariant knowledge by aligning the joint distributions of features and categories across the domains, which consists of a feature generator G and a domain discriminator D with the same structure of the dual classifiers M1 and M2.
+
+The existing two-classifier adversarial learning paradigm first trains the feature extractor and two classifiers with the same structure using labeled samples, then fixes the feature extractor G, trains the two classifiers, and employs the L1 paradigm [25] to measure the divergence between the two domains to maximize the output gap between the target data on the classification predictions. Finally, the classifiers are fixed and the feature extractor parameters are optimized to minimize the output difference between the target data on the two classifiers.
+
+The above method is theoretically closer to the HΔH divergence, but since the two classifiers only consider the differences between the classifiers in the mini competition game, the similarity of the output does not guarantee the accuracy of the target sample, even if the difference between classifiers is small, and the target sample may be matched to the wrong category. Therefore, based on the pseudo-labels generated in Section 3.4, the prediction attention is shifted to the degree of excellence of the classifier on different samples. According to the optimal set of classification clusters, the two classifiers complete opposite optimizations in their respective fields.
+
+In each update, given a batch of auxiliary domain samples xiai=1Ca, the predicted labels obtained from the two classifiers are pi,1ai=1Ca and pi,2ai=1Ca, respectively. Due to the lack of real labeling information in the auxiliary domain, the current labeling information is approximated using high-quality pseudo-labels described in Section 3.4. Kullback–Leibler (KL) divergence [26] is used to measure the similarity between each sample prediction vector and the pseudo-label vector, KL(P∣Q)=∑pilogpi/qi. If the KL divergence is large, it means that the prediction result is far away from the pseudo-label. For a given sample, a smaller KL scatter indicates better play of the classifier. Therefore, the samples are preferred into two clusters based on the performance of the dual classifier: (29) C1a=xia∣KLy˜ia,pi,1a<KLy˜it,pi,2aC2a=xia∣KLy˜ia,pi,1a>KLy˜it,pi,2a
+
+C1a and C2a represent the set of samples with better classification performance on M1 and M2, respectively. We attempt to further reduce the fuzzy samples by maximizing the prediction difference within both clusters. Taking the update of classifier M1 as an example, it outperforms M2 on Cluster A and therefore further maximizes the prediction difference with M2, whereas M2 performs worse on Cluster A and needs to further reduce the prediction difference with M1. Classification loss of M1 (30) minM1Lcre−1Dt=−LdisC1a+LdisC2a
+
+−LdisC1a moves the prediction of M1 on Cluster A away from M2, while Ldis·C2a moves the prediction of M1 on Cluster B closer to M2, in addition: (31) Lcre(X)=Ex∈Xdiscp1,p2
+
+discp1,p2 is the difference in predictions of the bi-classifier, typically measured by the L1 paradigm or the sliding Wasserstein distance [27]. Similarly, the classification loss of M2 (32) minM2Lcre2Dt=LdisC1a−LdisC2a
+
+Parameter initialization consists of a fully connected layer activated by the ReLU function, and training is performed using the cross-entropy function of fully labeled data: (33) LTM=−1ns∑i=1nsyislogMkGxis
+
+In summary, the loss of our bi-classifier clustering adversarial strategy is: (34) minM1Exis∈DsLTMM1Gxis,yis+Lcre1DtminM2Exis∈DsLTMM2Gxis,yis+Lcre2Dt
+
+The above scheme achieve as reliable diagnostic accuracy, but the classifier’s prediction confidence for source domain samples is much higher than that for auxiliary domain samples. Taking the three-classification situation as an example, the prediction result of [0.85, 0.1, 0.05] is likely to occur in DLS, while the classification situation of [0.4, 0.3, 0.3] is more likely to occur in DUAn. To address this problem, we design an adversarial metric factor based on the classification prediction results: (35) LTAdv=EP1−P22Pk∞P1=Softmaxxia∼DUAnM1GxiaP2=Softmaxxia∼DUAnM2Gxia
+
+where Pk is the classification result on the better performing classifier for that sample, using the above calculation as a measure of inter-class difference. Specifically, the introduction of adversarial metric factors as category difference measures can clearly unify the two tasks of improving diagnostic discriminability and credibility, reducing category differences while ensuring that content features are not contaminated.
+
+The domain discrimination module implicitly aligns the edge probability distribution between the source and auxiliary domains by designing the domain classification loss and domain confusion loss. Classification loss of domain discriminator D: (36) Ldo=−1ns∑i=1nslog1−DGxis+1na∑j=1nalogDGxjA
+
+where ns is the number of source domain samples and na is the number of auxiliary domain samples. The domain confusion loss is formulated by calculating the cross-entropy between pseudo-labels and predicted distributions to maximize the confusion of the boundaries between different domains: (37) Cdo=λLdomain−1ns∑i=1nslogDGxis−1na∑j=1nalog1−DGxjA
+
+where λ is the metric parameter. By optimizing the respective loss functions of the domain discrimination and category adversarial implicit alignment modules, the joint alignment of conditional and marginal probability distributions is achieved: (38) minG,DLTD=minDLdo+minGCdo
+
+Prior studies [28] have demonstrated that feature vectors characterized by the highest singular values predominantly influence the transferability of feature representations. Conversely, those with lower singular values tend to be excessively penalized during adversarial training, resulting in a diminished level of distinguishability. The BSP scheme is employed to attenuate the feature vectors associated with the highest singular values, thereby facilitating a relative enhancement of the remaining vectors: (39) LTbsp=∑n=1N∑q=1Qσqn2
+
+where σqn denotes the qth largest singular value. The difference compared to the original intention of using BSP in [28] is that we apply it for the first time to domain generalization problems and exploit its potential in the jamming diagnosis.
+
+Taken together, the final optimization objective of this subsection is: (40) J=LT1cre−LT2cre+γLTAdv−λLTD+ξLTbsp
+
+where γ, λ and ξ are adjustable weights. Let θG, θM and θD be the parameters of the feature extractor, classifier, and domain discriminator, respectively, the network optimization problem is formulated as:(41) JθG′,θM′,θD′=minθG,θM,θDLTcreθG,θM+γLTAdvθG,θM−λLTDθG,θD+ξLTbspθG
+
+The gradient descent method is employed to update the model parameters in each batch. This approach facilitates the joint optimization of several losses, including the source-auxiliary domain classification loss, class adversarial loss, domain discrimination loss, and maximum singular value regularization loss.
+
+During the offline training phase, jamming signal data from various domains are converted into time-frequency 2D matrices. Subsequently, the training process is halted by iterating through the set of training parameters until the loss function J exhibits a variation of less than 0.1%. In the online classification phase, these time-frequency data are inputted into the trained LJCD-Net to predict the type of jamming.
+
+4. Generation of Training and Test Data
+
+In order to evaluate the performance of the algorithm in this article, a hardware test bench was used to generate training and testing datasets, as shown in Figure 7. An Agilent N5181A (Agilent Technologies, Santa Clara, CA, USA) signal generator was used to generate jamming, and a tunable attenuator was used to control the generated signal power. The receiving antenna collects the GNSS or 5G positioning signals generated by the satellite navigation simulator and feeds them to the RF signal collector USRP B210 (National Instruments, Austin, TX, USA) for processing. The software receiver is a device designed by the author’s research group for SOI research. The sampling frequency is no higher than 50 MHZ, the front-end bandwidth is between 10 and 20 MHz, the ADC resolution is 12 bits, and the data incoming from the USRP are recorded in real time.
+
+In a typical positioning receiver, four signals are typically required to complete the position solution. The number of signals available to the receiver at varying complexity levels is represented by from 1 to 4 hybrid SOIs. Pseudo-codes of the same PRN sequence are chosen to generate spoofed signals but with different time delays and Doppler.
+
+To facilitate the SNR calculation, all channel coefficients are normalized and generated by a land mobile channel object designed based on the ITU-R Recommended Format P.681-11 [29]. In the context of the relative movement between the source and receiver, a semi-Markov chain is employed, which allows for the generation of signals that alternate between high and low quality. High-quality signals have direct paths within line of sight, while low-quality signals are characterized by severe obstruction or complete non-line-of-sight. Taking BeiDou B1 as an example, the parameters of the generated signal are set as follows: the carrier frequency point is selected as 1575.42 MHz, and the channel sampling rate is 1.023 MHz. Multipath signals that add reflection and refraction have an impact on the received SOI. The channel fading does not obey the statistical characteristics, and the channel state undergoes unknown distortion. The multipath is assigned a random number, ranging from 1 to 5, the delays of adjacent paths are randomly distributed over a pseudocode length.
+
+The channel coefficients for both jamming and spoofing incorporate Rayleigh and Rician fading samples, which generate six distinct types of jamming: AM, FM, chirp, narrowband, pulse, and spoofing. These jammings are generated in a randomly distributed manner within a predefined parameter space. To simulate random delays in spoofed jamming navigation messages, positioning messages are generated with a duration of 1 bit and the first 1 ms of the signal is taken for training. The delay in the navigation message was determined by a stream of bits in integer multiples of the duration, with each bit multiplied by a random number of plus or minus 1. For each signal type, 8000 samples for the training set and 1000 samples for the test set are generated. Table 1 lists the parameter space definitions for each jamming, where U(a,b) denotes a uniform distribution within [a,b].
+
+5. Experimental Results and Analysis
+
+5.1. Lack of Available Source Domains
+
+To validate the generality of the model proposed in this paper, before investigating the diagnostic capability of the generalized model, we consider a special case where the training dataset contains only a fully labeled source domain and the test set samples are still unknown, where the sufficient prerequisites of domain generalization and domain adaptation for migration are not met. Accordingly, the training set samples cover five in-band squelch-type jammings, AM, FM, chirp, NB, and pulse, which are trained under the conditions of a signal-to-noise ratio (SNR) of 0 dB and a jamming-to-signal ratio (JSR) of 5 dB, and the test set samples obey the JSR∼U(−15,10)dB. In this study, we selected several jamming identification methods for comparative analysis to elucidate the diagnostic superiority of LJCD-Net in scenarios devoid of auxiliary domain samples. For the sake of impartiality and rationality, all network model-based methods employed identical parameter structures. The specific configurations of these comparison techniques are detailed below. M1: Joint fractional order Fourier transform and trap for jamming detection (FR-TRAP) scheme [6];
+
+M2: Classical decision tree (DT) scheme based on thresholding [30];
+
+M3: Time-domain constructed residual network suppression based jamming identification (TD-RNN) scheme [10];
+
+M4: Deep subdomain adaptive network (DSAN) [11];
+
+M5: DANN [31].
+
+The proposed method and the comparison method are implemented in the PyTorch framework. During the network training process, the Kaiming initializer is used to preset network parameters. The parameter update uses an SGD optimizer with a momentum of 0.9 and a weight decay of 5×10−4. The first-stage hyperparameters αP and αdiv are both empirically set to 1, and the hyperparameters γ, λ, and ξ are empirically set to 1, 0.1, and 1×10−5, respectively. The epoch and batch sizes of all methods were set to 100 and 64, respectively, with an initial learning rate of 1×10−3.
+
+The methodology proposed in this study necessitates the use of multiple classes of unlabeled auxiliary samples during the generalization phase to facilitate the acquisition of domain-invariant knowledge. In instances where only a single fully labeled domain is incorporated, the training process is confined solely to the source domain, and pseudo-label generation does not incorporate migration training. We conducted 1000 Monte Carlo simulations to assess the recognition performance of various algorithms under varying JNRs. The accuracy was determined as the average of the results from five classes of suppressed jamming diagnosis.
+
+The recognition accuracies of from M1 to M5 and the methods in this paper at different JSRs are shown in Figure 8a. It can be seen that M1 and M2, as representatives of the traditional jamming diagnosis methods, have different performances compared to M3, M4, and M5 in the face of the increase in JSR from 5 dB to 20 dB. Traditional jamming diagnosis methods are not influenced by the number of source domains or cross-domain tests. In contrast, FR-TRAP estimates the instantaneous frequency and recovers the phase information of jamming through time-frequency plane rotation. Meanwhile, DT classifies the jamming step by comparing characteristic parameters with a priori thresholds until each category set contains only one type of jamming. As JSR escalates, the time-frequency ridges of the jamming signal become progressively more pronounced and the number of eigenvalues expands. Consequently, the diagnostic performance of these aforementioned methods incrementally improves.
+
+TD-RNN is not affected by the number of source domains, but still because the training and testing scenarios do not comply with independent and identical distribution, the jamming diagnosis performance of JSR from 10 to 20 dB is about 7% lower than that of JSR at 5 dB. DSAN and DANN, as typical migration learning networks, outperform M1 to M4 in diagnostic performance at JSR = 5 dB, but reduce the recognition accuracy by more than 9% in other test scenarios due to the lack of the number of source domains and domain divergence between training and test scenarios, and do not improve with JSR. LJCD-Net is also limited by the number of source domains and test scenarios, but it adds a global attention mechanism residual module to extract more stable jamming modal features, and obtains a better diagnostic performance when JSR = 5 dB, in unknown scenarios The test is also inferior to traditional and transfer learning methods.
+
+Figure 8b demonstrates the recognition accuracy of the network model proposed in this paper under different JSR when dealing with various types of jamming. Since the model is only trained at JSR = 5 dB, the neural network does not perform well in the face of unfamiliar probability density distributions and the diagnostic performance decreases as the difference between the marginal probability and conditional probability distributions increases, despite the fact that the increase in jamming power leads to a more pronounced feature representation. In this particular scenario, the diagnostic performance of the conventional method when JSR reaches 20 dB is similar to that of our method.
+
+5.2. Sufficient Number of Available Source Domains
+
+With a sufficient number of available source domains, we only need one fully labeled source domain and multiple unlabeled auxiliary domains to complete the generalization. In order to more intuitively demonstrate the advantages of LJCD-Net in unknown environments, two sets of migration experiments are designed: migration between different spoofing jamming types and migration between different JSR datasets under the same jamming type. Different methods with similar network architecture and experimental settings to the proposed method were selected for comparison, and ablation experiments were conducted to verify the effectiveness of each module. All models use the same network architecture and hyperparameters as LJCD-Net, and the methods are shown in Table 2.
+
+In the first part, from N1 to N5 are designed as comparative experiments based on the existing domain adaptation or the domain generalization extension to demonstrate the effectiveness and superiority of LJCD-Net. It is worth mentioning that N1 will have different results depending on the selected source domain. Choose the best one among these results for comparison. N2 uses the same feature extraction and classification module as the scheme in this paper. N3, as an upgrade of DANN, constrains the inter-domain distribution distances in an adversarial manner. N4 extracts domain-invariant and discriminative features from multiple source domains with potential differences and shows great potential in jamming recognition. N5 adds an attention mechanism and a residual network to DANN, and it has been shown to have excellent performance in jamming recognition. In the second part, we conduct the ablation experiments from A1 to A4 to verify the necessity of the key strategies in LJCD-Net, keeping the parameter settings of the remaining modules.
+
+5.2.1. Migration Experiments between Different Spoofing Jamming Types
+
+Malicious spoofing scenarios are fully considered and spoofed signals are generated using the same PRNs with different time delays, Doppler frequencies, and multipaths. We set the six main jamming types of jamming-free single SOI (single SOI), jamming-free multiple SOI, Doppler shift, time delay, joint Doppler-time shift, and multipath as the target identification objects for LJCD-Net and the control method.
+
+The classification obfuscation diagrams for the six algorithms are illustrated in Figure 9, with support vector machines (SVMs) being included in the comparison as a prevalent method of classification. This is due to the fact that both N1 and N2 employ convolutional neural networks (CNNs) as independent extraction networks, performing analogous functions in the diagnostic process. The accurate prediction accuracies and their respective incorrect prediction percentages for each spoofing category are prominently displayed in Figure 9. It is evident from this figure that the diagnostic accuracy of the proposed LJCD-Net surpasses that of the other five methods when the training and testing data fall within the same distribution. LJCD-Net demonstrates an average recognition rate of 99.4% across all signal patterns, while the recognition accuracies for alternative methods vary between 76.2% and 94.1%. N5, a prevalent method for spoofing jamming recognition, yields commendable results in diagnosing Doppler and time delay. However, its performance is subpar when compared to N4 in scenarios involving multipath-oriented and multiplexed signal overlapping spoofing. N2 and N3 employ distinct CNN architectures as the foundational network for feature extraction and recognition, while they exhibit comparable recognition accuracies across various spoofing types, a singular convolutional architecture proves inadequate for extracting stable features and making accurate judgments in the context of intricate time-frequency images. Notably, the average diagnostic accuracy is approximately 89% when dealing with multipath and multiplexed SOI mashups. Support vector machines (SVM) are frequently employed to detect suppression jamming, demonstrating commendable performance in non-line-of-sight scenarios and multipath clustering, but with an average identification accuracy of 76.2% in the face of subtly differentiated spoofing jamming.
+
+A/B/C/D/E denotes single SOI, Doppler offset, time delay, Doppler-time offset, and multipath spoofing, and tasks from T1 to T10 denote A/B/C/D→E, B/A/C/D→E, A/B/C/E→D, A/B/C→D, A/B/D/E→C, A/B/E→C, A/C/D/E→B, A/C/E→B, B/C/D/E→A, and B/C/D→A, respectively. The results in Table 3 show that the average diagnostic accuracy (96.40%) of the proposed scheme (LJCD-Net) in this paper is significantly better than that of other methods, and the diagnostic efficacy has been improved by 8.74%, 7.67%, and 2.71%, respectively, when compared with N1, N3, and N5. Furthermore, the LJCD-Net exhibits superior stability compared to other comparative methods across a majority of tasks. This suggests that the model is proficient in generating uncontaminated shared knowledge and demonstrates a greater resilience to unfamiliar diagnostic scenarios. (1) Both N1 and N2 perform the cross-domain diagnosis task with a traditional CNN architecture, and the overall performance is far from what we expect. N1 performs worse in task A/C/E→B, which is because the model can only learn delay features from, and has a weak generalization to, jamming features in the frequency offset category, and the huge specificity leads to poor diagnosis results. The overall robustness of N2 is better than that of N1 (3.04% improvement), which is due to the multi-domain adversarial training that improves the robustness of the model. Although N1 exhibits a superior diagnostic performance compared to N2 (a 5.05% improvement), this may be attributed to the fact that merely amalgamating source domains with significant distributional disparities into a singular training domain could potentially undermine the network’s generalization capabilities.
+
+(2) The utilization of adversarial training, as opposed to conventional domain metrics, can significantly enhance the capacity of feature extractors to assimilate shared knowledge. This is evidenced by the comparative analysis between LJCD-Net and N3. The DANN-based method incorporates a discriminator compared to CNN, and the results show that N4 obtains better diagnostic results (4.5% improvement) compared to N3 in most of the tasks, suggesting that the parameter adaptation of the network model is effective in improving the generalization of the model. N5 further incorporates the attention mechanism and residual learning into DANN, thereby reducing the standard error. This improvement in diagnostic performance over N4 is notable. However, it proves ineffective in tasks A/C/E→B and B/C/D→A. This suggests that while N5 possesses superior general knowledge portability and broad applicability, it also poses challenges in learning specific feature representations that are more beneficial for target domain diagnosis.
+
+(3) The difficulty in generalizing A/B/E→C and A/C/E→B may be due to the large span of jamming features in the migration task, and the time-frequency features learned from the source and auxiliary domains are still deviating from or failing to satisfy the diagnostic needs of the target domain. The more obvious the inter-domain divergence is, the more difficult the migration becomes.
+
+(4) The only difference between A/B/C/D→E and B/A/C/D→E is the different labeling domains, and the poorer migration effect of the latter is due to the fact that the Doppler shift cannot obtain more general time-frequency features compared to the single SOI, and cannot generate more reliable pseudo-labels to be used in the next stage of confrontation. Overall, the use of single SOI as the labeling domain can help us obtain satisfactory clustering results.
+
+Figure 10a and Table 3 corroborate the efficacy of each strategy and module. The absence of precise and dependable auxiliary domain pseudo-labels in A1 leads to a marked decrease in the diagnostic outcomes. This could be attributed to the weighting strategy, which is grounded on uncertainty guidance, effectively mitigating misclassifications of the training samples and serving as a guiding mechanism for the accurate classification of target samples. A2 and A3 remove the clustering confrontation and confidence measure loss, respectively, resulting in a rather ambiguous prediction of the sample by the model, and the lack of either one prevents a trade-off between accuracy and reliability.
+
+A good feature should identify its own category with a high confidence probability. Due to the lack of criteria for judging feature quality, reference [23] identifies features with a prediction confidence of 95% or higher as high-quality features. We use the proportion of high-quality features (HTR) in correctly classified samples to judge the overall quality of model-generated features: (42) HTR=numtrue-95numtrue
+
+numtrue-95 is the number of samples that are classified correctly with a confidence level of 95% or more. Figure 10b illustrates the percentage of high-quality features in the correctly classified samples. Due to the unavailability of valid classification boundaries, it is difficult for N1 and N2 to produce high-quality predictions. A3 removes the loss of adversarial metrics. T8, for example, shows a significant decrease in the prediction confidence when the source domain diverges from the target domain, proving that LTAdv is a core module for improving the diagnostic confidence. The mean HTR of LJCD-Net across various tasks is 98.16%, suggesting that the semantic features are the least affected, thereby ensuring highly dependable cross-domain diagnosis.
+
+To further validate the discriminatory nature of the model, the number of samples with a prediction confidence of more than 95% but incorrectly diagnosed was analysed. The misclassification rate σ:(43) σ=numfalse-95num95
+
+Taking T8 as an example, Figure 10c demonstrates the misclassification of A1 and A2 with our scheme. Compared with A1 and A2, LJCD-Net reduces the misclassification probability by 18.81% vs. 14.33%, respectively, which further illustrates that our pseudo-label weighting strategy with dual-classifier clustered adversarial approach plays a key role in improving the discriminative nature of diagnosis.
+
+5.2.2. Migration Experiments between Different JSR Datasets with the Same Jamming Type
+
+Time-varying power increases the dynamics and uncertainty of jamming features, subverts the inherent time-frequency knowledge learnt by the DNN model in the training samples, and greatly affects the performance of various types of jamming and SOI diagnosis. Considering the case where both suppression and spoofing jammings exist, six jammings, AM, FM, chirp, NB, pulse, and spoofing (Doppler-time) are diagnosed and then averaged, and the cross-domain diagnostic task settings are shown in Table 4.
+
+The diagnostic performance of SVM, N2 to N5, and LJCD-Net for each type of jamming is illustrated in Figure 11. NIF stands for a SOI without jamming, and NIF before spreading is shown as thermal noise on the time-frequency diagram due to the fact that the power of suppressed jamming is much higher than that of the useful signal. It can be seen that the average diagnosis success rate of LJCD-Net for all types of jamming is 99.5%, which is better than 95.1% of DT-DDG and 96.5% of Attention-RDANN. Among them, the chirp signal is often mistaken for an FM signal. The possible reason is that our TF window period is 1 ms and the chirp duration defined in Table 1 is 5 ms. This mismatch makes the jamming time-frequency characteristic representation with a longer scanning period closer for FM signals. Secondly, the pulse signal is susceptible to the misclassification of AM, NB, and spoofing due to the fixed-pulse bandwidth of 1 MHz and the narrowest pulse peak period ranging from approximately 1 to 10 μs. This often leads to the assumption that these signals share similar time-frequency characteristics with the AM signal. When the power of the spoofing jamming is high, it affects the correct diagnosis of pulse in short cycles as well, and its own classification is often spoofed by NIF. The SVM is unsatisfactory as an jamming diagnostic tool, especially for the two easily confused decisions of FM and chirp, NIF and spoofing. The average recognition accuracy is only between 76.6% and 76.5%. The preceding analysis has revealed that factors contributing to misclassification encompass discrepancies in feature representation, which arise from varying TF window selections, and temporal-frequency ambiguity, resulting from power fluctuations. In practical applications, the diagnostic accuracy can be further stabilized through the normalized setting of various jamming target parameters.
+
+Table 5 demonstrates that the average diagnostic accuracy (96.94%) of LJCD-Net is significantly better than other methods in each task. Comparing T11 and T13, it is not difficult to find that suppressing the jamming by generalizing from high to low JSR targets results in a better diagnosis, and the reason for the lower overall recognition performance of T12 may be that it is difficult to share the knowledge of targets at 110 dB with the source domain samples of JSR from 40 to 60 dB. Upon comparing T14, T15, and T16, it becomes evident that augmenting the number of training sources does not invariably enhance the diagnostic performance. Instead, it impedes the acquisition of universal diagnostic knowledge due to an inability to effectively address the distributional disparities among them. N4 proficiently supports the acquisition of generic diagnostic knowledge by evaluating the transferability of multiple sources in the context of “distant sources”. However, N4 applicability diminishes when the target sample is deemed not to exhibit a greater similarity to the “distant source”. It is inferred against T17 to T20 that when the source and auxiliary domain sample knowledge is similar, the model focuses on the learning specific features of both, ignoring the potential differences that may exist in other domains, which need to be addressed by introducing diversity and variability. A4 removes the global attention residual module and performs ablation experiments on the feature extraction module proposed in Section 3.3. The results show that the traditional CNN has a single structure, which cannot distinguish between the channel as well as the importance of spatial information, and is insufficient to extract stable subtle features in the face of generalized scenarios with a large gap between the source-target domains, such as T12 and T16. T17 to T20 show that the CNN is unable to pay attention to the regions of higher mobility in the time-frequency map in the face of the spoofing jamming with lower power, which even leading to the occurrence of gradient degradation.
+
+Figure 12 plots the accuracy trend of the optimized pseudo-labels during the iterative process. PLLSA [34] is highly affected by pseudo-label noise, which leads to difficulty in convergence and gradual degradation of performance during the iterative process. Contrarily, UGLW directs the gradient direction of the pseudo-label update optimization utilizing neighbourhood knowledge. This approach substantiates its efficacy in enhancing noise robustness. Thus, our scheme is able to endow the auxiliary domain samples with high-quality pseudo-labeling, which, in turn, guides the next generalization task.
+
+The feature visualisation results of the proposed method and the comparison method are shown in Figure 13, with the first row showing the 3D visualisation results, which depicts the degree of inter-domain separation and intra-class aggregation more clearly compared to the 2D visualisation. Different colours represent different categories of interference. As shown in Figure 13a,b, the use of a single source or simple merging of information from all domain samples results in the apparent confusion between the different categories, when the knowledge learnt from the source and auxiliary domains does not work effectively in the target domain. On the other hand, as shown in Figure 13f, the proposed scheme in this paper shows a significant improvement in inter-class separation and intra-class aggregation compared to other methods, which indicates that the shared high-level feature representations of the same class of disturbances across different domains are effectively mined, and the target samples can be benefited from the generic diagnostic knowledge, which leads to an improved diagnostic performance.
+
+The efficacy of the training model is evaluated using datasets of varying sample sizes, with the final average recognition success rate illustrated in Figure 14. The data clearly demonstrate that as the volume of training data escalates, so too does the average recognition success rate. This observation aligns with the prevailing principle that a larger number of samples for the learning model correlates positively with an enhanced recognition accuracy. From a practical application point of view, training with more samples leads to a longer training time with a greater workload, and we expect to accomplish the projected goal with less data. Figure 14 shows that when the number of samples of each type is 800, the average recognition success rate is around 95.7%. After the number of samples exceeds 2000, the slope of the increase in recognition success rate is very slow as the training samples increase significantly. Considering that the auxiliary domain samples do not need to be labeled, this amount of data is not difficult to prepare and train in terms of duration in practical applications. Table 6 demonstrates the average recognition accuracy of T16 with different amounts of training data. As the number of samples increases further, the recognition accuracy increases slowly while the standard deviation decreases significantly and converges gradually.
+
+6. Conclusions
+
+In this study, we seek to provide a generalized jamming diagnosis method for cross-domain heterogeneous scenarios to support jamming diagnosis in real-life positioning scenarios using jamming information data collected in the laboratory. The proposed method aims to use a fully labeled source domain and multiple unlabeled auxiliary domains to generate a shared feature representation with a generalization ability, and tries to solve the problems of the low quality of pseudo-labels, and the poor discriminative and low confidence of classification models. The experimental results show that LJCD-Net can effectively identify suppression and spoofing jamming in the face of unknown scenarios, and outperforms the existing classical and advanced schemes.
+
+To our knowledge, this is the first work of adversarial domain generalized network in jamming diagnosis. In the future, we will start from the joint high-confidence PNT spatial and temporal service of GNSS and 5G to provide a higher accuracy, availability, and reliability for the new spatial and temporal network. However, there is still a need to provide more experimental data and test scenarios for the generalized perception model, and how to overcome the negative migration phenomenon as well as further mining of jamming features to guide the diagnosis performance will be the next research direction.
+
+Acknowledgments
+
+We thank the Research Centre for Convergence of Wireless Network Communication and Navigation and the State Key Laboratory of Information Photonics and Optical Communication for their support of this research.
+
+Author Contributions
+
+Conceptualization, Z.D. (Zhongliang Deng) and Z.Z.; methodology, Z.Z. and B.L.; software, Z.Z.; validation, Z.Z., J.L. and Z.D. (Zhenke Ding); formal analysis, Z.Z. and B.L.; investigation, Z.D. (Zhenke Ding); resources, Z.Z. and J.L.; data curation, Z.Z.; writing—original draft preparation, Z.Z.; writing—review and editing, Z.Z.; visualization, Z.Z.; supervision, Z.Z. and Z.D. (Zhongliang Deng); project administration, Z.D. (Zhongliang Deng). All authors have read and agreed to the published version of the manuscript.
+
+Data Availability Statement
+
+The original contributions presented in the study are included in the article, further inquiries can be directed to the corresponding authors.
+
+Conflicts of Interest
+
+The authors declare no conflicts of interest.
+
+Figure 1 The performance of a localization receiver is influenced by jamming during the processing of Global Navigation Satellite System (GNSS) data.
+
+Figure 2 Illustration of (a) traditional knowledge migration method and (b) our deep adversarial migration method.
+
+Figure 3 Our two-stage deep adversarial transfer learning approach. In the first step, the source model optimizes the network parameters by minimizing the source classification loss to generate high-quality pseudo-labels for each unlabeled auxiliary domain image. In the second step, the feature extractor is fixed, and the classifier and domain discriminator parameters are updated to maximize the inter-domain and intra-class variation loss. Fixing the classifier, updating the feature extractor by minimizing the difference between the two fixed classifiers in an attempt to generate features that are transferable with high discrimination.
+
+Figure 4 Time-frequency spectra of various types of jamming.
+
+Figure 5 Global attention mechanism residual module.
+
+Figure 6 An auxiliary domain label weighting strategy based on uncertainty bootstrapping. In the first step, samples with adjacent features are more likely to have the same labels, and the refinement of pseudo-labels is completed by aggregating the knowledge of near-neighbour samples. In the second step, the gradient optimization direction of loss entropy is changed according to the infinite parameter of the probability vector, and the pseudo-labels with high confidence gain more trust.
+
+Figure 7 Generation of SOI and jamming data using hardware test benches.
+
+Figure 8 Diagnostic ability of the methods for jamming in the case of only one fully labeled source domain: (a) Recognition accuracy of various methods under different JSR. (b) Recognition accuracy of LJCD-Net in dealing with various types of jamming.
+
+Figure 9 Comparison of classification accuracies of SVM (top left), from N2 to N5 (in descending order) and LJCD-Net (bottom right) for six signal or jamming types, namely, single SOI, SOI from 1 to 4, Doppler offset, time delay, combined Doppler-time offset, and multipath.
+
+Figure 10 Overall analyses in migration experiments with different spoofing types. (a) Ablation experiments. (b) Feature quality analysis. (c) Misclassification analysis.
+
+Figure 11 Comparison of classification accuracies of SVM (top left), from N2 to N5 (in descending order), and LJCD-Net (bottom right) for seven signals or jammings, AM, FM, chirp, NB, pulse, NIF, and spoofing.
+
+Figure 12 Refinement of pseudo-labeling accuracy. Noise is not dealt with in PLLSA [34], where model overfitting generates erroneous pseudo-labels. Instead, we guide the gradient direction of the pseudo-label update optimization with the help of neighbourhood knowledge, which mitigates the effect of noisy samples and thus gradually improves the accuracy and confidence of the pseudo-labels.
+
+Figure 13 Feature visualisation of T13 test results. (a) N1. (b) N2. (c) N3. (d) N4. (e) N5. (f) LJCD-Net.
+
+Figure 14 Average correct recognition rate versus amount of training data.
+
+sensors-24-03266-t001_Table 1 Table 1 Definition of the jamming parameter space.
+
+Jamming Type	Parameter Setting	
+AM	fpk∼U(0.1,1) MHz	
+Two sets of parameters are normalized	
+FM	βk∼U(0.1,0.9)	
+fmk∼U(0.1,1) MHz	
+Chirp	fmin=1 MHz	
+fmax=25 MHz	
+Tswp∼U(0.05,5) ms	
+a=±1	
+NB	Ω(f)=μ,f−f0<B/20,otherwise	
+B=4 MHz	
+znb[n]∼N(0,0)	
+Pulse	B=1 MHz	
+αk∼U(0.8,1.2)	
+a=U(0.02,1) μs	
+Mp=2	
+Spoofing	ψk∼U−∞∀′,∞∀′	
+fkp∼U−∞Δ′,∞Δ′	
+
+sensors-24-03266-t002_Table 2 Table 2 Comparison method.
+
+Method	Description	
+N1	CNN training by a single source domain data	
+N2	Train CNN by merging data from multiple domains together	
+N3	CNN + MMD [32] trained by generalization from multiple domain data	
+N4	DT-DDG [22], combining dynamic weighting strategies and batch spectral penalty regularization terms for adversarial training	
+N5	Attention-RDANN [33], adding attention mechanisms with residual networks	
+A1	Remove uncertainty-guided weighting strategies	
+A2	Remove bi-classifier clustering adversarial strategies	
+A3	Remove of adversarial metric loss LTAdv	
+A4	Remove global attention residual module	
+
+sensors-24-03266-t003_Table 3 Table 3 Diagnostic accuracy of each method under different migration tasks (%).
+
+Task	N1	N2	N3	N4	N5	A1	A2	A3	LJCD-Net	
+T1	90.72 ± 3.91	89.32 ± 0.81	91.71 ± 1.03	94.87 ± 2.85	95.58 ± 0.45	84.59 ± 7.06	87.89 ± 3.26	94.01 ± 3.11	96.37 ± 0.92	
+T2	87.05 ± 4.57	86.45 ± 1.73	88.20 ± 1.67	90.31 ± 2.26	91.91 ± 1.82	76.87 ± 10.86	83.96 ± 2.91	94.85 ± 3.99	94.74 ± 1.73	
+T3	92.09 ± 4.11	91.99 ± 1.87	92.26 ± 1.99	95.03 ± 3.94	98.70 ± 1.38	80.14 ± 6.99	89.74 ± 3.11	93.86 ± 4.07	98.34 ± 0.52	
+T4	88.25 ± 5.92	89.76 ± 2.82	88.57 ± 3.71	92.87 ± 3.55	95.12 ± 2.71	82.24 ± 9.64	86.56 ± 2.67	92.97 ± 2.78	96.86 ± 1.14	
+T5	90.41 ± 4.96	91.07 ± 1.45	91.39 ± 2.36	95.46 ± 2.57	97.18 ± 2.60	78.70 ± 8.79	85.50 ± 3.62	85.03 ± 3.66	97.01 ± 0.95	
+T6	83.06 ± 6.05	84.33 ± 2.24	85.20 ± 2.97	93.18 ± 2.11	90.16 ± 3.42	81.90 ± 9.37	84.89 ± 4.06	94.20 ± 2.92	96.29 ± 0.59	
+T7	91.31 ± 3.98	86.36 ± 1.88	91.67 ± 1.18	94.92 ± 2.89	96.43 ± 1.95	79.36 ± 7.56	87.29 ± 3.61	93.00 ± 2.57	97.76 ± 0.34	
+T8	68.49 ± 5.70	79.91 ± 3.22	82.67 ± 3.45	91.47 ± 3.05	86.66 ± 4.00	82.21 ± 7.55	83.07 ± 4.68	92.11 ± 3.82	95.32 ± 1.31	
+T9	88.38 ± 5.02	86.12 ± 1.06	90.83 ± 1.50	92.52 ± 2.57	95.45 ± 1.89	71.70 ± 9.02	88.93 ± 4.14	93.90 ± 3.41	96.21 ± 0.98	
+T10	82.79 ± 5.34	80.04 ± 2.16	84.81 ± 2.64	91.67 ± 2.77	89.71 ± 3.23	75.42 ± 7.63	84.22 ± 2.02	94.95 ± 3.24	95.07 ± 1.13	
+Average	86.26 ± 4.96	86.54 ± 1.92	88.73 ± 2.25	93.23 ± 2.86	93.69 ± 2.34	79.31 ± 8.45	86.21 ± 3.41	92.89 ± 3.26	96.40 ± 1.00	
+
+sensors-24-03266-t004_Table 4 Table 4 Cross-domain diagnostic tasks between different JSR datasets.
+
+Jamming Type	Task	Source (dB)	Auxiliary (dB)	Target (dB)	
+suppressive	T11	40	50/60	70	
+T12	40	50/60	110	
+T13	70	50/60	40	
+T14	40	50/70/110	60	
+T15	40	50/70	60	
+T16	40	50/70/110	100	
+spoofing	T17	5	10/20	15	
+T18	5	8/10	20	
+T19	10	11/12	5	
+T20	8	10/15	5	
+
+sensors-24-03266-t005_Table 5 Table 5 Diagnostic accuracy of methods in the migration task (%).
+
+Task	N1	N2	N3	N4	N5	A4	LJCD-Net	
+T11	79.36 ± 3.89	84.51 ± 2.04	91.73 ± 1.96	92.82 ± 1.51	96.20 ± 1.06	95.34 ± 1.75	98.43 ± 0.61	
+T12	77.03 ± 4.46	81.72 ± 3.16	88.65 ± 2.58	92.64 ± 0.93	94.81 ± 1.89	89.41 ± 2.38	94.53 ± 1.50	
+T13	80.22 ± 4.23	85.68 ± 1.75	90.83 ± 2.71	92.56 ± 2.42	97.86 ± 1.21	96.10 ± 0.96	99.02 ± 0.14	
+T14	84.20 ± 5.15	76.72 ± 2.88	86.04 ± 2.31	95.12 ± 1.87	92.43 ± 2.75	91.86 ± 1.22	94.62 ± 0.36	
+T15	80.77 ± 4.75	86.83 ± 2.96	91.46 ± 3.56	93.55 ± 2.80	96.31 ± 0.99	96.05 ± 1.89	98.52 ± 1.17	
+T16	85.94 ± 4.69	80.28 ± 3.23	86.92 ± 3.41	76.04 ± 4.60	92.56 ± 1.89	88.63 ± 1.91	95.79 ± 0.91	
+T17	83.47 ± 4.97	87.31 ± 3.24	93.27 ± 2.37	94.90 ± 1.01	96.80 ± 1.95	92.15 ± 1.56	98.87 ± 0.16	
+T18	74.62 ± 5.11	79.06 ± 3.86	85.62 ± 3.38	93.55 ± 2.25	95.40 ± 1.03	91.83 ± 1.79	96.92 ± 1.00	
+T19	79.86 ± 6.25	76.63 ± 4.72	84.41 ± 3.34	90.02 ± 3.65	87.14 ± 3.98	87.46 ± 3.35	95.20 ± 2.67	
+T20	83.99 ± 4.70	83.71 ± 2.02	89.08 ± 2.66	94.10 ± 2.78	95.26 ± 1.95	91.72 ± 0.86	97.45 ± 0.32	
+Average	80.95 ± 4.82	82.25 ± 2.99	88.80 ± 2.83	91.53 ± 2.38	94.48 ± 1.87	92.06 ± 1.77	96.94 ± 0.88	
+
+sensors-24-03266-t006_Table 6 Table 6 Average recognition accuracy of T16 with different amounts of training data (%).
+
+Training Data Number	2000	5000	8000	12,000	20,000	
+performance	93.92 ± 1.93	94.81 ± 1.20	95.79 ± 0.91	96.03 ± 0.35	96.29 ± 0.26	
+
+Disclaimer/Publisher’s Note: The statements, opinions and data contained in all publications are solely those of the individual author(s) and contributor(s) and not of MDPI and/or the editor(s). MDPI and/or the editor(s) disclaim responsibility for any injury to people or property resulting from any ideas, methods, instructions or products referred to in the content.
+==== Refs
+References
+
+1. Elango A. Ujan S. Ruotsalainen L. Disruptive gnss signal detection and classification at different power levels using advanced deep-learning approach Proceedings of the 2022 International Conference on Localization and GNSS (ICL-GNSS) Tampere, Finland 7–9 June 2022 IEEE Piscataway, NJ, USA 2022 1 7
+2. Joubert N. Reid T.G. Noble F. Developments in modern gnss and its impact on autonomous vehicle architectures Proceedings of the 2020 IEEE Intelligent Vehicles Symposium (IV) Las Vegas, NV, USA 19 October–13 November 2020 IEEE Piscataway, NJ, USA 2020 2029 2036
+3. Liu J. Deng Z. Hu E. Huang Y. Deng X. Zhang Z. Ding Z. Liu B. Gnss-5g hybrid positioning based on joint estimation of multiple signals in a highly dependable spatio-temporal network Remote Sens. 2023 15 4220 10.3390/rs15174220
+4. Huang S. Guo K. Wang Z. Zhu Y. Tang H. Wang Y. A dme interference signal identification and mitigation approach based on gaussian mixture model used for bds b2a receivers Proceedings of the 2023 IEEE/AIAA 42nd Digital Avionics Systems Conference (DASC) Barcelona, Spain 1–5 October 2023 IEEE Piscataway, NJ, USA 2023 1 6
+5. Zhang X. Zhang G. Wang H. Li G. Two-stage neural network based combined interference classification and recognition for a gnss receiver Proceedings of the China Satellite Navigation Conference (CSNC) 2020 Proceedings: Volume III Chengdu, China 22–25 November 2020 Springer Berlin/Heidelberg, Germany 2020 623 633
+6. Ma X. Han C. Jin R. Wang D. Bai P. Zhen W. Study on gnss spoofing interference detection method in urban multipath environment based on cnn and clustering model Proceedings of the 2023 Cross Strait Radio Science and Wireless Technology Conference (CSRSWTC) Guilin, China 10–13 November 2023 IEEE Piscataway, NJ, USA 2023 1 3
+7. Jwo D.-J. Lai J.-H. Chang Y. Interacting multiple model filter with a maximum correntropy criterion for gps navigation processing Appl. Sci. 2023 13 1782 10.3390/app13031782
+8. Maruta K. Improving semi-blind interference suppression on multi-cell massive mimo systems by multi-antenna users Proceedings of the 2023 IEEE 97th Vehicular Technology Conference (VTC2023-Spring) Florence, Italy 20–23 June 2023 IEEE Piscataway, NJ, USA 2023 1 6
+9. Jwo D.-J. Biswal A. Mir I.A. Artificial neural networks for navigation systems: A review of recent research Appl. Sci. 2023 13 4475 10.3390/app13074475
+10. Zhou Y. Ren F. Nishide S. Kang X. Facial sentiment classification based on resnet-18 model Proceedings of the 2019 International Conference on electronic engineering and informatics (EEI) Nanjing, China 8–10 November 2019 IEEE Piscataway, NJ, USA 2019 463 466
+11. Sikandar S. Mahum R. Alsalman A. A novel hybrid approach for a content-based image retrieval using feature fusion Appl. Sci. 2023 13 4581 10.3390/app13074581
+12. Chen W. Zheng X. Lu X. Hyperspectral image super-resolution with self-supervised spectral-spatial residual network Remote Sens. 2021 13 1260 10.3390/rs13071260
+13. Cho S. Seok H.-W. Kong S.-H. Mpcnet: Gnss multipath error compensation network via multi-task learning Proceedings of the 2023 IEEE Intelligent Vehicles Symposium (IV) Anchorage, AK, USA 4–7 June 2023 IEEE Piscataway, NJ, USA 2023 1 6
+14. Tan Y. Li F. Qi Y. C/n 0-based gnss multipath mitigation methods: Research, challenges, and prospects Proceedings of the 2022 IEEE International Workshop on Electromagnetics: Applications and Student Innovation Competition (iWEM) Narashino, Japan 29–31 August 2022 IEEE Piscataway, NJ, USA 2022 101 102
+15. Zhe Y. Fukuchi K. Akimoto Y. Sakuma J. Domain generalization via adversarially learned novel domains IEEE Access 2022 10 101855 101868 10.1109/ACCESS.2022.3209815
+16. Liu K. Wang D. Yang Y. Wang J. Mao J. A domain generalization model based on multilevel domain adversarial invariant representation learning Proceedings of the 2023 8th International Conference on Intelligent Computing and Signal Processing (ICSP) Xi’an, China 21–23 April 2023 IEEE Piscataway, NJ, USA 2023 2106 2110
+17. Wang Y. Xu Q. Li Z. He W. Zhang J. He J. Unsupervised contrastive learning-based adversarial domain adaptation Proceedings of the 2023 15th International Conference on Communication Software and Networks (ICCSN) Shenyang, China 21–23 July 2023 IEEE Piscataway, NJ, USA 2023 233 237
+18. Tseng H.-Y. Lee H.-Y. Huang J.-B. Yang M.-H. Cross-domain few-shot classification via learned feature-wise transformation arXiv 2020 2001.08735
+19. Zheng H. Wang R. Yang Y. Li Y. Xu M. Intelligent fault identification based on multisource domain generalization towards actual diagnosis scenario IEEE Trans. Ind. Electron. 2019 67 1293 1304 10.1109/TIE.2019.2898619
+20. Wang M. Liu Y. Yuan J. Wang S. Wang Z. Wang W. Inter-class and inter-domain semantic augmentation for domain generalization IEEE Trans. Image Process. 2024 33 1338 1347 10.1109/TIP.2024.3354420 38261475
+21. Liu Z. Chen G. Li Z. Qu S. Knoll A. Jiang C. D2ifln: Disentangled domain-invariant feature learning networks for domain generalization IEEE Trans. Cogn. Dev. Syst. 2023 15 2269 2281 10.1109/TCDS.2023.3264615
+22. Qian Q. Zhou J. Qin Y. Relationship transfer domain generalization network for rotating machinery fault diagnosis under different working conditions IEEE Trans. Ind. Inform. 2023 19 9898 9908 10.1109/TII.2022.3232842
+23. Chen Z. Wang W. Zhao Z. Su F. Men A. Dong Y. Instance paradigm contrastive learning for domain generalization IEEE Trans. Circuits Syst. Video Technol. 2023 34 1032 1042 10.1109/TCSVT.2023.3289201
+24. Mitra S.K. Kuo Y. Digital Signal Processing: A Computer-Based Approach McGraw-Hill Higher Education New York, NY, USA 2006 Volume 2
+25. Du Z. Li J. Su H. Zhu L. Lu K. Cross-domain gradient discrepancy minimization for unsupervised domain adaptation Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition Nashville, TN, USA 20–25 June 2021 3937 3946
+26. Hershey J.R. Olsen P.A. Approximating the kullback leibler divergence between gaussian mixture models Proceedings of the 2007 IEEE International Conference on Acoustics, Speech and Signal Processing—ICASSP’07 Honolulu, HI, USA 16–20 April 2007 IEEE Piscataway, NJ, USA 2007 Volume 4 IV-317 IV-320
+27. Lee C.-Y. Batra T. Baig M.H. Ulbricht D. Sliced wasserstein discrepancy for unsupervised domain adaptation Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition Long Beach, CA, USA 15–20 June 2019 10285 10295
+28. Chen X. Wang S. Long M. Wang J. Transferability vs. discriminability: Batch spectral penalization for adversarial domain adaptation Proceedings of the International Conference on Machine Learning PMLR Long Beach, CA, USA 9–15 June 2019 1081 1090
+29. Chen X. He D. Yan X. Yu W. Truong T.-K. Gnss interference type recognition with fingerprint spectrum dnn method IEEE Trans. Aerosp. Electron. Syst. 2022 58 4745 4760 10.1109/TAES.2022.3167985
+30. Tsang S. Kao B. Yip K.Y. Ho W.-S. Lee S.D. Decision trees for uncertain data IEEE Trans. Knowl. Data Eng. 2009 23 64 78 10.1109/TKDE.2009.175
+31. Ajakan H. Germain P. Larochelle H. Laviolette F. Marchand M. Domain-adversarial neural networks arXiv 2014 1412.4446
+32. Borgwardt K.M. Gretton A. Rasch M.J. Kriegel H.-P. Schölkopf B. Smola A.J. Integrating structured biological data by kernel maximum mean discrepancy Bioinformatics 2006 22 e49 e57 10.1093/bioinformatics/btl242 16873512
+33. Sun M. Chen X. Qiu Z. Teng X. Radar deception jamming recognition method based on domain adaptation and attention mechanism J. Electron. Inf. Technol. 2022 44 3891 3899
+34. Li Y. Guo L. Ge Y. Pseudo labels for unsupervised domain adaptation: A review Electronics 2023 12 3325 10.3390/electronics12153325

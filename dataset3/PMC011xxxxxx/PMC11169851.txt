@@ -1,0 +1,338 @@
+
+==== Front
+Front Neurosci
+Front Neurosci
+Front. Neurosci.
+Frontiers in Neuroscience
+1662-4548
+1662-453X
+Frontiers Media S.A.
+
+10.3389/fnins.2024.1410936
+Neuroscience
+Original Research
+Automatic cortical surface parcellation in the fetal brain using attention-gated spherical U-net
+You Sungmin 1 2
+
+De Leon Barba Anette 1
+
+Cruz Tamayo Valeria 1
+
+Yun Hyuk Jin 1 2 3
+
+Yang Edward 4
+Grant P. Ellen 1 2 4
+
+Im Kiho 1 2 3 *
+
+1Fetal Neonatal Neuroimaging and Developmental Science Center, Boston Children’s Hospital, Harvard Medical School, Boston, MA, United States
+2Division of Newborn Medicine, Boston Children’s Hospital, Harvard Medical School, Boston, MA, United States
+3Department of Pediatrics, Harvard Medical School, Boston, MA, United States
+4Department of Radiology, Boston Children’s Hospital, Harvard Medical School, Boston, MA, United States
+Edited by: Zhengwang Wu, University of North Carolina at Chapel Hill, United States
+
+Reviewed by: Fenqiang Zhao, University of North Carolina at Chapel Hill, United States
+
+Prasanna Parvathaneni, Flagship Biosciences, Inc., United States
+
+*Correspondence: Kiho Im, kiho.im@childrens.harvard.edu
+30 5 2024
+2024
+18 141093602 4 2024
+20 5 2024
+Copyright © 2024 You, De Leon Barba, Cruz Tamayo, Yun, Yang, Grant and Im.
+2024
+You, De Leon Barba, Cruz Tamayo, Yun, Yang, Grant and Im
+https://creativecommons.org/licenses/by/4.0/ This is an open-access article distributed under the terms of the Creative Commons Attribution License (CC BY). The use, distribution or reproduction in other forums is permitted, provided the original author(s) and the copyright owner(s) are credited and that the original publication in this journal is cited, in accordance with accepted academic practice. No use, distribution or reproduction is permitted which does not comply with these terms.
+Cortical surface parcellation for fetal brains is essential for the understanding of neurodevelopmental trajectories during gestations with regional analyses of brain structures and functions. This study proposes the attention-gated spherical U-net, a novel deep-learning model designed for automatic cortical surface parcellation of the fetal brain. We trained and validated the model using MRIs from 55 typically developing fetuses [gestational weeks: 32.9 ± 3.3 (mean ± SD), 27.4–38.7]. The proposed model was compared with the surface registration-based method, SPHARM-net, and the original spherical U-net. Our model demonstrated significantly higher accuracy in parcellation performance compared to previous methods, achieving an overall Dice coefficient of 0.899 ± 0.020. It also showed the lowest error in terms of the median boundary distance, 2.47 ± 1.322 (mm), and mean absolute percent error in surface area measurement, 10.40 ± 2.64 (%). In this study, we showed the efficacy of the attention gates in capturing the subtle but important information in fetal cortical surface parcellation. Our precise automatic parcellation model could increase sensitivity in detecting regional cortical anomalies and lead to the potential for early detection of neurodevelopmental disorders in fetuses.
+
+fetal MRI
+brain MRI
+cortical surface parcellation
+deep learning
+spherical U-net
+attention mechanism
+National Institute of Neurological Disorders and Stroke 10.13039/100000065 R01NS114087 National Institutes of Health 10.13039/100000002 R01EB031170 Ministry of Health & Welfare, Republic of KoreaHI21C1234 Korea Health Industry Development Institute 10.13039/501100003710 The author(s) declare that financial support was received for the research, authorship, and/or publication of this article. This research was supported by the National Institute of Neurological Disorders and Stroke (R01NS114087) and National Institute of Biomedical Imaging & Bioengineering (R01EB031170) of the National Institutes of Health (NIH). This research was also supported by a grant of the Korea Health Technology R&D Project through the Korea Health Industry Development Institute (KHIDI), funded by the Ministry of Health & Welfare, Republic of Korea (grant number: HI21C1234). section-at-acceptanceBrain Imaging Methods
+==== Body
+pmc1 Introduction
+
+Cortical surface parcellation of the human brain refers to the process of dividing the cerebral cortex into distinct regions based on various criteria, including anatomical landmarks, functional properties, connectivity patterns, or developmental trajectories (Fischl et al., 2004; Xia et al., 2019; McGrath et al., 2022). Anatomical cortical parcellations based on sulcal/gyral folding patterns using magnetic resonance imaging (MRI) have been widely used for various region-based cortical structural, functional, and network analyses. Regional analysis via cortical surface parcellation is even important for fetal brains since regional variations in brain structures affected by genetic and environmental factors and neurodevelopmental disorders already occur during this period (Rajagopalan et al., 2011; Vasung et al., 2016, 2020, 2021; Andescavage et al., 2017; Ortinau et al., 2019).
+
+As manual cortical parcellation is labor-intensive, reliant on expert knowledge, and time-consuming, several automated methods have been proposed for sulcal/gyral parcellations on adult and infant cortical surfaces from MRI (Fischl et al., 2004; Lyttelton et al., 2007; Destrieux et al., 2010; Yeo et al., 2010; Li and Shen, 2011; Auzias et al., 2016; Gopinath et al., 2019; Parvathaneni et al., 2019; Zhao et al., 2019, 2021; Cheng et al., 2020; Hao et al., 2020). One prevalent approach to automatic parcellation involves surface registration, where single or probabilistic label maps defined on a reference surface are transferred to the target individual surface following registration (Fischl et al., 2004; Lyttelton et al., 2007; Destrieux et al., 2010; Yeo et al., 2010; Hazlett et al., 2017; Wu et al., 2019; Yun et al., 2019). However, the accuracy of traditional techniques for cortical surface parcellation is heavily dependent on the precise registration of the cortical surface, which establishes correspondences between the atlas and the subject.
+
+With the advent and success of deep learning in computer vision (Deng et al., 2009), deep learning techniques were introduced for automatic cortical parcellation (Zhao et al., 2022). One approach was transforming the parcellation task into a common image classification task by making 2D patches from the cortical surface. Wu et al. (2018) directly applied a 2D convolutional neural network (CNN) to the cortical shape features, mean curvature, sulcal depth, and average convexity, to learn the nonlinear mapping to parcellation labels by projecting surface patches into tangent spaces to create regular 2D image patches and subsequently classifying those patches. However, the patch-wise approach inherently suffers from limitations such as the trade-off between spatial contextual information and localization during the patching process and redundant computations due to overlapping patches.
+
+In order to overcome those issues, spherical CNNs (Jiang et al., 2019; Zhao et al., 2019) were proposed, which use the ring convolutional filters via spatial re-tessellation of the spherical surface onto the standard icosahedron. By the re-tessellation onto the icosahedron, the spherical surface could be transformed into a consistent structure with uniform-sampled vertices, which enabled the learning of feature maps on the spherical space with hierarchical CNN architectures (Zhao et al., 2021). As the U-net and its variations have shown state-of-the-art performances in medical segmentation fields (Ronneberger et al., 2015), Zhao et al. (2019) proposed a spherical U-net by replacing 2D convolution and pooling operators in the U-net with spherical ring-convolution and pooling. Another recent study proposed a deep learning model named SPHARM-net for cortical surface parcellation (Ha and Lyu, 2022), which introduced spherical harmonics-based convolution filters that can encode all the spectral components without the full harmonic expansion to capture geometric details. They applied the spherical harmonic convolution to the spherical U-net structure. Those studies based on spherical U-net structure showed improved performance for cortical surface parcellation compared to surface registration-based approaches in both adult and infant brains (Hao et al., 2020; Zhao et al., 2021; Ha and Lyu, 2022).
+
+To the best of our knowledge, there have been no studies reporting automatic cortical parcellation for the fetal brain. Unlike infant or adult brains, fetal brains have small sizes and weights, smooth surfaces with limited gyrification, and immature regional structures (Habas et al., 2012; Dubois et al., 2014; Dubois and Dehaene-Lambertz, 2015). In addition, fetal brains have variations in relative position and size of cortical folds along with gestational age (GA). Since automatic cortical parcellation learns the mapping between cortical folding features and regional labels, cortical region definition and parcellation are challenging for fetal brains with immature cortical folding. Due to those reasons, previous methods developed for postnatal brains might not be robust enough to handle the unique anatomy of the fetal brain surface.
+
+A deep learning model with the attention mechanism, inspired by human cognitive processes, allows it to focus selectively on specific parts of the input data, emphasizing regions of interest while downplaying less relevant areas (Vaswani et al., 2017; Wang et al., 2017; Oktay et al., 2018). This characteristic may be beneficial to address the challenges in the cortical surface parcellation of the fetal brain. First, it may help the model find and focus on subtle but important features from incomplete cortical folding maps of the fetal brain (Schlemper et al., 2019). Secondly, fetal brains have wide temporal variations in their folding characteristics under the neurodevelopment process. Therefore, the parcellation model should adaptively adjust the model’s internal focus on input feature maps according to GA (Jetley et al., 2018). Third, it can distinguish between genuine cortical features and imaging artifacts ensuring that the latter do not adversely affect the parcellation process (Liu et al., 2022). Lastly, it may make more informed decisions about the boundaries and classifications of cortical areas through the extension of receptive fields to consider the relationships between different brain regions widely (Zhang et al., 2018).
+
+In this study, we propose an attention-gated spherical U-net by applying the attention mechanism to the spherical U-net for fetal cortical surface parcellation. The utilization of the attention mechanisms in the cortical surface parcellation model may promise a breakthrough to address the challenges posed by the unique fetal brain structure, allowing the model to focus adaptively on relevant features and contexts, which can significantly enhance the accuracy, robustness, and generalizability of fetal brain parcellation models.
+
+2 Methods
+
+2.1 Subjects and MR image acquisition
+
+We collected MRIs from 55 typically developing (TD) fetuses [GA (mean ± SD, range): 32.9 ± 3.3 weeks, 27.4–38.7 weeks; sex (n, male/female/unknown): 23/12/20] for this study from prior prospective recruitment studies or clinical fetal MRIs that were performed to screen for fetal brain abnormalities but were clinically interpreted as normal by two board-certified radiologists. To construct a confirmed parcellation dataset, we included fetuses with successful cortical surface reconstruction and over 27 gestational weeks when gyral and sulcal folding starts visibly forming. This study was reviewed and approved by the Institutional Review Board at Boston Children’s Hospital. We acquired fetal brain MRIs on a Siemens 3 T Skyra scanner using a T2-weighted Half-Fourier Acquisition Single-Shot Turbo Spin-Echo (HASTE) sequence with the following parameters: in-plane resolution of 1 mm, field of view (FOV) of 256 mm × 256 mm, time repetition of 1.6 s, time echo of 120 ms, and slice thickness of 2–4 mm. After localization of fetal brains, multiplanar HASTE stacks were acquired at least three times in different orthogonal orientations to reconstruct reliable 3D motion-corrected volume of the fetal brain.
+
+2.2 MRI processing
+
+We used our fetal MRI processing pipeline (Im et al., 2017; Yun et al., 2020, 2021) to reconstruct the cortical surfaces, which consists of the brain extraction (Hong et al., 2021), the isotropic high-resolution volume reconstruction algorithm via a slice-to-volume registration (Kuklisova-Murgasova et al., 2012), and deep learning-based cortical plate (CP) segmentation (Hong et al., 2020). For the brain extraction, we used our in-house fetal brain extraction model based on a 2D U-net structure, which had been trained with 291 MRI stacks from 65 typical developing (TD) fetuses.1 After brain extraction, we corrected intensity inhomogeneity via N4 bias field correction (Tustison et al., 2010) and created a motion-corrected 3D volume with 0.75 mm isotropic resolution using a slice-to-volume super-resolution technique (Kuklisova-Murgasova et al., 2012). Then, we applied our automatic CP segmentation algorithm that had been developed for the fetal brain (Hong et al., 2020; https://github.com/jwhong1125/fetal_CP_segmentation). The CP segmentation algorithm is based on 2D U-net models trained separately for the sagittal, coronal, and axial planes, which had been trained with 52 TD fetuses. It includes multi-view aggregation and test-time augmentation for precise CP segmentation onto the 3D volumes.
+
+After CP segmentation on 3D volumes, we extracted 3D inner CP surfaces using matching-cube algorithms from the CIVET,2 which generates tessellated triangular meshes for the boundary between the CP and its inner region. The algorithm tessellates a surface by collapsing an outer ellipsoid mesh enclosing the inner CP volumes and resampling it to the standard mech format with 81,920 triangles and 40,962 vertices (Liu et al., 2021). Lastly, we geometrically smoothed the resampled surface with the Taubin smoothing approach (Taubin, 1995) to obtain a natural shape of the surface without shrinking and voxelated patterns. In order to get brain surfaces on the standard mesh structure, we flipped the right hemisphere to the left, resampled onto the standard mesh, and re-flipped to the right. In this manner, both hemispheres share the same vertex indices and the neighborhood definition following the standard mesh structure, which enables the usage of both hemispheres together in the same model. After the resampling of individual cortical surfaces onto the standard mesh, both left and right surface models have the same vertex indices and neighborhoods. Therefore, both hemispheres were used for the training and evaluation of the parcellation models together.
+
+We computed three folding feature maps, mean curvature, average convexity, and adaptive distance transform-based sulcal depth (Yun et al., 2013) as inputs for surface parcellation. The mean curvature measures the cortical folding in a fine view, the average convexity measures the cortical folding in a coarse view, and our adaptive distance transform-based sulcal depth measures the cortical folding by combining both the coarse and fine views. For the parcellation label, we manually parcellated individual cortical surfaces following the Freesurfer Desikan parcellation protocol that has been extensively used as a standard in neuroimaging studies (Desikan et al., 2006). The original Desikan parcellation map consists of 34 cortical regions in each hemisphere. However, the secondary and tertiary sulci are not fully developed in the fetal brain, so it is not feasible to parcellate subdivisions of the gyrus. We simplified the original map and defined 30 cortical regions in each hemisphere (Figure 1).
+
+Figure 1 Cortical parcellation and anatomical labels. 0: background, 1: caudal middle frontal gyrus, 2: cingulate cortex, 3: cuneus, 4: frontal pole, 5: fusiform gyrus, 6: inferior parietal gyrus, 7: inferior temporal gyrus, 8: insula, 9: isthmus of the cingulate cortex, 10: lateral occipital cortex, 11: lateral orbital frontal cortex, 12: lingual gyrus, 13: medial orbital frontal cortex, 14: middle temporal gyrus, 15: parecentral lobule, 16: parahippocampal gyrus, 17: pars opercularis, 18: pars orbitalis, 19: pars triangularis, 20: pericalcarine cortex, 21: postcentral gyrus, 22: precentral gyrus, 23: precuneus cortex, 24: rostal middle frontal gyrus, 25: superior frontal gyrus, 26: superior parietal gyrus, 27: superior temporal gyrus, 28: supramarginal gyrus, 29: temporal pole, and 30: transverse temporal gyrus.
+
+2.3 Network architecture
+
+In this study, we implemented an attention-gated spherical U-net by modifying the attention module and applying it to the original spherical U-net as backbone architecture (Figure 2). The spherical U-net architecture has an encoder path and a decoder path each with five up/down-sampling steps. Each path consists of repeated layers of convolution, batch normalization, and leaky rectified linear units like the original U-net. However, there are several differences from the original U-net in handling spherical structures as input and output. The general 2D convolution layers are replaced with ring convolutions. The ring convolutions are designed to perform convolution operations on the mesh structures (Zhao et al., 2021). Likewise, the up-convolution and max pooling are replaced with surface-transposed convolutions and surface mean pooling. The final layer will be a vertex-wise filter to map the feature vector to the output surface shape.
+
+Figure 2 Schematic of the proposed cortical automatic parcellation mode with attention-gated spherical U-net. Left: The network receives cortical features mapped on the icosahedron with 40,962 vertices. In the encoder layers, ring convolutions and spherical pooling layers project feature maps onto icosahedrons with 10,242, 2,562, 642, and 162 vertices. Meanwhile, the number of channels at each layer is increased from 3 Cin to 32, 64, 128, 256, and 512, respectively. In the decoding layers, transposed one-ring convolution layers upsample and project feature maps into the icosahedron with 40,962 vertices eventually. Right: The attention gate receives feature maps through skip connections and corresponding gating signals as inputs. The input feature maps are weighted by attention coefficients α computed within them.
+
+2.4 Attention gates for spherical U-net
+
+Attention mechanisms can potentially enhance the network’s ability to focus on relevant features while ignoring irrelevant ones, thereby improving the accuracy and robustness of cortical surface parcellation (Oktay et al., 2018). The coefficient of attention, αi∈01, identify salient regions and prune feature response to preserve only the activations relevant to the specific task of the network which is the parcellation in this study. The output of the attention gate is the vertex-wise multiplication of input feature maps and attention coefficients, x^i,cl=xi,cl⋅αil (Figure 2). We used the multi-dimensional attention coefficients (Oktay et al., 2018) that enable each attention gate to learn to focus on multiple target regions of interest on each level of the icosahedron. The gating vector, gi∈ℝFg, is defined as multi-dimensional attention coefficients for each vertex i on the input icosahedron, where Fg corresponds to the number of feature maps in layer l. The gating vector contains contextual information to determine regions to be focused on lower-level feature maps. We used the additive attention (Bahdanau et al., 2014) to get the gating vector for spherical feature maps on each level of the icosahedron.
+
+qattl=ψTReLUWxTxil+WgaTgi+bg+bψ
+
+αil=sigmoidqattlxil,gI;Θatt
+
+The attention gate is defined as a set of parameters Θatt containing: three linear transformations with one-ring convolution Wx∈ℝFl×Fint,Wg∈ℝFg×Fint,ψ∈ℝFl×1 and bias terms bψ∈ℝ,bg∈ℝFint, which are based on the original paper (Oktay et al., 2018) but the transform and dimensions are modified for spherical data shape on icosahedrons. Instead of the 1×1×1 convolutions, channel-wise one-ring convolutions were used to linearly map those concatenated inputs, i.e., xl and g, on icosahedrons toward an intermediate space with ℝFint dimension. After that, the rectified linear unit (ReLU) was applied to the concatenated features before linear transformation with another one-ring convolution and sigmoid activation function for vector concatenation-based attention (Jetley et al., 2018). The gating signal forms a grid on vertices conditioned to spatial information for each level of icosahedron from skip-connection, which enables the network to combine information from multiple scales of spherical feature maps to achieve better performance. The parameters within those attention gates can be optimized with the general back-propagation-based training of neural networks.
+
+2.5 Training of the model
+
+We trained and evaluated the model with fetal cortical surfaces extracted from 55 fetuses using 5-fold cross-validation while 10% of the training samples selected were used for validation during its training. In order to increase the number of training samples, we applied three-dimensional rotational augmentation on the icosahedron. We randomly rotated input folding maps and output parcellation maps on the sphere and re-tessellated rotated maps onto the icosahedron with 40,962 vertices using the barycentric interpolation (Berrut and Trefethen, 2004). After rotational augmentations, we normalized each input folding map’s value with the z-score transform (Devore, 1995). For the loss function, we used the Dice loss using the Adam optimizer (Kingma and Ba, 2014) with a learning rate of 1e−3. To get the best optimal weights of the model in each fold, we monitored the Dice coefficient for the validation set and applied the learning rate reducer with a factor of 0.1 with five-epoch patience for the stagnation of validation loss. The training continued for 100 epochs and the network weights that showed the highest dice coefficient for the validation set were stored as the optimal network for each fold. The entire automatic parcellation framework was developed using Tensorflow (Dillon et al., 2017) backend, and the training and evaluation process was conducted with Nvidia RTX A5000 GPUs.
+
+2.6 Evaluation of the model
+
+We used the dice coefficient to evaluate automatic cortical surface parcellation performance, measuring the regional overlap between the predicted parcellation label and ground truth. The overall Dice coefficient is used to measure the general parcellation performance of the model according to the following formulas.
+
+Diceoverallgp=2×∑i,lgilpil+ϵ∑i,lgil+∑i,lpil+ϵ
+
+The l denotes the class label and i represents the vertex. The pil is the one-hot encoded prediction labels at vertex i for class l from automatic parcellation models and gil is the ground truth label at vertex i for class l based on manual parcellation.
+
+We also computed boundary distance for each region to compare how predicted regional boundaries are aligned with boundaries defined on ground truth. We measured surface distance over vertices from the ground truth boundaries to the boundaries of the predicted regions and used their median to represent boundary distance. For region j and vertex i on predicted boundaries defined with k vertices, dij denotes the shortest distance toward the ground truth boundary of region j. Likewise, we also computed their mean to represent the overall boundary distance.
+
+Medianboundarydistance=mediand1jd2jd3j…dijdkj
+
+Additionally, we investigated the effect of parcellation performance on cortical surface measurement. For each region j, we computed the ground truth regional area, areaGTj, from the manual parcellation map and the predicted regional area, areapredj, from each automatic parcellation method for each cortical parcel. Then, we computed the absolute percent error for each region and measured their mean as the overall error for each automatic parcellation method.
+
+Absolutepercenterror%=areapredj−areaGTjareaGTj∗100
+
+We compared the automatic parcellation performance of the proposed attention-gated spherical U-net with surface registration-based parcellation (Fischl et al., 2004), SPHARM-net (Ha and Lyu, 2022), and original spherical U-net (Zhao et al., 2019). For surface registration-based parcellation, we aligned a 29 GA template surface with predefined regional labels, constructed with a different TD fetal cohort (Serag et al., 2012; Yun et al., 2019), to the individual cortical surface using a 2D sphere-to-sphere non-rigid warping (Robbins et al., 2004). Then, we resampled the label map for the individual surfaces.
+
+2.7 Statistical analysis
+
+All statistical analyses were conducted with IBM SPSS Statistics (Version 29), IBM Corp, and MATLAB, MathWorks Inc. For the statistical comparison of the parcellation performance, all the metrics and measurements are computed subject-wisely to investigate the improvement of parcellation performance in a paired manner. We first performed paired t-tests on the overall Dice coefficient, median boundary distance, and mean absolute percent error of area measurements from the proposed model against the registration-based parcellation, SPHARM-net, and original spherical U-net to statistically compare their automatic parcellation performances. For the regional evaluation, we performed paired t-tests on the dice coefficient, boundary distance, and absolute percentage error of area measurement for each region between methods. We used the false discovery rate (FDR) control method at a q-value (FDR adjusted p value) of 0.05 to adjust for multiple comparisons (Benjamini and Hochberg, 1995).
+
+We examined the performance according to variations of GA and gyrification. We performed linear regression analysis, Dice=GA+c, to examine the relationship between GA and parcellation performance. Furthermore, we also divided the subjects into two subgroups based on GA, early third trimester (27–33 GA) and late third trimester (33–39 GA). Even fetal brains in both subgroups are under neurodevelopment for the maturation of the brain, cortical folding structures in the late third trimester are much more similar to infant or adult brains than those in the early third trimester. We performed paired t-tests on the overall dice coefficients for early and late third trimester subgroups to assess how neurodevelopmental stages affect brain parcellation performance.
+
+3 Results
+
+In terms of global parcellation performance, our proposed attention-gated spherical U-net achieved an overall dice coefficient of 0.899 ± 0.020 (mean ± SD). When we compared the performance metrics across different models, it showed a significantly higher overall dice coefficient compared to the surface registration-based method (p < 0.001), SPHARM-net (p < 0.001), and the original spherical U-net (p = 0.002), respectively (Table 1). Also, the median boundary distance from the proposed model achieved the lowest error than other methods while showing statistical significance only compared to the surface registration-based method (p < 0.001) (Table 2). Lastly, the proposed model showed the lowest mean absolute percent error in surface area measurement among the parcellation methods computed across all regions showing statistical significance than the surface registration-based method (p < 0.001) and SPHARM-net (p < 0.001) (Table 3).
+
+Table 1 Statistical comparisons of overall dice coefficients between the proposed model and other parcellation methods.
+
+Parcellation method	Param	Overall dice coefficient	t	p value	
+Surface registration (1)	-	0.834 ± 0.036	−17.5	<0.001	
+SPHARM-net (30)	4.3 M	0.894 ± 0.020	−3.6	<0.001	
+Original spherical U-net (12)	6.7 M	0.897 ± 0.020	−3.2	0.002	
+Attention-gated spherical U-net (Proposed model)	7.6 M	0.899 ± 0.020	-	-	
+Data for dice coefficient: mean ± SD; Param: number of trainable parameters; t: t-score from the subject-wise paired t-test. Bold p-values denote statistical significance compared to the proposed model.
+
+Table 2 Effect of parcellation performance on median boundary distance.
+
+Model	Median boundary distance (mm)	t	p-value	
+Surface registration	3.112 ± 1.225	18.8	<0.001	
+SPHARM-net	2.484 ± 1.272	1.2	0.24	
+Original spherical U-net	2.483 ± 1.320	1.1	0.29	
+Attention-gated spherical U-net	2.471 ± 1.322	-	-	
+Data: mean ± SD; t: t-score from the subject-wise paired t-test. Bold p-values denote statistical significance compared to the proposed model.
+
+Table 3 Effect of parcellation performance on global surface regional area measurement.
+
+Model	Mean absolute percent error (%)	t	p value	
+Surface registration	16.40 ± 3.67	16.0	<0.001	
+SPHARM-net	11.15 ± 2.62	4.3	<0.001	
+Original spherical U-net	10.48 ± 2.42	0.8	0.46	
+Attention-gated spherical U-net	10.40 ± 2.64	-	-	
+Data: mean ± SD; t: t-score from the subject-wise paired t-test. Bold p-values denote statistical significance compared to the proposed model.
+
+For regional evaluation of parcellation performance, we first compared dice coefficients for each parcellated region (Figure 3). The attention-gated spherical U-net outperformed the surface registration-based method, showing a statistically significant increase in the regional dice coefficient for most regions except for the precentral gyrus. When it comes to the comparisons against SPHARM-net and original spherical U-net, their trends of improvement were notable even though they did not retain statistical significance after FDR correction. The proposed model showed higher Dice coefficients than SPHARM-net for every region except for the insula and superior temporal gyrus. It also showed increased dice coefficients than the original spherical U-net for the caudal middle frontal gyrus, cingulate cortex, cuneus, frontal pole, inferior parietal gyrus, pars orbitalis, and transverse temporal gyrus. The improvement in the regional dice coefficient, although not statistically significant after FDR correction, indicates their trend toward the most precise parcellation performance.
+
+Figure 3 Regional dice coefficient for each automatic cortical parcellation method. *Significant decrease in dice coefficient when compared to the proposed model (FDR adjusted p < 0.05). Label number: see Figure 1.
+
+Similarly, the trends of improvement are observed in both errors from boundary distance measurement and surface area measurement. The attention-gated spherical U-net showed significantly lower boundary distances than the surface registration-based method for every region except the cingulate cortex, medial orbital frontal cortex, and precuneus cortex after FDR correction. Despite not achieving statistical significance following FDR correction, the boundary distances still showed decreasing trends compared to SPHARM-net and original spherical U-net (Figure 4). In terms of regional absolute percent error of surface area measurement, the attention-gated spherical U-net showed significantly lower errors from the surface registration-based method for every region except medial orbital frontal cortex, pars opercularis, and pars orbitalis after FDR correction. It also showed statistically lower errors in the frontal pole, paracentral lobule, and precuneus cortex compared to SPHARM-net. However, the attention-gated spherical U-net did not achieve statistical significance against the original spherical U-net even though it showed decreasing trends (Table 4).
+
+Figure 4 Regional median boundary distance of each automatic cortical parcellation method. *Significant increase in boundary distance for each region when compared to the proposed model (FDR adjusted p < 0.05) Label number: see Figure 1.
+
+Table 4 Effect of parcellation performance on regional surface regional area measurement.
+
+Regional absolute percent error (%)	
+Label index	Surface registration	SPHARM-net	Original spherical U-net	Attention-gated spherical U-net	
+1	16.7 + 13.5*	13.7 ± 12.3	12.5 ± 11.4	12.0 ± 10.8	
+2	13.6 ± 11.2*	10.1 ± 9.0	9.6 ± 7.9	8.9 ± 7.7	
+3	24.0 ± 21.4*	10.9 ± 10.5	12.3 ± 12.7	11.3 ± 12.0	
+4	64.0 ± 67.8*	31.7 ± 27.3*	24.1 ± 21.3	24.2 ± 19.9	
+5	12.2 ± 10.1*	10.7 ± 9.8	9.6 ± 8.1	9.6 ± 10.5	
+6	13.3 ± 11.2*	10.6 ± 9.3	10.2 ± 8.8	10.9 ± 9.5	
+7	14.8 ± 10.7*	10.3 ± 9.8	9.9 ± 8.3	10.4 ± 9.6	
+8	12.9 ± 11.3*	4.6 ± 3.5	3.6 ± 2.8	3.9 ± 2.7	
+9	25.6 ± 14.9*	16.2 ± 12.1	15.2 ± 12.1	15.2 ± 13.6	
+10	13.1 ± 12.6*	10.7 ± 8.8	10.9 ± 10.3	10.7 ± 10.5	
+11	11.5 ± 7.6*	8.0 ± 7.1	6.9 ± 5.6	6.7 ± 5.8	
+12	11.1 ± 10.2*	9.9 ± 8.9	8.2 ± 7.7	8.6 ± 8.0	
+13	11.3 ± 9.6	10.1 ± 8.2	9.9 ± 10.1	10.1 ± 9.7	
+14	14.8 ± 10.7*	8.5 ± 8.0	8.3 ± 6.4	8.7 ± 6.6	
+15	16.8 ± 13.8*	15.2 ± 12.4*	13.6 ± 9.7	12.4 ± 10.2	
+16	16.5 ± 12.5*	10.0 ± 8.5	9.7 ± 7.6	10.0 ± 7.9	
+17	13.1 ± 10.8	13.8 ± 15.3	14.6 ± 13.9	14.2 ± 13.3	
+18	17.5 ± 14.3	15.1 ± 14.3	18.1 ± 17.3	17.6 ± 15.8	
+19	22.8 ± 12.5*	12.2 ± 8.9	12.3 ± 10.2	12.9 ± 11.2	
+20	16.0 ± 16.0*	15.1 ± 13.8	12.5 ± 12.7	12.4 ± 12.1	
+21	6.4 ± 6.4*	5.9 ± 5.5	5.2 ± 4.4	4.9 ± 4.0	
+22	8.5 ± 8.5*	5.4 ± 3.8	5.3 ± 3.5	5.4 ± 3.9	
+23	13.6 ± 11.0*	9.2 ± 7.3*	7.0 ± 5.9	6.8 ± 5.8	
+24	13.0 ± 8.0*	6.9 ± 6.6	7.1 ± 5.6	6.5 ± 5.7	
+25	8.5 ± 6.6*	5.9 ± 4.7	5.1 ± 4.7	5.5 ± 4.8	
+26	10.9 ± 10.4*	8.8 ± 9.5	7.8 ± 7.3	7.5 ± 5.9	
+27	13.0 ± 9.7*	6.8 ± 5.9	7.1 ± 5.0	6.9 ± 5.1	
+28	16.0 ± 16.5*	9.5 ± 8.5	8.7 ± 6.5	8.8 ± 7.9	
+29	21.3 ± 15.4*	16.0 ± 14.1	16.5 ± 14.6	16.7 ± 14.1	
+30	25.3 ± 23.7*	19.6 ± 16.0	19.6 ± 16.9	19.5 ± 17.0	
+Data: mean ± SD; *Significant difference compared to the attention-gated spherical U-net after multiple-comparison correction with FDR at q = 0.05; Label number: see Figure 1. Bold p-values denote statistical significance compared to the proposed model.
+
+When it comes to the effect of GA on parcellation, the overall dice coefficient from the proposed model was not statistically associated with GA p=0.055, while the surface registration-based method (p<0.001) and SPHARM-net p=0.008 showed a statistically significant negative correlation (Table 5; Figure 5). Furthermore, from the subgroup analysis dividing the subjects into two subgroups based on GA: early third trimester (27–33 GA) and late third trimester (33–39 GA), the proposed model showed the highest dice coefficients in both subgroups maintaining statistical significance (p < 0.05). It highlights its robustness across varying stages of brain development (Figure 6).
+
+Table 5 Result of linear regression analysis between GA and overall dice coefficient.
+
+Model	R2	Standardized coefficients beta for GA	t	p value	
+Surface registration	0.11	−0.33	−3.66	<0.001	
+SPHARM-net	0.06	−0.25	−2.71	0.008	
+Original spherical U-net	0.03	−0.17	−1.76	0.082	
+Attention-gated spherical U-net	0.03	−0.19	−1.95	0.055	
+Bold p-values denote statistical significance compared to the proposed model.
+
+Figure 5 Cortical parcellation performance of each method along with GA.
+
+Figure 6 Comparison of cortical parcellation performance within subgroups, early third trimester (27–33 GA) and late third trimester (33–39 GA). *Significant decrease in dice coefficient when compared to the proposed model (p < 0.05).
+
+4 Discussion
+
+In this study, we proposed the attention-gated spherical U-net for cortical surface parcellation in the fetal brain. The proposed model outperformed the surface registration-based method, SPHARM-net, and the original spherical U-net. The proposed model exhibited robustness across different GAs, showing no statistically significant association with overall Dice coefficients. Subgroup analysis further confirmed its high performance and robustness across early and late third trimesters of brain development.
+
+4.1 Cortical surface parcellation performance in the fetal brain
+
+Previous cortical surface parcellation methods are not sufficient for parcellation in fetal brains which have small size, limited gyrification, and large temporal variation since those methods rely on the presence of well-defined gyral and sulcal patterns. These differences require the parcellation model to capture information both adaptively and sensitively. The attention mechanism has emerged as a pivotal component in deep learning models, particularly in tasks that require discerning intricate patterns and relationships within data (Oktay et al., 2018; Schlemper et al., 2019). In the context of cortical surface parcellation, the attention mechanism plays a crucial role in instructing the model to focus on specific patterns on the cortical feature maps, which are relevant to infer the parcellation outputs (Jetley et al., 2018; Liu et al., 2022), thereby it contributes to improving the accuracy and precision of the automatic parcellation in fetal brains. The statistically significant improvements in overall dice coefficients (Table 1), as compared to previous methods, demonstrate the effect of attention mechanisms on fetal cortical parcellation. By focusing on relevant features and suppressing irrelevant ones, the attention mechanism allowed the model to capture fine-grained boundaries more accurately, which leads to the most similar boundaries of ground truth (Figure 7) and lowest boundary distances among the automatic parcellation approaches both globally and locally (Table 2; Figure 4). This is particularly important in cortical surface parcellation in fetal brains, where the distinction between different gyral regions can be subtle.
+
+Figure 7 Visualization of automatic cortical surface parcellation outputs in the fetal brain. Comparison of predicted cortical parcellation label map on a fetal brain with 28 GA and its ground truth. On the top row, the black dotted line indicates the boundaries between four regions (scarlet, red, green, lime) from ground truth. The attention-gated spherical U-net shows smoother boundaries mostly aligned with the ground truth.
+
+Furthermore, the attention mechanism aids in contextual understanding (Zhang et al., 2018). In the complex landscape of the brain, understanding the contextual information such as global and local folding patterns of the cortical surface is important to infer regional labels on the cortical surface. The attention mechanism allows the model to weigh the importance of different regions based on their context, leading to more accurate parcellation (Chen et al., 2018). The region-wise evaluation further reinforces the superiority of the attention-gated spherical U-net since each cortical region has a different rate of growth and gyrification. In the regions where cortical folding formed in the early developmental period, such as the precentral gyrus, postcentral gyrus, and insula, all of the parcellation methods showed stable performances. On the other hand, the proposed model showed greater performance in the cortical regions with late gyrification, such as the caudal middle frontal gyrus, cuneus, inferior parietal gyrus, par orbitalis, and transverse temporal gyrus (Figure 3). Not only did it outperform the surface registration-based method, but it also showed significant improvements against other deep learning models like SPHARM-net and the original spherical U-net. This suggests that the attention mechanism is not just a supplementary feature but a core component that substantially enhances the model’s performance.
+
+Lastly, the improvement of the parcellation performance with the proposed model was not limited to the evaluation via dice coefficients. The proposed model showed the lowest error in the actual cortical surface measurements both globally and regionally (Tables 3, 4). This result emphasizes the effectiveness of the attention mechanism for automatic cortical surface parcellation, which eventually leads to precise regional analysis of the fetal brain.
+
+4.2 Parcellation performance along GA
+
+Analyzing parcellation performance along GA provides valuable insights into the model’s adaptability and accuracy across different developmental stages. The fetal brains in the third trimester are under rapid growth of the cerebral cortex with gyrification, forming foldings on the surfaces. It means that the region belonging to the same parcellation label could have large temporal variations on its folding feature maps along with GA. For the precise parcellation of fetal brains across a wide range of GA, the model is required to find peculiar patterns composing each cortical region and focus on them, such as its sulcus/gyrus and their relative relationship, despite the large temporal variation in fetal brains.
+
+The result shows the usefulness of the attention-gated spherical U-net for fetal cortical surface parcellation across a wide range of GA (Table 5; Figure 5). The surface registration-based method showed lower dice coefficients for all GAs and a bigger variation in subjects with higher GA, which led negative correlation between GA and dice coefficients. The SPHARM-net showed slightly lower performance around 31 weeks and decreased dice coefficients with GA. Our attention-gated spherical U-net was less influenced by the variations in brain development stages, suggesting that it could be a more reliable tool for fetal studies across different GA. Furthermore, the subgroup analysis dividing subjects into early (27–33 GA) and late third trimester (33–39 GA) subgroups further emphasizes the proposed model’s capability to adapt to the dynamic nature of fetal brain development during this period showing the highest overall Dice coefficients within both subgroups (Figure 6).
+
+4.3 Limitations
+
+The proposed attention-gated spherical U-net showed improved performance in cortical parcellation of the fetal brain, there are some limitations to be addressed in future studies. First, the fetal MRIs used in this study were sourced from a single center. This may introduce biases related to specific imaging protocols, equipment, and patient demographics. Multi-center studies are essential to validate the generalizability of our findings across different settings and populations. Secondly, the number of subjects included in this study is relatively smaller than other cortical brain parcellation studies due to the rarity of fetal MRIs. For future research, a collaborative multi-center approach with a larger cohort is recommended to gather a diverse set of fetal MRI data, ensuring broader generalizability. Lastly, constructing a comprehensive dataset including possible variations by maternal health, socioeconomic status, racial and ethnic background, and other clinical factors will enhance the model’s adaptability and accuracy in reflecting real-world variability in fetal brain development.
+
+5 Conclusion
+
+This study introduced the attention-gated spherical U-net for automatic cortical surface parcellation of the fetal brain, showing its improved performance over the conventional surface registration-based method and other previously developed deep learning models. The proposed model could work as a valuable tool for precise regional analyses in fetuses that help understand brain development and neurodevelopment disorders. Furthermore, it could increase sensitivity to detect abnormalities in specific regions, which leads to the potential for early detection of neurodevelopmental disorders in the future.
+
+Data availability statement
+
+The raw data supporting the conclusions of this article will be made available by the authors, without undue reservation.
+
+Ethics statement
+
+The studies involving humans were approved by Institutional Review Board at Boston Children’s Hospital. The studies were conducted in accordance with the local legislation and institutional requirements. Written informed consent for participation in this study was provided by the participants’ legal guardians/next of kin. Written informed consent was obtained from the individual(s) for the publication of any potentially identifiable images or data included in this article.
+
+Author contributions
+
+SY: Writing – original draft, Writing – review & editing, Conceptualization, Data curation, Formal analysis, Methodology, Software, Visualization. AL: Data curation, Writing – review & editing. VC: Data curation, Writing – review & editing. HY: Writing – review & editing. EY: Data curation, Writing – review & editing. PG: Writing – review & editing, Investigation, Resources, Supervision. KI: Writing – review & editing, Conceptualization, Investigation, Resources, Supervision.
+
+Conflict of interest
+
+The authors declare that the research was conducted in the absence of any commercial or financial relationships that could be construed as a potential conflict of interest.
+
+The author(s) declared that they were an editorial board member of Frontiers, at the time of submission. This had no impact on the peer review process and the final decision.
+
+Publisher’s note
+
+All claims expressed in this article are solely those of the authors and do not necessarily represent those of their affiliated organizations, or those of the publisher, the editors and the reviewers. Any product that may be evaluated in this article, or claim that may be made by its manufacturer, is not guaranteed or endorsed by the publisher.
+
+1 https://github.com/FNNDSC/fetal-brain-segmentation
+
+2 https://mcin.ca/technology/civet/
+==== Refs
+References
+
+Andescavage N. N. Du Plessis A. McCarter R. Serag A. Evangelou I. Vezina G. . (2017). Complex trajectories of brain development in the healthy human fetus. Cereb. Cortex 27 , 5274–5283. doi: 10.1093/cercor/bhw306, PMID: 27799276
+Auzias G. Coulon O. Brovelli A. (2016). MarsAtlas: a cortical parcellation atlas for functional mapping. Hum. Brain Mapp. 37 , 1573–1592. doi: 10.1002/hbm.23121, PMID: 26813563
+Bahdanau D Cho K Bengio Y (2014). Neural machine translation by jointly learning to align and translate. arXiv [Preprint]. doi: 10.48550/arXiv.1409.0473
+Benjamini Y. Hochberg Y. (1995). Controlling the false discovery rate: a practical and powerful approach to multiple testing. J. R. Stat. Soc. Ser. B 57 , 289–300. doi: 10.1111/j.2517-6161.1995.tb02031.x
+Berrut J.-P. Trefethen L. N. (2004). Barycentric Lagrange interpolation. SIAM Rev. 46 , 501–517. doi: 10.1137/S0036144502417715
+Chen L-C Zhu Y Papandreou G Schroff F Adam H (eds.) (2018). “Encoder-decoder with atrous separable convolution for semantic image segmentation” in Proceedings of the European conference on computer vision (ECCV).
+Cheng J. Dalca A. V. Fischl B. Zöllei L. Alzheimer’s Disease Neuroimaging Initiative (2020). Cortical surface registration using unsupervised learning. NeuroImage 221 :117161. doi: 10.1016/j.neuroimage.2020.117161, PMID: 32702486
+Deng J Dong W Socher R Li L-J Li K Fei-Fei L (eds.) (2009). “Imagenet: A large-scale hierarchical image database” in 2009 IEEE conference on computer vision and pattern recognition; IEEE.
+Desikan R. S. Ségonne F. Fischl B. Quinn B. T. Dickerson B. C. Blacker D. . (2006). An automated labeling system for subdividing the human cerebral cortex on MRI scans into gyral based regions of interest. NeuroImage 31 , 968–980. doi: 10.1016/j.neuroimage.2006.01.021, PMID: 16530430
+Destrieux C. Fischl B. Dale A. Halgren E. (2010). Automatic parcellation of human cortical gyri and sulci using standard anatomical nomenclature. NeuroImage 53 , 1–15. doi: 10.1016/j.neuroimage.2010.06.010, PMID: 20547229
+Devore J. L. (1995). Probability and Statistics for Engineering and the Sciences. Belmont, CA: Duxbury Press Belmont.
+Dillon JV Langmore I Tran D Brevdo E Vasudevan S Moore D . (2017). Tensorflow distributions. arXiv [Preprint]. doi: 10.48550/arXiv.1711.10604
+Dubois J. Dehaene-Lambertz G. (2015). Fetal and postnatal development of the cortex: MRI and genetics. Brain Map. 2 , 11–19. doi: 10.1016/B978-0-12-397025-1.00194-9
+Dubois J. Dehaene-Lambertz G. Kulikova S. Poupon C. Hüppi P. S. Hertz-Pannier L. (2014). The early development of brain white matter: a review of imaging studies in fetuses, newborns and infants. Neuroscience 276 , 48–71. doi: 10.1016/j.neuroscience.2013.12.044, PMID: 24378955
+Fischl B. van der Kouwe A. Destrieux C. Halgren E. Segonne F. Salat D. H. . (2004). Automatically parcellating the human cerebral cortex. Cereb. Cortex 14 , 11–22. doi: 10.1093/cercor/bhg087 14654453
+Gopinath K. Desrosiers C. Lombaert H. (2019). Graph convolutions on spectral Embeddings for cortical surface Parcellation. Med. Image Anal. 54 , 297–305. doi: 10.1016/j.media.2019.03.012, PMID: 30974398
+Ha S. Lyu I. (2022). SPHARM-net: spherical harmonics-based convolution for cortical Parcellation. IEEE Trans. Med. Imaging 41 , 2739–2751. doi: 10.1109/TMI.2022.3168670 35436188
+Habas P. A. Scott J. A. Roosta A. Rajagopalan V. Kim K. Rousseau F. . (2012). Early folding patterns and asymmetries of the normal human brain detected from in utero MRI. Cereb. Cortex 22 , 13–25. doi: 10.1093/cercor/bhr053, PMID: 21571694
+Hao L. Bao S. Tang Y. Gao R. Parvathaneni P. Miller J. A. . (2020). Automatic labeling of cortical sulci using spherical convolutional neural networks in a developmental cohort. Proc. IEEE Int. Symp. Biomed. Imag. 2020 , 412–415. doi: 10.1109/isbi45749.2020.9098414, PMID: 32547677
+Hazlett H. C. Gu H. Munsell B. C. Kim S. H. Styner M. Wolff J. J. . (2017). Early brain development in infants at high risk for autism spectrum disorder. Nature 542 , 348–351. doi: 10.1038/nature21369, PMID: 28202961
+Hong J. Yun H. J. Park G. Kim S. Laurentys C. T. Siqueira L. C. . (2020). Fetal cortical plate segmentation using fully convolutional networks with multiple plane aggregation. Front. Neurosci. 14 :591683. doi: 10.3389/fnins.2020.591683, PMID: 33343286
+Hong J. Yun H. J. Park G. Kim S. Ou Y. Vasung L. . (2021). Optimal method for fetal brain age prediction using multiplanar slices from structural magnetic resonance imaging. Front. Neurosci. 15 :714252. doi: 10.3389/fnins.2021.714252, PMID: 34707474
+Im K. Guimaraes A. Kim Y. Cottrill E. Gagoski B. Rollins C. . (2017). Quantitative folding pattern analysis of early primary sulci in human fetuses with brain abnormalities. AJNR Am. J. Neuroradiol. 38 , 1449–1455. doi: 10.3174/ajnr.A5217, PMID: 28522661
+Jetley S Lord NA Lee N Torr PH (2018). Learn to pay attention. arXiv [Preprint]. doi: 10.48550/arXiv.1804.02391
+Jiang C Huang J Kashinath K Marcus P Niessner M (2019). Spherical CNNs on unstructured grids. arXiv [Preprint]. doi: 10.48550/arXiv.1901.02039
+Kingma DP Ba J (2014). Adam: A method for stochastic optimization. arXiv [Preprint]. doi: 10.48550/arXiv.1412.6980
+Kuklisova-Murgasova M. Quaghebeur G. Rutherford M. A. Hajnal J. V. Schnabel J. A. (2012). Reconstruction of fetal brain MRI with intensity matching and complete outlier removal. Med. Image Anal. 16 , 1550–1564. doi: 10.1016/j.media.2012.07.004, PMID: 22939612
+Li G. Shen D. (2011). Consistent sulcal parcellation of longitudinal cortical surfaces. NeuroImage 57 , 76–88. doi: 10.1016/j.neuroimage.2011.03.064, PMID: 21473919
+Liu M. Chen J. Han X. (2022). Research on Retinex algorithm combining with attention mechanism for image enhancement. Electronics 11 :3695. doi: 10.3390/electronics11223695
+Liu M. Lepage C. Kim S. Y. Jeon S. Kim S. H. Simon J. P. . (2021). Robust cortical thickness morphometry of neonatal brain and systematic evaluation using multi-site MRI datasets. Front. Neurosci. 15 :650082. doi: 10.3389/fnins.2021.650082, PMID: 33815050
+Lyttelton O. Boucher M. Robbins S. Evans A. (2007). An unbiased iterative group registration template for cortical surface analysis. NeuroImage 34 , 1535–1544. doi: 10.1016/j.neuroimage.2006.10.041, PMID: 17188895
+McGrath H. Zaveri H. P. Collins E. Jafar T. Chishti O. Obaid S. . (2022). High-resolution cortical parcellation based on conserved brain landmarks for localization of multimodal data to the nearest centimeter. Sci. Rep. 12 :18778. doi: 10.1038/s41598-022-21543-3, PMID: 36335146
+Oktay O Schlemper J Folgoc LL Lee M Heinrich M Misawa K . (2018). Attention u-net: Learning where to look for the pancreas. arXiv [Preprint]. doi: 10.48550/arXiv.1804.03999
+Ortinau C. M. Rollins C. K. Gholipour A. Yun H. J. Marshall M. Gagoski B. . (2019). Early-emerging Sulcal patterns are atypical in fetuses with congenital heart disease. Cereb. Cortex 29 , 3605–3616. doi: 10.1093/cercor/bhy235, PMID: 30272144
+Parvathaneni P. Bao S. Nath V. Woodward N. D. Claassen D. O. Cascio C. J. . (2019). Cortical surface Parcellation using spherical convolutional neural networks. Med. Image Comput. Comput. Assist. Interv. 11766 , 501–509. doi: 10.1007/978-3-030-32248-9_56, PMID: 31803864
+Rajagopalan V. Scott J. Habas P. A. Kim K. Corbett-Detig J. Rousseau F. . (2011). Local tissue growth patterns underlying normal fetal human brain gyrification quantified in utero. J. Neurosci. 31 , 2878–2887. doi: 10.1523/JNEUROSCI.5458-10.2011, PMID: 21414909
+Robbins S. Evans A. C. Collins D. L. Whitesides S. (2004). Tuning and comparing spatial normalization methods. Med. Image Anal. 8 , 311–323. doi: 10.1016/j.media.2004.06.009 15450225
+Ronneberger O Fischer P Brox T (eds.) (2015). “U-net: Convolutional networks for biomedical image segmentation” in Medical Image Computing and Computer-Assisted Intervention–MICCAI 2015: 18th International Conference, Munich, Germany, October 5–9, 2015, Proceedings, Part III 18; Springer.
+Schlemper J. Oktay O. Schaap M. Heinrich M. Kainz B. Glocker B. . (2019). Attention gated networks: learning to leverage salient regions in medical images. Med. Image Anal. 53 , 197–207. doi: 10.1016/j.media.2019.01.012, PMID: 30802813
+Serag A. Kyriakopoulou V. Rutherford M. A. Edwards A. D. Hajnal J. V. Aljabar P. . (2012). A multi-channel 4D probabilistic atlas of the developing brain: application to fetuses and neonates. Annal. BMVA. 2012 , 1–14.
+Taubin G (ed.) (1995). “Curve and surface smoothing without shrinkage” in Proceedings of IEEE international conference on computer vision, IEEE.
+Tustison N. J. Avants B. B. Cook P. A. Zheng Y. Egan A. Yushkevich P. A. . (2010). N4ITK: improved N3 bias correction. IEEE Trans. Med. Imaging 29 , 1310–1320. doi: 10.1109/TMI.2010.2046908, PMID: 20378467
+Vasung L. Lepage C. Rados M. Pletikos M. Goldman J. S. Richiardi J. . (2016). Quantitative and qualitative analysis of transient fetal compartments during prenatal human brain development. Front. Neuroanat. 10 :11. doi: 10.3389/fnana.2016.00011 26941612
+Vasung L. Rollins C. K. Velasco-Annis C. Yun H. J. Zhang J. Warfield S. K. . (2020). Spatiotemporal differences in the regional cortical plate and subplate volume growth during fetal development. Cereb. Cortex 30 , 4438–4453. doi: 10.1093/cercor/bhaa033, PMID: 32147720
+Vasung L. Zhao C. Barkovich M. Rollins C. K. Zhang J. Lepage C. . (2021). Association between quantitative MR markers of cortical evolving organization and gene expression during human prenatal brain development. Cereb. Cortex 31 , 3610–3621. doi: 10.1093/cercor/bhab035, PMID: 33836056
+Vaswani A. Shazeer N. Parmar N. Uszkoreit J. Jones L. Gomez A. N. . (2017). Attention is all you need. Adv. Neural Inf. Proces. Syst. 30 . doi: 10.48550/arXiv.1706.03762
+Wang F Jiang M Qian C Yang S Li C Zhang H . (eds.) (2017). “Residual attention network for image classification” in Proceedings of the IEEE conference on computer vision and pattern recognition.
+Wu Z Li G Wang L Shi F Lin W Gilmore JH . (eds.) (2018). “Registration-free infant cortical surface parcellation using deep convolutional neural networks” in International Conference on Medical Image Computing and Computer-Assisted Intervention; Springer.
+Wu Z. Wang L. Lin W. Gilmore J. H. Li G. Shen D. (2019). Construction of 4D infant cortical surface atlases with sharp folding patterns via spherical patch-based group-wise sparse representation. Hum. Brain Mapp. 40 , 3860–3880. doi: 10.1002/hbm.24636, PMID: 31115143
+Xia J. Wang F. Benkarim O. M. Sanroma G. Piella G. Gonzalez Ballester M. A. . (2019). Fetal cortical surface atlas parcellation based on growth patterns. Hum. Brain Mapp. 40 , 3881–3899. doi: 10.1002/hbm.24637, PMID: 31106942
+Yeo B. T. Sabuncu M. R. Vercauteren T. Ayache N. Fischl B. Golland P. (2010). Spherical demons: fast diffeomorphic landmark-free surface registration. IEEE Trans. Med. Imaging 29 , 650–668. doi: 10.1109/TMI.2009.2030797, PMID: 19709963
+Yun H. J. Chung A. W. Vasung L. Yang E. Tarui T. Rollins C. K. . (2019). Automatic labeling of cortical sulci for the human fetal brain based on spatio-temporal information of gyrification. NeuroImage 188 , 473–482. doi: 10.1016/j.neuroimage.2018.12.023, PMID: 30553042
+Yun H. J. Im K. Jin-Ju Y. Yoon U. Lee J. M. (2013). Automated sulcal depth measurement on cortical surface reflecting geometrical properties of sulci. PLoS One 8 :e55977. doi: 10.1371/journal.pone.0055977, PMID: 23418488
+Yun H. J. Perez J. D. R. Sosa P. Valdes J. A. Madan N. Kitano R. . (2021). Regional alterations in cortical Sulcal depth in living fetuses with down syndrome. Cereb. Cortex 31 , 757–767. doi: 10.1093/cercor/bhaa255, PMID: 32940649
+Yun H. J. Vasung L. Tarui T. Rollins C. K. Ortinau C. M. Grant P. E. . (2020). Temporal patterns of emergence and spatial distribution of Sulcal pits during fetal life. Cereb. Cortex 30 , 4257–4268. doi: 10.1093/cercor/bhaa053, PMID: 32219376
+Zhang H Dana K Shi J Zhang Z Wang X Tyagi A . (eds.) (2018). “Context encoding for semantic segmentation” in Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition.
+Zhao F. Wu Z. Li G. (2022). Deep learning in cortical surface-based neuroimage analysis: a systematic review. Intellig. Med. 3 , 46–58. doi: 10.1016/j.imed.2022.06.002
+Zhao F. Wu Z. Wang L. Lin W. Gilmore J. H. Xia S. . (2021). Spherical deformable U-net: application to cortical surface parcellation and development prediction. IEEE Trans. Med. Imaging 40 , 1217–1228. doi: 10.1109/TMI.2021.3050072, PMID: 33417540
+Zhao F. Xia S. Wu Z. Wang L. Chen Z. Lin W. . (2019). Spherical U-net for infant cortical surface parcellation. Proc. IEEE Int. Symp. Biomed. Imag. 2019 , 1882–1886. doi: 10.1109/ISBI.2019.8759537, PMID: 31681458
+Zhao F Xia S Wu Z Wang L Chen Z Lin W . (eds.) (2019). “Spherical U-Net for infant cortical surface parcellation” in 2019 IEEE 16th International Symposium on Biomedical Imaging (ISBI 2019); IEEE.

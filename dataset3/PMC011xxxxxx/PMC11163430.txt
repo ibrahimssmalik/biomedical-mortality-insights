@@ -1,0 +1,412 @@
+
+==== Front
+J Phys Chem A
+J Phys Chem A
+jx
+jpcafh
+The Journal of Physical Chemistry. a
+1089-5639
+1520-5215
+American Chemical Society
+
+38787736
+10.1021/acs.jpca.3c08386
+Article
+Uncertainty-Aware First-Principles Exploration of Chemical Reaction Networks
+Bensberg Moritz
+https://orcid.org/0000-0002-9508-1565
+Reiher Markus *
+Department of Chemistry and Applied Biosciences, ETH Zürich, Vladimir-Prelog-Weg 2, 8093 Zürich, Switzerland
+* Email: markus.reiher@phys.chem.ethz.ch.
+24 05 2024
+06 06 2024
+128 22 45324547
+24 12 2023
+13 05 2024
+13 05 2024
+© 2024 The Authors. Published by American Chemical Society
+2024
+The Authors
+https://creativecommons.org/licenses/by/4.0/ Permits the broadest form of re-use including for commercial purposes, provided that author attribution and integrity are maintained (https://creativecommons.org/licenses/by/4.0/).
+
+Exploring large chemical reaction networks with automated exploration approaches and accurate quantum chemical methods can require prohibitively large computational resources. Here, we present an automated exploration approach that focuses on the kinetically relevant part of the reaction network by interweaving (i) large-scale exploration of chemical reactions, (ii) identification of kinetically relevant parts of the reaction network through microkinetic modeling, (iii) quantification and propagation of uncertainties, and (iv) reaction network refinement. Such an uncertainty-aware exploration of kinetically relevant parts of a reaction network with automated accuracy improvement has not been demonstrated before in a fully quantum mechanical approach. Uncertainties are identified by local or global sensitivity analysis. The network is refined in a rolling fashion during the exploration. Moreover, the uncertainties are considered during kinetically steering of a rolling reaction network exploration. We demonstrate our approach for Eschenmoser–Claisen rearrangement reactions. The sensitivity analysis identifies that only a small number of reactions and compounds are essential for describing the kinetics reliably, resulting in efficient explorations without sacrificing accuracy and without requiring prior knowledge about the chemistry unfolding.
+
+document-id-old-9jp3c08386
+document-id-new-14jp3c08386
+ccc-price
+Special Issue
+
+Published as part of The Journal of Physical Chemistry Avirtual special issue “Rodney J. Bartlett Festschrift”.
+==== Body
+pmc1 Introduction
+
+If chemical compounds react in a flask in the laboratory, there will be a large number of reaction paths conceivable, leading to a complex network of elementary reaction steps with potentially many products. Detailed knowledge of such a reaction network is required for any kind of rational reaction optimization in order to prevent the formation of side products while promoting a desired reaction path. Constructing such reaction networks is facilitated by automated reaction network exploration protocols based on quantum chemical calculations (see refs (1−7) for reviews). These protocols construct large reaction networks with automated algorithms, therefore reducing the amount of manual work and the chance of overlooking essential reaction channels compared to manual investigations. After calculating the free energies for all compounds and rate constants in the network, these networks can be directly subjected to microkinetic modeling to predict products, key intermediates of the reaction, and concentration profiles.
+
+Since the objective of a reaction network exploration is to derive a quantitative high-fidelity model of a chemical reaction in experiment, the emerging chemical reaction network should focus on the chemistry of the reactive system under experimental conditions. This means that the automated exploration must be autonomously steered toward the kinetically relevant part of the network. To address this challenge, we proposed an automated kinetics-interlaced exploration algorithm8 (KIEA) that achieves this through analysis of concentration fluxes obtained from microkinetic modeling during the generation of the network. A related analysis of microkinetic modeling simulations is used in the reaction mechanism generator9−12 (RMG), which focuses on combustion chemistry13−15 and heterogeneous catalysis.10,11 The algorithm in RMG follows a greedy strategy during the exploration, focusing on an in-depth exploration of single reaction paths16 rather than on a broad exploration, as facilitated by KIEA. Sumiya and Maeda17 suggested an alternative approach to steer automated explorations by only analyzing the rate constant matrix of the reaction network and avoiding explicit microkinetic modeling. However, their approach is restricted to a single potential energy surface, implying that the atom composition of every compound in the network must be the same. Apart from these approaches, a shortest-path analysis,18−20 such as provided by Pathfinder,20 which takes kinetic information on the reaction network into account, can also quantify how accessible a compound in the reaction network is and, hence, steer the exploration of reaction networks.
+
+All these steering approaches depend crucially on the accuracy of the kinetic and thermodynamic parameters of the underlying reaction network. However, accurate quantum chemical methods require tremendous computational resources, making a large-scale exploration of tens of thousands of reactions challenging, if not impossible. Therefore, a refinement-based strategy is a way out of this problem in which the network is initially explored with a computationally efficient but less reliable method before refining the energies (and sometimes the structures) of the compounds in a second step.8,21−24 Because of the high computational cost of accurate quantum chemical calculations, the refinement is generally executed after the exploration and is limited only to a small set of reactions and compounds that dominate the overall kinetics.8,25 These reactions and compounds can be identified by sensitivity analysis of the microkinetic model with respect to its kinetic parameters (e.g., rate constants or free energies).25−29 Such a postexploration analysis and refinement of the reaction network can also extract the most likely reaction mechanism from the large reaction network.28,30
+
+Since autonomous steering of an automated reaction network exploration should depend on the kinetics of the network, it is crucial to consider the uncertainty in the kinetic parameters during exploration. Quantifying such uncertainties during the reaction network exploration was demonstrated with the program RMG for carbon dioxide methanation on Ni(111)31,32 and the oxidation of exhaust gas on Pt(111)33 by analyzing reaction network ensembles. These ensembles were generated with RMG using graph enumeration rules and the concept of reaction families. However, such an approach applies only to chemistry where such reaction families are well documented and the graph rules can be applied reliably.
+
+We avoid these restrictions by relying fully on first-principles calculations. We propose to explicitly interweave (i) an unfolding exploration of the reaction network with (ii) the identification of kinetically relevant reactions and compounds and (iii) the refinement of the kinetic parameters in one algorithm.
+
+Our algorithm is illustrated in Figure 1. It combines KIEA to steer the exploration (i.e., select new exploration trials) based on concentrations predicted from microkinetic modeling simulations with an integrated refinement of structures and energies (IRES). IRES identifies important reactions and compounds through local one-at-a-time (OAT) or Morris sensitivity analysis34 of the microkinetic modeling output and then refines structures, reaction paths, and energies in the network fully automatically. The Morris sensitivity analysis not only identifies important parameters in the microkinetic model but also quantifies the uncertainty in the predicted concentrations. We exploit this fact and demonstrate how the uncertainties can be directly included in KIEA.
+
+Figure 1 Workflow of the KIEA-IRES exploration.
+
+This work is structured as follows: First, we develop the IRES algorithm in Section 2, detailing our microkinetic modeling and sensitivity analysis approaches. In Section 3, we provide technical details and introduce the Eschenmoser–Claisen reaction, which serves as an example for developing our exploration approach. We then demonstrate the IRES-KIEA in Section 4 and conclude in Section 5.
+
+2 Conceptual Considerations
+
+2.1 Microkinetic Modeling
+
+For microkinetic modeling, the ordinary differential equations describing the mass-action kinetics of a chemical reaction network are integrated to obtain the concentration trajectories cn(t) for each species n. The forward (+) and backward (−) reaction rates fI± of the reaction I are given as1
+
+with the forward and backward reaction rate constants kI+ and kI–, respectively, and the stoichiometric coefficients SnI± of the species in reaction I. Accordingly, the differential equation describing the change of concentration of species n is given by2
+
+and the total concentration flux passing through reaction I by3
+
+where t0 and tmax denote the start and end times of the microkinetic modeling simulation, respectively. The concentration flux passing through species n thus reads4
+
+We approximate the reaction rate constants kI+ by Eyring’s absolute rate theory35,365
+
+where ΔGI‡ is the free energy of activation of reaction I, h is Planck’s constant, T the temperature, kB Boltzmann’s constant, and Γ the transmission coefficient (assumed to be Γ = 1 in the following). To ensure that the reaction is thermodynamically balanced, the reverse rate constant kI– is then expressed with the equilibrium constant KI as6
+
+The equilibrium constant KI is defined as usual7
+
+with the free energies Gn of the species on the reaction’s right-hand side (RHS) and left-hand side (LHS)8
+
+2.2 Sensitivity Analysis
+
+The calculation of the parameters Gn and ΔGI‡ required for the microkinetic modeling [see eqs 5 and 8] will always be subject to various approximations, leading to an uncertain microkinetic modeling output. To reduce the uncertainty in the microkinetic modeling output, our IRES approach identifies the most influential parameters (Gn and ΔGI‡) through sensitivity analysis and refines them by carrying out more accurate calculations in a fully autonomous fashion. The objective of IRES is to increase the accuracy of the continued reaction network exploration driven by KIEA, which relies on the concentration fluxes cnflux and maximum concentrations cnmax encountered during the microkinetic modeling. Because cnmax is a lower bound for cnflux for compounds with zero starting concentration, it is the key output of the microkinetic modeling simulation and, therefore, analyzed by sensitivity analysis.
+
+In local OAT sensitivity analysis, the relevance of an input parameter on the model output is calculated by changing one input parameter xi at a time from the baseline parameters Xbase (such as the most accurate free energies available) and evaluating the model output. Therefore, only one parameter differs from the baseline parameters during model evaluation. To provide an upper limit for the error of cnmax, the maximum effect of the parameter uncertainty on cnmax is crucial. For realistic variations of the parameters, we vary the free energies in the microkinetic modeling within their uncertainty bounds. We can expect the effect of this variation to be the largest if we change the parameter by its uncertainty, i.e., to the edge of the range of likely values. Therefore, we define the modification of the input parameters as9
+
+where u(xi) is the uncertainty we expect for parameter xi, and xiu and xil denote the most extreme upper and lower parameter values of i, respectively. Care must be taken when modifying the free energies to avoid negative backward barriers. In such cases, the forward reaction barrier is increased to give a zero backward barrier.
+
+To derive a sensitivity measure δcimax, we collect the maximum concentrations cnmax(Xil/u) from the OAT model evaluations and calculate their absolute maximum change10
+
+compared to the baseline model’s maximum concentrations cnmax(Xbase), where Xil/u = (x1,...,xi–1,xil/u,xi+1,...xk) are the modified parameters from the OAT procedure and k is the total number of parameters.
+
+Because KIEA disregards any compound with negligible concentration flux in following microkinetic modeling steps,8 refinement of these compounds cannot affect the exploration. Therefore, the sensitivity analysis can be accelerated by (i) varying free energies only if the associated species shows a concentration flux cnflux > τfluxkin and (ii) by varying free energies of activation only if the reaction exhibits a flux FI > τfluxkin.
+
+The baseline parameters Xbase can be understood as one point in the possible input space given by all possible values within the input’s uncertainty. Because local OAT sensitivity analysis samples only a tiny part of this input space close to the baseline point, it is often criticized for being unreliable in identifying essential model parameters and may fail to provide the correct picture of the sensitivities and model output uncertainties.37,38
+
+A computationally affordable alternative to local sensitivity analysis is Morris sensitivity analysis,34 where a grid of equally spaced input values is formed for each parameter from the range of possible values. This range is given as the interval between the values of xi in eq 9. Afterward, the model is evaluated for a set of N samples Xr = (xr,0, ..., xr,k), drawn at random from initially selected parameter values, where xr,0, ..., xr,k are the k model parameters for sample r. Then, each parameter value of Xr is changed one-at-a-time in random order to a neighboring value xr,i′ on the parameter grid. The parameters xr,i′ are not returned to their initial values xr,i. Therefore, this algorithm creates a trajectory through the input space starting at Xr. By this procedure, Morris sensitivity analysis covers a significantly larger part of the input space than local OAT analysis. It is able to identify crucial parameters in the model with a relatively small number of samples N, typically in the range between 10 and 20.37
+
+To quantify the maximum effect of an input parameter on the maximum concentrations, we define a sensitivity measure as11
+
+where μni* is the expectation value of the absolute elementary effect39 for parameter i and maximum concentration cnmax(Xr)12
+
+Here, Δ is the difference between the values for parameter i on its parameter grid, and the tilde (i.e., instead of xr,j) highlights that these parameters may have been changed before because of the random order in the parameter modification during the sensitivity analysis.
+
+Since Morris sensitivity analysis provides an adequate sampling of the input parameter space, the spread in the microkinetic modeling output provides an uncertainty measure for the concentrations. This allows us to define an uncertainty-aware version of KIEA. Instead of exploring unimolecular and bimolecular reactions based on the criteria cnflux > τflux and cnmaxcmmax > τmax, respectively,8 we include the concentration spread by reformulating these criteria as13
+
+and14
+
+Here, and σ(cnflux) are the arithmetic mean and standard deviation of the concentration flux of compound n and and σ(cnmax) are the arithmetic mean and standard deviation of the compound’s maximum concentration, respectively. The mean and standard deviation are calculated over the ensemble of microkinetic modeling simulations in the Morris sensitivity analysis.
+
+3 Computational Methodology
+
+3.1 Eschenmoser–Claisen Rearrangement
+
+To demonstrate our IRES-KIEA approach, we chose the Eschenmoser–Claisen rearrangement40 of allyl alcohol a1 and of furfuryl alcohol f1. The rearrangement of furfuryl alcohol was first reported in 196941 in dimethylformamide at 160 °C after 24 h. However, there is no experimental report on the Eschenmoser–Claisen rearrangement of allyl alcohol. Still, allyl alcohol represents the main reactive moiety in the reaction, making it an ideal model reactant for a general Eschenmoser–Claisen rearrangement. A sketch of the reaction mechanisms is shown in Figure 2. The elevated reaction temperature is required for the rate-limiting initial alcohol exchange and methanol elimination to form intermediates a3 and f3, respectively, before the Claisen rearrangement step occurs.42 In the case of the furfuryl-based rearrangement [Figure 2b], the product of the Claisen rearrangement (f4) step undergoes an H-shift to re-establish aromaticity in the furan moiety and form the final product f5. The Eschenmoser–Claisen rearrangement reaction is an E stereoselective, [3,3] sigmatropic rearrangement of allyl alcohols and N,N-dimethylacetamide-dimethyl acetal a at reduced temperatures of around 150 °C compared to other Claisen-type rearrangements.43 The reaction is employed in natural product synthesis because of the mild reaction conditions and its stereoselectivity.44−47
+
+Figure 2 Sketch of the reaction mechanisms of the Eschenmoser–Claisen rearrangement reactions of allyl alcohol (a) and furfuryl alcohol (b). The notation with multiple arrows indicates that the reaction may not be a single elementary reaction step.
+
+3.2 Reaction Network Exploration
+
+In our Scine software framework,48 reaction networks are encoded in terms of structures, which are local minima on Born–Oppenheimer potential energy surfaces, and elementary steps, which represent transitions between local minima on a potential energy surface.4 These transitions proceed either through a transition state or are barrierless processes (e.g., in the case of the association of two molecules to form a weakly interacting complex). Several structures (typically conformers) are grouped into compounds according to their charge, spin multiplicity, and the abstract molecular graph and structure representation determined by our software module Molassembler.49,50 A structure containing multiple molecules is grouped into so-called flasks, in which reactive complexes are formed. Elementary steps are grouped into reactions so that compounds or flasks associated with the structures that are connected by the elementary steps can be related.
+
+3.3 Microkinetic Modeling
+
+The mass-action kinetics were integrated at the level of compounds and flasks as kinetic species and reactions describing the transition between these species. Because we did not perform exhaustive conformer searches for every compound, flask, and transition state, we approximated Gn by the minimum of the harmonic-oscillator/particle-in-a-box/static-rotor free energy approximation GiHPS calculated for any structure i of the compound or flask n15
+
+where GniHPS is given by16
+
+Here, Eielec, δGivib, δGirot, δGitrans, and δGsolv are the electronic energy, harmonic vibrational free energy correction, free energy correction from the static rotor model, translational free energy correction from the particle-in-a-box model, and solvation free energy correction, respectively. We calculated the translational free energy contribution for a concentration of 1.0 mol L–1 to account for the typical standard state free energy correction in solution.51
+
+Similar to eq 15, we calculated the free energies of activation ΔGI‡ as17
+
+18
+
+i.e., as the difference between the minimal GiHPS approximation for a transition state of the reaction and LHS’s free energy. In the case of barrierless reactions, where transition states are not available, the free energy approximation for the transition state GI‡ = mini∈I(GIiHPS) was replaced by the maximum of the free energies of RHS and LHS19
+
+3.4 Electronic Structure Models
+
+To reduce the number of single-point calculations, we refined electronic energies by coupled cluster calculations52,53 only for a subset of structures. Either the structures were discovered as part of an elementary step with a barrier lower than 250.0 kJ mol–1 or during the sensitivity-based refinement.
+
+To maximize the efficiency of the exploration and achieve sufficient accuracy for the microkinetic modeling, we calculated the electronic energy contribution to the free energy with a different electronic structure method than employed for the reaction exploration, structure optimization, and harmonic frequency calculations. These model combinations will be denoted as the electronic energy model//structure optimization and frequency model. We applied the following three ranks for our refinement-based exploration strategy.(I) PBE0-D3//GFN2-xTB
+
+(II) PBE0-D3//PBE-D3
+
+(III) DLPNO-CCSD(T)//PBE-D3
+
+Here, we denote the exchange–correlation hybrid functional by Adamo and Barone54 as PBE0 and the pure functional by Perdew, Burke, and Ernzerhof’s as PBE.55 Both functionals were corrected for long-range dispersion by Grimme’s D3 correction,56 including Becke–Johnson damping.57 GFN2-xTB denotes the semiempirical tight binding method developed by Bannwarth et al.,58 and DLPNO-CCSD(T) refers to domain-based local pair natural orbital (PNO)-coupled cluster with singles, doubles, and perturbative triple excitations59,60 with tight PNO thresholds. PBE0-D3 and DLPNO-CCSD(T) calculations were carried out with the def2-TZVP basis set61 and PBE-D3 calculations with the def2-SV(P) basis set.61 Furthermore, the conductor-like screening model62 represented the solvent in the DFT calculations [dielectric constants (ϵ) and solvent radii (rsolv): toluene: ϵ = 2.38, rsolv = 3.48 au, acetonitrile: ϵ = 37.5, rsolv = 2.76 au], whereas the generalized Born and surface area63,64 model described the solvent in the GFN2-xTB calculations, and the conductor-like polarizable continuum model65 (toluene: ϵ = 2.4, rsolv = 1.3 au, acetonitrile: ϵ = 36.6, rsolv = 1.3 au) represented the solvent in the DLPNO-CCSD(T) calculations.
+
+Free energies Gn for the microkinetic modeling were calculated according to the first two ranks of the electronic structure model hierarchy, i.e., the electronic energies were always calculated with PBE0-D3 to ensure comparable energies. The hierarchy was implemented as follows: if the free energy calculated with PBE0-D3//PBE-D3 was available in the database, it was preferred over a PBE0-D3//GFN2-xTB free energy approximation. The free energies of activation ΔGI‡ were calculated similarly, including all three hierarchy ranks.
+
+All IRES-based explorations were performed with PBE0-D3//GFN2-xTB as the initial electronic structure method. During the exploration, free energies found to be important by the sensitivity analysis were refined with PBE0-D3//PBE-D3 and free energies of activation with DLPNO-CCSD(T)//PBE-D3.
+
+The initial transition-state GFN2-xTB structures were refined by double-ended reaction path optimizations with PBE-D3 (basis set and solvent models as detailed above) for the ten energetically most favorable elementary steps within 20.0 kJ mol–1 of the lowest PBE0-D3//GFN2-xTB free energy transition state, as described in ref (8). In this double-ended reaction path optimization, the minimum energy path is obtained by curve optimization,66 the transition state is optimized, and the reactants and reaction products are obtained from an intrinsic reaction coordinate scan. Then, we calculated the electronic energy for each newly optimized stationary point with DLPNO-CCSD(T) and the vibrational harmonic frequencies with PBE-D3. To increase the number of successfully refined reactions, we restarted any unsuccessful transition-state optimization with a lowered trust radius (to 0.05 bohr instead of the original 0.1 bohr) and increased the maximum number of iterations (to 250 instead of the original 100). The accuracy of the free energies of the compounds and flasks was increased by optimizing the ten structures with the lowest value of GiHPS with PBE-D3. These structures were chosen to be at most 20.0 kJ mol–1 higher in energy (PBE0-D3//GFN2-xTB) than the most stable structure. Then, PBE0-D3 electronic energies were calculated for the reoptimized structures, and the vibrational harmonic frequencies were calculated with PBE-D3.
+
+3.5 Exploration Protocols
+
+The reaction network was explored with the programs of the SCINE software suite. Chemoton(67,68) was employed to sort structures and elementary steps and create the input for the individual electronic structure calculations. The exploration calculations were then performed by Puffin(69) and ReaDuct.66,70,71 The electronic structure calculations were performed by external programs: Electronic energies and nuclear gradients were provided by Turbomole(72,73) (version 7.4.1) and xTB(74) (version 6.5.1) for all DFT models and for GFN2-xTB, respectively. The DLPNO-CCSD(T) electronic energies were calculated with Orca(75) (version 5.0.2).
+
+Specific reaction conditions for the Eschenmoser–Claisen rearrangement of allyl alcohol were not reported in the literature. We assumed a temperature of 150 °C and toluene as a solvent for our exploration because these conditions are close to the conditions reported in the original publication of the Eschenmoser–Claisen rearrangement40 and for Eschenmoser–Claisen rearrangements in general.43 Furthermore, the reaction network of the rearrangement of furfuryl alcohol was explored at 160 °C and acetonitrile as a solvent instead of dimethylformamide as reported in ref (41). Acetonitrile was assigned a dielectric constant of ϵ = 37.5, which is similar to that of dimethylformamide (ϵ = 37), but, in contrast to dimethylformamide, solvent parameters were available for all electronic structure methods employed.
+
+We explored the reaction networks of both reactions combined with the local OAT sensitivities for IRES-KIEA with the thresholds τmax = 1 × 10–3 mol2 L–2 and τflux = 1 × 10–2 mol L–1 to select compounds for the exploration of bimolecular and unimolecular reactions, respectively. The maximum time for the microkinetic modeling simulations was set to tmax = 24 h to match the experimental reaction conditions. We set the starting concentrations for both reactants to 1 mol L–1 to avoid biasing the exploration to unimolecular kinetics of a [note that a is commonly used in excess of 1.3 (ref (40)) to 2 (ref (41)) equivalents in the experiment]. The KIEA algorithm was only provided with the optimized structures of the starting reactants, i.e., the structures of a and a1 for the Eschenmoser–Claisen rearrangement of allyl alcohol and a and f1 for the Eschenmoser–Claisen rearrangement of furfuryl alcohol.
+
+For comparison, we explored the reaction network of the Eschenmoser–Claisen rearrangement of allyl alcohol with PBE0-D3//GFN2-xTB and DLPNO-CCSD(T)//PBE-D3 with the same KIEA settings as in the local OAT-based explorations. Note that we calculated the free energies for the microkinetic modeling in the DLPNO-CCSD(T)//PBE-D3 exploration with PBE0-D3//PBE-D3 and only the free energies of activation with DLPNO-CCSD(T)//PBE-D3.
+
+The sensitivity measures δcimax were calculated after each microkinetic modeling simulation in KIEA with a truncation threshold of . Refinement calculations were started for reactions, compounds, and flasks if for their associated free energy of activation or free energy parameter i. We chose a threshold of 1 × 10–2 mol L–1 for the maximum concentration change to match the threshold τflux, as this choice reduced the uncertainty in cnflux and cnmax for compounds that are either significantly populated during the exploration or at the edge of being explored further by KIEA.
+
+In addition to the local OAT-based IRES strategy, we explored both Eschenmoser–Claisen reactions with the uncertainty-aware algorithm based on Morris sensitivity analysis and the KIEA exploration conditions given in eqs 13 and 14. The Morris sensitivity indices were calculated with four levels in the parameter grid and N = 20 samples, the maximum number affordable without the sensitivity analysis becoming a bottleneck of the exploration. Convergence of the sensitivity measures with respect to the number of Morris samples is discussed in the Supporting Information. This definition of the exploration criteria in eqs 13 and 14 explicitly includes a measure of the uncertainty of the maximum concentrations and concentration fluxes through their standard deviation. Therefore, we chose the thresholds τmax = 1 × 10–2 mol2 L–2 and τflux = 1 × 10–1 mol L–1 significantly higher than in the local OAT-based explorations. We refined parameters i if μi*max exceeded a refinement threshold τref = 5 × 10–2 mol L–1, which means that a small modification of the parameter is expected to change at least one maximum concentration by 5×10–2 mol L–1. Similar to the threshold choice for the local OAT sensitivities (vide supra), we chose the value of τref such that it was close to τflux, therefore reducing the uncertainty in concentration fluxes and maximum concentrations for compounds which were close to being considered for further exploration.
+
+For the Morris sensitivity analysis, we select the sampling trajectories of the microkinetic models with up to 1000 parameters (elements of Xr, that is free energies Gn or activation energies ΔGI‡) through a variant of Morris sensitivity analysis proposed by Saltelli and co-workers39 that maximizes the input space covered by the sensitivity analysis, instead of relying on an initially small number of random points, as discussed in Section 2. This modified Morris approach became prohibitively slow for large microkinetic models with more than 1000 parameters, for which we relied on random trajectories, as proposed originally by Morris.34 Furthermore, we applied a variant of the flux-based screening procedure from the local OAT sensitivities in the case of microkinetic models with more than 1000 parameters. In such cases, we restricted the Morris sensitivity analysis to parameters associated with compounds and flasks with and reactions with FI > 1 × 10–9 mol L–1 in the baseline microkinetic modeling simulation. We chose this screening procedure as a compromise to prevent the tens of thousands of microkinetic model evaluations from becoming the bottleneck of the exploration. We chose the screening threshold as 1 × 10–9 mol L–1, and hence, significantly lower than for the local OAT sensitivities. A short analysis of the effect of the screening threshold on the concentration uncertainties predicted for the Eschenmoser–Claisen rearrangement of furfuryl alcohol is given in the Supporting Information. Note that our uncertainty-aware exploration protocol also considers the variance in the concentration flux, which is only available after the sensitivity analysis. The Morris sensitivity analysis and sampling were performed through an interface to the Sensitivity Analysis Library.76,77 All microkinetic modeling simulations in this work were executed by an interface to the program Reaction Mechanism Simulator.11,78
+
+3.6 Pathfinder Analysis
+
+Chemical reactions are often discussed in terms of a single reaction path that dominates the overall conversion from reactants to products. In order to connect our detailed microkinetic model with this more approximate picture, we extracted reaction paths with the Pathfinder shortest-path analysis20 from the microkinetic models of the converged uncertainty-aware explorations. Pathfinder searches for the shortest path between two compounds in the reaction network. For this purpose, it takes the reaction barriers in the network and the starting reactants into account. The availability of the starting reactants is weighted by a so-called compound cost. For the Pathfinder analysis of the Eschenmoser–Claisen reaction of allyl alcohol, we assumed a compound cost of 1.0 for allyl alcohol and N,N-dimethylacetamide-dimethyl acetal because both are assigned equal starting concentrations during the exploration. In the case of the Eschenmoser–Claisen rearrangement of furfuryl alcohol, we assumed a compound cost of 1.0 for 1-methoxy-N,N-dimethylethen-1-amine and 2.0 for furfuryl alcohol because 1-methoxy-N,N-dimethylethen-1-amine is provided at a two times excess compared to furfuryl alcohol in the experiment.41
+
+3.7 Elementary Step Searches
+
+The reaction network exploration was based on single-ended reaction trial calculations run with the second-generation Newton-trajectory-type algorithm detailed in ref (67). For these calculations, the number of bond modifications was limited to two, with at least one intermolecular bond formation for bimolecular reactions. Furthermore, the reaction trials were restricted by a set of element-specific rules that were chosen to reflect the general textbook-known reactivity of functional groups involved in the mechanism:Oxygen and nitrogen atoms were always considered reactive.
+
+Hydrogen atoms were considered reactive if part of an ammonium group or at a distance of two bonds to an sp2-hybridized carbon atom or acetal group.
+
+Carbon atoms were considered reactive if sp2-hybridized or neighbors of an sp2-hybridized carbon atom.
+
+Furthermore, reaction coordinates were restricted in such a way that they always involved different polarized atoms in bond formation and breaking processes. Atoms were assigned positive and negative polarization identifiers according to their Pauling electronegativities, as described in ref (8). Moreover, we always assigned positive identifiers to hydrogen atoms and both positive and negative identifiers to sp2-hybridized carbon atoms.
+
+3.8 Uncertainty Estimates
+
+For both sensitivity analysis approaches considered in this work, we required estimates for the uncertainties of Gn and ΔGI‡ for PBE0-D3//GFN2-xTB, PBE0-D3//PBE-D3, and DLPNO-CCSD(T)//PBE-D3. For this, we compared the reaction networks for the Eschenmoser–Claisen rearrangement of allyl alcohol (a + a1 → a4) explored with PBE0-D3//GFN2-xTB and DLPNO-CCSD(T)//PBE-D3 by matching flasks, compounds, and reactions that are accessible from the starting compounds by crossing reaction barriers of less than 400.0 kJ mol–1. We then calculated the differences ΔGn of the free energies20
+
+and the differences ΔΔGI‡ of the activation free energies21
+
+Note that we calculated ΔΔGI‡ for forward and backward reactions, whereas the ΔGI‡ parameters in the microkinetic modeling are defined with respect to the LHS of the reaction.
+
+The differences ΔΔGI‡ and ΔGn [see eqs 21 and 20] are shown in Figure 3 as a function of their reference values ΔGI‡(DLPNO-CCSD(T)//PBE-D3) and Gn(PBE0-D3//PBE-D3), respectively. The ΔΔGI‡ values [Figure 3a] are scattered and can reach the order of magnitude of their reference values in some cases. Nevertheless, the mean absolute difference (MAD) is only 15.1 kJ mol–1, largely because of the high number of relatively low-barrier and barrierless reactions. Furthermore, the mean of ΔΔGI‡ is −4.5 kJ mol–1, which suggests that PBE0-D3//GFN2-xTB overestimates reaction barriers on average compared to DLPNO-CCSD(T)//PBE-D3.
+
+Figure 3 (a,c,d) Errors of the activation energies ΔGI‡ calculated with PBE0-D3//GFN2-xTB, PBE0-D3//PBE-D3, and PBE-D3//PBE-D3 with respect to the DLPNO-CCSD(T)//PBE-D3 activation energy. (b) Errors of the free energies Gn calculated with PBE0-D3//GFN2-xTB with respect to the PBE0-D3//PBE-D3 free energies.
+
+To bring these errors into perspective, we extracted the reaction barriers for PBE0-D3//PBE-D3 and PBE-D3//PBE-D3 from the DLPNO-CCSD(T)//PBE-D3 exploration and plotted their ΔΔGI‡ in Figure 3c,d, respectively. PBE0-D3//PBE-D3 shows a MAD of 10.3 kJ mol–1 that is lower than for PBE0-D3//GFN2-xTB (15.1 kJ mol–1) and a mean error of 9.1 kJ mol–1. This implies that PBE0-D3//PBE-D3 underestimates the reaction barrier on average. Note that PBE0-D3//GFN2-xTB overestimates it, even though the electronic energy contributions are calculated with the same DFT method. Moreover, the importance of the DFT functional with which the electronic energies are calculated becomes evident for PBE-D3//PBE-D3. PBE-D3//PBE-D3 has a high MAD of 32.0 kJ mol–1 because it systematically underestimates the reaction barrier, as is shown by the high mean of ΔΔGI‡ which is 29.8 kJ mol–1.
+
+The free energy differences ΔGn [Figure 3b] show a striped pattern as a function of Gn(PBE0-D3//PBE-D3) because of the high absolute values of the total absolute energies Gn(PBE0-D3//PBE-D3). Furthermore, the ΔGn increases on average with decreasing Gn(PBE0-D3//PBE-D3). The mean and MAD of ΔGn are 12.0 and 15.8 kJ mol–1, respectively, reflecting the anticorrelation between Gn(PBE0-D3//PBE-D3) and ΔGn.
+
+To be consistent with the MAD of ΔΔGI‡, we chose the uncertainty of ΔGI‡ with PBE0-D3//GFN2-xTB to be a constant value of . Furthermore, we chose the uncertainty bounds for Gn and PBE0-D3//GFN2-xTB as u(Gn) = 10.0 kJ mol–1, as a compromise between the MAD and the fact that ΔGn is significantly smaller for small molecules.
+
+Even for our most accurate electronic structure model combination DLPNO-CCSD(T)//PBE-D3, there remain a large number of error sources, such as the approximations intrinsic to local coupled cluster, errors in the solvation-free energy approximation, anharmonicities in the vibrations, and significant contributions from the conformational entropy, which all contribute to the uncertainty of ΔGI‡. Quantifying all these uncertainty sources would be highly desirable but exceeds the scope of this work. Therefore, we restricted our investigation to the uncertainty of the approximations from the DLPNO ansatz by calculating ΔGI‡ with normal (pair truncation threshold tpair = 1 × 10–4Eh, PNO truncation threshold tPNO = 3.33 × 10–7) and tight PNO (tpair = 1×10–5Eh, tPNO = 1 × 10–7) settings and taking the absolute differences δPNOΔGI‡. Accuracies for relative energies of 1 kcal/mol and 1 kJ mol–1 were reported previously for normal and tight PNO settings, respectively, compared to canonical CCSD(T).79 We defined the uncertainty as22
+
+We chose a minimum uncertainty of 5.0 kJ mol–1 to account for the other error sources that we did not quantify in this work.
+
+Because Gn are absolute energies in our model, there is no clear approach to quantify the uncertainty in the electronic energy contribution from PBE0-D3 in the PBE0-D3//PBE-D3 method combination. Apart from the electronic energy uncertainty, the same uncertainty sources are present for DLPNO-CCSD(T)//PBE-D3. Therefore, we chose a constant uncertainty of 5.0 kJ mol–1. An overview of our uncertainty estimates is given in Table 1.
+
+Table 1 Uncertainty Estimates for the Local OAT and Morris’ Sensitivity Analysis, in kJ mol–1
+
+ 	u(Gn)	u(ΔGI‡)	
+PBE0-D3//GFN2-xTB	10.0	15.0	
+PBE0-D3//PBE-D3	5.0	 	
+DLPNO-CCSD(T)//PBE-D3	 	
+
+	
+
+4 Results
+
+4.1 Local Sensitivity Analysis
+
+To analyze the efficiency of the local OAT sensitivity-based IRES exploration for the Eschenmoser–Claisen rearrangement of allyl alcohol, we compared the microkinetic model extracted from the IRES exploration to the models obtained from the PBE0-D3//GFN2-xTB and DLPNO-CCSD(T)//PBE-D3 explorations. The concentration trajectories of the main product a4, methanol, the allyl alcohol a1, N,N-dimethylacetamide-dimethyl acetal a, and the mixed acetal a2 (sum of the concentrations for both enantiomers) are shown in Figure 4a–c.
+
+Figure 4 Concentration trajectories of reactants, products, and main intermediates for the Eschenmoser–Claisen allyl rearrangement of the allyl alcohol. The trajectories were calculated based on the reaction networks explored with PBE0-D3//GFN2-xTB (a), local OAT sensitivity-based IRES exploration (b), DLPNO-CCSD(T)//PBE-D3 (c), and IRES-based exploration without a favorable transition state for the MeOH-catalyzed MeOH elimination from a (d).
+
+The microkinetic model extracted from the reaction network explored with our IRES-based approach [Figure 4b] shows the fastest product formation, reaching a concentration of more than 0.9 mol L–1 within 24 h. The product formation predicted by the PBE0-D3//GFN2-xTB model [Figure 4a] is slower, showing only 0.76 mol L–1 after 24 h, while the product concentration predicted by the model based on DLPNO-CCSD(T)//PBE-D3 [Figure 4c] is only 0.25 mol L–1 after 24 h and therefore significantly slower than both other models.
+
+The disagreement between DLPNO-CCSD(T)//PBE-D3 and the IRES-based model is somewhat surprising since the refinement-based approach should systematically improve the parameters from PBE0-D3//GFN2-xTB to DLPNO-CCSD(T)//PBE-D3. The difference between both models is due to the significantly lower free energy of activation of the methanol-catalyzed methanol elimination from the initial acetal a for the IRES-based model compared to DLPNO-CCSD(T)//PBE-D3, shown in Figure 5. To illustrate the effect of this favorable transition state, we removed it from the reaction network. After removing it from the network, the resulting concentration trajectories agree qualitatively with the DLPNO-CCSD(T)//PBE-D3 concentrations, as shown in Figure 4d. Because the lower reaction barrier for the methanol-catalyzed methanol elimination is a result of the refinement with the DLPNO-CCSD(T)//PBE-D3 model combination, the refined reaction network [concentration plots in Figure 4b] is a better model for the reaction than the pure DLPNO-CCSD(T)//PBE-D3 network, which failed to find this transition state. It is likely that the pure DLPNO-CCSD(T)//PBE-D3 did not discover this transition state because it relied exclusively on the Newton-trajectory-type approach to locate transition-state guesses. By contrast, the IRES-based strategy employed a double-ended curve optimization to locate transition-state guesses for the refinement, which was more successful in this case.
+
+Figure 5 Mechanistic sketch of the methanol-catalyzed methanol elimination from a.
+
+The size of the reaction networks obtained from the exploration with PBE0-D3//GFN2-xTB, DLPNO-CCSD(T)//PBE-D3, and our IRES-based approach is shown in Table 2. The reaction network obtained from the IRES-based exploration discovered 1622 compounds, 1073 flasks, and 3200 reactions, which is significantly more than discovered with DLPNO-CCSD(T)//PBE-D3 (1113 compounds, 653 flasks, and 2123 reactions) and PBE0-D3//GFN2-xTB (1339 compounds, 859 flasks, and 2538 reactions). However, the number of compounds and flasks fulfilling the exploration criteria of KIEA (i.e., showing significant concentration flux) are nearly identical for all the three explorations.
+
+Table 2 Overview of the Number of Compounds, Flasks, and Reactions in the Networks; the Number of DFT and GFN2-xTB Reaction Trial Calculations; DLPNO-CCSD(T) Single-Point Calculations (sp.); and DFT Geometry Optimizations (opt.) Required for the DLPNO-CCSD(T)//PBE-D3 Exploration and the IRES Based on Local OAT Sensitivitiesa
+
+ 	DLPNO-CCSD(T)//PBE-D3	local OAT IRES	PBE0-D3//GFN2-xTB	
+compounds	1113 (13)	1622 (14)	1339 (13)	
+flasks	653 (25)	1073 (31)	859 (32)	
+reactions	2123	3200	2538	
+DFT trials	19,763 (16 h)	199 (39 h)	 	
+GFN2-xTB trials	 	29,150 (119 s)	19,404 (94 s)	
+DLPNO-CCSD(T) sp.	2561 (4 h)	468 (3 h)	 	
+DFT opt.	 	434 (1 h)	 	
+a The numbers in parentheses denote the number of flasks/compounds fulfilling the exploration criteria of KIEA and the average CPU time for the calculations.
+
+Furthermore, the IRES-based reaction network exploration required significantly fewer high-cost calculations, as shown in Table 2. While the overall number of reaction trial calculations (single-ended or double-ended transition-state searches) with GFN2-xTB for the IRES-based exploration is 29,150, and therefore higher than the number of reaction trial calculations required for the pure DLPNO-CCSD(T)//PBE-D3 exploration (19,763 trials), these calculations require on average only 119 s CPU time compared to the 16 h for the reaction trials with DFT. Therefore, they contribute only little to the overall computational cost of the exploration. Compared to the high number of 19,763 PBE-D3-based exploration trials for the DLPNO-CCSD(T)//PBE-D3 exploration, only 199 PBE-D3-based trials were needed for the IRES-based exploration, reducing computational demands significantly. These are significantly higher than the computational time spent on the less demanding 434 PBE-D3 structure optimization for the Gn refinement. The structure optimizations require only few computational resources compared to an exploration trial calculation because each reaction trial calculation consists of several structure optimizations, a transition-state search, and intrinsic reaction coordinate scans.67
+
+The computational savings are smaller for the DLPNO-CCSD(T) single-point calculations because, in the DLPNO-CCSD(T)//PBE-D3 exploration, electronic energies were only refined for elementary steps with a barrier lower than 250.0 kJ mol–1. Nevertheless, the IRES-based exploration required more than a factor 5 fewer DLPNO-CCSD(T) calculations than the full DLPNO-CCSD(T)//PBE-D3 exploration (468 vs 2561 calculations).
+
+The concentration trajectories calculated with the microkinetic modeling parameters from the local OAT sensitivity-based IRES exploration of the Eschenmoser–Claisen rearrangement of furfuryl alcohol are shown in Figure 6a. The microkinetic model predicts only very slow product formation. Most of the reactants are converted to the post-Claisen compound f4 only, and significant concentrations of furfuryl aldehyde and N,N-dimethyletheneamine (see Figure 6d for the Lewis structures) are produced, effectively leading to a deactivation of the reactants. However, for this reaction, the experimental yield after 24 h starting from 42 mmol furfuryl alcohol and 84 mmol 1-methoxy-N,N-dimethylethen-1-amine was reported to be 70–80%.41 This experimental observation suggests that the free energy of activation for the rearomatization (f4 → f5) of the post-Claisen compound f4 is overestimated and that f4 is formed too slowly in our model.
+
+Figure 6 Concentration trajectories simulated for the reaction network explored with the local OAT sensitivity-based IRES. (a) Concentration trajectories for the most populated compounds were calculated with the best available parameters (baseline). (b,c) Uncertainty estimation based on the Morris sensitivity analysis model evaluations. 90% of trajectories are within the shaded area. “Baseline” and “Mean” denote the trajectory calculated with the baseline (best available) parameters and the mean of the simulation ensemble, respectively. (d) Compound Lewis structures and trajectory color coding. The black dashed lines denote the experimental yield of 70–80% after 24 h.
+
+To better understand the disagreement of our model with the experimental observation and to estimate the uncertainty in the concentrations, we performed a Morris sensitivity analysis with the same settings discussed in Section 2. The mean concentrations of all model evaluations, the 90% percentiles, and the concentration trajectories calculated with the baseline (best) parameters are shown for the post-Claisen compound f4 and the product f5 in Figure 6b, and for the side products furfuryl aldehyde and N,N-dimethyletheneaminin in Figure 6c. The mean concentrations predicted for the product f5 and the post-Claisen intermediate f4 are significantly higher than the concentrations predicted by the baseline model. This clearly shows that a faster formation of the post-Claisen intermediate f4 and the product f5 is possible within the uncertainty assumed for the microkinetic modeling parameters. However, the experimental yields are not covered by the 90% percentile of the product f5, suggesting that we may have underestimated the error in the parameters.
+
+The side products furfuryl aldehyde and N,N-dimethyletheneaminin remain at moderate concentrations even if we consider their concentration’s uncertainty [see Figure 6c]. Therefore, our model is qualitatively correct as it predicts the experimental product f5 and the post-Claisen intermediate f4 as the main reaction products.
+
+4.2 Uncertainty-Aware Explorations
+
+The mean concentration trajectories for the product a4 of the rearrangement of allyl alcohol, methanol, the mixed acetal a2, and the reactants a/a1 calculated with our uncertainty-aware exploration approach are shown with their counterpart from the local OAT-based exploration in Figure 7. The mean trajectories show slower formation of the product a4 and, in turn, slower reactant consumption than the results from the local OAT-based exploration. However, in all cases, the local OAT-based concentration trajectories are within the 90% percentiles of the uncertainty-aware exploration trajectories, i.e., the uncertainty-aware exploration and local OAT-based exploration agree in their predictions.
+
+Figure 7 (a) Concentration trajectories for the main products (a4, MeOH), intermediates (a2), and (b) reactants (a, a1) calculated based on the reaction network of the Eschenmoser–Claisen rearrangement of allyl alcohol with the uncertainty-aware exploration approach. 90% of trajectories are within the shaded area. “Mean” denotes the mean trajectory of the simulation ensemble and “Local OAT” denotes the trajectories from the exploration based on local OAT sensitivities.
+
+The concentration trajectories of the product f5, intermediate f4, and the side products furfuryl aldehyde and N,N-dimethylethenamine for the uncertainty-aware exploration of the Eschenmoser–Claisen rearrangement of furfuryl alcohol are shown in Figure 8. The concentration trajectories for f4 and f5 are similar to the trajectories calculated based on the Morris sensitivity analysis of the local OAT-based exploration presented in Figure 6. The concentration estimated for the product f5 does not match the experimental estimate (70–80% of the reactants after 24 h), as highlighted by the dashed lines in Figure 8a. However, in contrast to the exploration based on local OAT sensitivities, the uncertainty-aware exploration predicts that the side products furfuryl aldehyde and N,N-dimethyletheneamine are essentially not relevant for the reaction model, as shown in Figure 8b. Both compounds do not reach significant concentrations within our uncertainty estimates.
+
+Figure 8 Concentration trajectories for the main product f5, intermediate f4 (a), and side products (b) calculated based on the reaction network of the Eschenmoser–Claisen rearrangement of furfuryl alcohol with the uncertainty-aware exploration approach. 90% of trajectories are within the shaded area. “Mean” denotes the mean trajectory of the simulation ensemble and “Local OAT” denotes the trajectories from the exploration based on local OAT sensitivities.
+
+An overview of the number of compounds, flasks, and reactions in the final reaction networks of the local OAT-based exploration and the uncertainty-aware exploration, together with the number of reaction trial calculations and refinement calculations needed for the exploration, are given in Table 3. Even though the KIEA exploration thresholds τflux and τmax are chosen higher for the uncertainty-aware exploration of the rearrangement of allyl alcohol, the uncertainty-aware exploration uncovers nearly 1000 additional compounds (1622 vs 2621), 547 more flasks (1073 vs 1630), and 1919 more reactions (3200 vs 5119) compared to the local OAT-based exploration. This significant increase in discovered compounds and flasks can be attributed to the increased number of bimolecular reaction trials, which were 28,486 for the local OAT-based exploration and 42,011 for the uncertainty-aware exploration. However, most of the newly found compounds, flasks, and reactions did not contribute significantly to the uncertainty of the concentration prediction and were, therefore, not refined, as is evident from the only moderately increased number of elementary step refinement calculations between the explorations (local OAT-based 199, uncertainty-aware 256). Furthermore, the only compound explored in addition to the uncertainty-aware exploration was propanol, originating from the disproportionation of allyl alcohol into propanol and prop-2-en-1-al, which did not reach any significant concentrations even if the uncertainty was considered.
+
+Table 3 Overview of the Number of Compounds, Flasks, and Reactions in the Networks; the Number of Unimolecular and Bimolecular Single-Ended Reaction Trials; and Double-Ended Refinement Calculations Required to Explore the Networksa
+
+ 	allyl alcohol	furfuryl alcohol	
+ 	local OAT	uncertainty-aware	local OAT	uncertainty-aware	
+compounds	1622 (14)	2621 (15)	13,644 (22)	12,784 (22)	
+flasks	1073 (31)	1630 (32)	7696 (40)	6943 (38)	
+reactions	3200	5119	24,195	22,129	
+unimol.	644 (60 s)	739 (60 s)	9806 (175 s)	8142 (188 s)	
+bimol.	28,486 (39 s)	42,011 (108 s)	163,354 (156 s)	148,545 (152.8 s)	
+refin.	199 (39 h)	256 (37 h)	218 (37 h)	312 (37 h)	
+a The numbers in parentheses denote the number of flasks/compounds fulfilling the exploration criteria of KIEA and the average CPU time for the calculations (Unimol., Bimol, and Refin.). Databases containing the full reaction networks are available on Zenodo.80,81
+
+The number of exploration trials and refinement calculations required to converge the exploration of the Eschenmoser–Claisen rearrangement of furfuryl alcohol are very similar between the uncertainty-aware and the local OAT-based approaches. The uncertainty-aware exploration ansatz required roughly 15,000 fewer bimolecular reaction trial calculations (163,354 vs 148,545) and 1664 fewer unimolecular reaction trial calculations, while the number of double-ended elementary step refinement calculations increased from 218 to 312.
+
+4.3 Reaction Paths
+
+The most favorable reaction path connecting allyl alcohol (a1) with its product a4 is shown in Figure 9. The path follows the mechanism outlined in Figure 2. In the first step, methanol is eliminated from the reagent a, forming the intermediate 1-methoxy-N,N-dimethylethen-1-amine. This step is catalyzed by the alcohol a1, stabilizing the transition state through a hydrogen bond between the methanol oxygen atom and a1’s hydroxy group. Next, a1 adds to the intermediate’s double bond while being stabilized through a hydrogen bond between the methanol hydroxy group and a1’s oxygen atom. Then, the second methanol molecule is eliminated, again catalyzed by methanol. Finally, the Claisen rearrangement step occurs, forming the desired product a4. The slowest reaction step is the Claisen rearrangement, which requires overcoming a reaction barrier of 140.8 kJ mol–1 compared to the reactants. Note that both methanol elimination steps have reaction barriers of 132.9 and 138.8 kJ mol–1, respectively, which are close to the barrier of the Claisen rearrangement. If we assume that the reaction barriers and free energies of the species Gn are affected by an uncertainty of up to 5 kJ mol–1, we cannot identify a rate-determining step in this mechanism. However, all these barriers are easily accessible at a temperature of 150 °C, assumed for the reaction. We find the reaction to be exergonic with a reaction free energy of −122.7 kJ mol–1.
+
+Figure 9 Reaction path for the Eschenmoser–Claisen reaction of allyl alcohol extracted with Pathfinder from the microkinetic model of the converged exploration. The energies below the level lines indicate the relative energy of a given species with respect to the reactants. The energies on top of the level lines show the energy change compared to the previous structure.
+
+The most favorable reaction path for the Eschenmoser–Claisen rearrangement of furfuryl alcohol and 1-methoxy-N,N-dimethylethen-1-amine is shown in Figure 10. Note that we show 1-methoxy-N,N-dimethylethen-1-amine as a reactant instead of N,N-dimethylacetamide-dimethyl to be in line with the experiment.41 The first reaction step is the addition of furfuryl alcohol to 1-methoxy-N,N-dimethylethen-1-amine, forming the mixed acetal f2. The addition is followed by methanol elimination and the Claisen rearrangement step. In the last step, the aromatic furyl moiety is restored through an H-shift. The methanol elimination has a reaction barrier of 147.1.6 kJ mol–1 compared to the reactant free energy. This is significantly higher than the reaction barrier of 138.8 kJ mol–1 compared to the starting reactants for the analogous methanol elimination in the Eschenmoser–Claisen rearrangement of allyl alcohol. The Claisen rearrangement step itself is, however, accelerated compared to the rearrangement of allyl alcohol. Its barrier is 127.8 kJ mol–1 for the rearrangement of furfuryl alcohol compared to the analogous barrier of 140.8 kJ mol–1 for the rearrangement of allyl alcohol. The slowest reaction step is the H-shift, for which we found a reaction barrier of 101.7 kJ mol–1 compared to the reactants and 183.7 kJ mol–1 compared to the post-Claisen rearrangement species f4. This explains why we observe a rapid formation and accumulation of the post-Claisen species during the reaction, which transforms only slowly into the desired product f5. The formation of the post-Claisen species is already exergonic by −82.0 kJ mol–1. The final product is then stabilized further by the aromatic furyl moiety, resulting in a reaction free energy of −170.4 kJ mol–1.
+
+Figure 10 Reaction path for the Eschenmoser–Claisen reaction of furfuryl alcohol extracted with Pathfinder from the microkinetic model of the converged exploration. The energies below the level lines indicate the relative energy of a given species with respect to the reactants. The energies on top of the level lines show the energy change compared to the previous structure.
+
+5 Conclusions
+
+We presented a fully automated first-principles exploration approach, KIEA-IRES, that combines automated reaction network exploration, microkinetic modeling-based exploration steering, sensitivity analysis, and refinement of kinetic parameters for reactions, compounds, and flasks.
+
+We explored the reaction network of the Eschenmoser–Claisen rearrangement containing tens of thousands of reactions and compounds with KIEA-IRES. KIEA-IRES correctly predicted the product of the rearrangement of furfuryl alcohol known from experiment and predicted the product of the rearrangement of allyl alcohol (not reported experimentally so far), as expected based on experimental studies for similar molecules.40
+
+The exploration approach requires no prior knowledge of the chemistry that is explored. The only remaining input of general chemistry knowledge in our approach is the restriction of the reaction trial calculations by a small set of rules applicable to organic chemistry, as discussed in Section 3. These rules could be replaced in the future by “first-principles heuristics”82 based on the analysis of partial charges, Fukui functions, or other concepts.82−84
+
+Our approach effectively exploits the fact that, out of the thousands of reactions and compounds in the network, only a small subset determines the kinetics. These reactions and compounds were automatically identified by global or local sensitivity analysis. The kinetic parameters encoded for them were refined with more accurate but computationally more costly quantum chemical methods. This refinement-driven approach led to significant computational savings compared to a full exploration with accurate but costly methods without loss in accuracy. For instance, IRES-KIEA required almost a factor of 100 fewer computationally costly DFT-based exploration trial calculations than a full DLPNO-CCSD(T)//PBE-D3-based KIEA reference exploration.
+
+Furthermore, we compared the activation energies and free energies calculated for GFN2-xTB structures with the same quantities calculated for PBE-D3 structures. We found a significant spread in the error for the activation energies and a correlation between the error in the free energies and the absolute free energy value. The large spread for the activation energies highlights the importance of considering the uncertainty in the kinetic parameters in microkinetic modeling simulations and even in qualitative discussions of reaction mechanisms based on activation energies.
+
+Our local OAT-based explorations and the uncertainty-aware exploration protocol relying on Morris sensitivity analysis both predicted the same products and kinetics for the example reactions. Nevertheless, the uncertainty-aware exploration approach is conceptually more appealing since it directly provides meaningful uncertainties for the concentrations and considers the microkinetic modeling parameters as distributions rather than as fixed values, which may prove crucial if the initial exploration method (here PBE0-D3//GFN2-xTB) turns out to be qualitatively wrong by favoring an incorrect reaction path. The local OAT-based sensitivity analysis can be considered a low-cost alternative for reaction networks in which the microkinetic model is extraordinarily large and the flux-based screening procedure cannot reduce the number of model parameters. The concentration uncertainty prediction could be improved further by considering the correlation between the errors of the predicted free energies. While some work has already been done in this direction for density functional theory-based methods,85−87 how to address this for more accurate local coupled cluster-based approaches remains unclear.
+
+Data Availability Statement
+
+The databases containing all information to reproduce this study are provided on Zenodo.80,81
+
+Supporting Information Available
+
+The Supporting Information is available free of charge at https://pubs.acs.org/doi/10.1021/acs.jpca.3c08386.Convergence studies for the sensitivity analysis regarding the flux-based prescreening and the sample size for the Morris sensitivity analysis (PDF)
+
+Supplementary Material
+
+jp3c08386_si_001.pdf
+
+The authors declare no competing financial interest.
+
+Acknowledgments
+
+We are grateful to ETH Zurich for the superb continuous support of our work.
+==== Refs
+References
+
+Dewyer A. L. ; Argüelles A. J. ; Zimmerman P. M. Methods for exploring reaction space in molecular systems. Wiley Interdiscip. Rev.: Comput. Mol. Sci. 2017, 8 , e1354 10.1002/wcms.1354.
+Simm G. N. ; Vaucher A. C. ; Reiher M. Exploration of Reaction Pathways and Chemical Transformation Networks. J. Phys. Chem. A 2019, 123 , 385–399. 10.1021/acs.jpca.8b10007.30421924
+Green W. H. Computer Aided Chemical Engineering; Elsevier, 2019; pp 259–294.
+Unsleber J. P. ; Reiher M. The Exploration of Chemical Reaction Networks. Annu. Rev. Phys. Chem. 2020, 71 , 121–142. 10.1146/annurev-physchem-071119-040123.32105566
+Maeda S. ; Harabuchi Y. Exploring Paths of Chemical Transformations in Molecular and Periodic Systems: An Approach Utilizing Force. Wiley Interdiscip. Rev.: Comput. Mol. Sci. 2021, 11 , e1538 10.1002/wcms.1538.
+Baiardi A. ; Grimmel S. A. ; Steiner M. ; Türtscher P. L. ; Unsleber J. P. ; Weymuth T. ; Reiher M. Expansive Quantum Mechanical Exploration of Chemical Reaction Paths. Acc. Chem. Res. 2022, 55 , 35–43. 10.1021/acs.accounts.1c00472.34918903
+Steiner M. ; Reiher M. Autonomous Reaction Network Exploration in Homogeneous and Heterogeneous Catalysis. Top. Catal. 2022, 65 , 6–39. 10.1007/s11244-021-01543-9.35185305
+Bensberg M. ; Reiher M. Concentration-Flux-Steered Mechanism Exploration with an Organocatalysis Application. Isr. J. Chem. 2023, 63 , e202200123 10.1002/ijch.202200123.
+Gao C. W. ; Allen J. W. ; Green W. H. ; West R. H. Reaction Mechanism Generator: Automatic construction of chemical kinetic mechanisms. Comput. Phys. Commun. 2016, 203 , 212–225. 10.1016/j.cpc.2016.02.013.
+Goldsmith C. F. ; West R. H. Automatic Generation of Microkinetic Mechanisms for Heterogeneous Catalysis. J. Phys. Chem. C 2017, 121 , 9970–9981. 10.1021/acs.jpcc.7b02133.
+Liu M. ; Grinberg Dana A. ; Johnson M. S. ; Goldman M. J. ; Jocher A. ; Payne A. M. ; Grambow C. A. ; Han K. ; Yee N. W. ; Mazeau E. J. ; et al. Reaction Mechanism Generator v3.0: Advances in Automatic Mechanism Generation. J. Chem. Inf. Model. 2021, 61 , 2686–2696. 10.1021/acs.jcim.0c01480.34048230
+Johnson M. S. ; Dong X. ; Grinberg Dana A. ; Chung Y. ; Farina D. ; Gillis R. J. ; Liu M. ; Yee N. W. ; Blondal K. ; Mazeau E. ; et al. RMG Database for Chemical Property Prediction. J. Chem. Inf. Model. 2022, 62 , 4906–4915. 10.1021/acs.jcim.2c00965.36222558
+Matheu D. M. ; Lada T. A. ; Green W. H. ; Dean A. M. ; Grenda J. M. Rate-based screening of pressure-dependent reaction networks. Comput. Phys. Commun. 2001, 138 , 237–249. 10.1016/S0010-4655(01)00237-5.
+Van Geem K. M. ; Reyniers M.-F. ; Marin G. B. ; Song J. ; Green W. H. ; Matheu D. M. Automatic reaction network generation using RMG for steam cracking of n-hexane. AIChE J. 2006, 52 , 718–730. 10.1002/aic.10655.
+Blurock E. ; Battin-Leclerc F. ; Faravelli T. ; Green W. H. Chapter Automatic generation of detailed mechanisms. In Cleaner Combustion: Developing Detailed Chemical Kinetic Models; Battin-Leclerc F. , Blurock E. , Simmie J. M. , Eds.; Springer-Verlag, 2012; pp 59–92.
+Johnson M. S. ; Pang H.-W. ; Liu M. ; Green W. H. Species Selection for Automatic Chemical Kinetic Mechanism Generation. ChemRxiv 2023, 10.26434/chemrxiv-2023-wwrqf.
+Sumiya Y. ; Maeda S. Rate Constant Matrix Contraction Method for Systematic Analysis of Reaction Path Networks. Chem. Lett. 2020, 49 , 553–564. 10.1246/cl.200092.
+Xie X. ; Clark Spotte-Smith E. W. ; Wen M. ; Patel H. D. ; Blau S. M. ; Persson K. A. Data-Driven Prediction of Formation Mechanisms of Lithium Ethylene Monocarbonate with an Automated Reaction Network. J. Am. Chem. Soc. 2021, 143 , 13245–13258. 10.1021/jacs.1c05807.34379977
+Blau S. M. ; Patel H. D. ; Spotte-Smith E. W. C. ; Xie X. ; Dwaraknath S. ; Persson K. A. A chemically consistent graph architecture for massive reaction networks applied to solid-electrolyte interphase formation. Chem. Sci. 2021, 12 , 4931–4939. 10.1039/D0SC05647B.34163740
+Türtscher P. L. ; Reiher M. Pathfinder—Navigating and Analyzing Chemical Reaction Networks with an Efficient Graph-Based Approach. J. Chem. Inf. Model. 2023, 63 , 147–160. 10.1021/acs.jcim.2c01136.36515968
+Simm G. N. ; Reiher M. Error-Controlled Exploration of Chemical Reaction Networks with Gaussian Processes. J. Chem. Theory Comput. 2018, 14 , 5238–5248. 10.1021/acs.jctc.8b00504.30179500
+Xu R. ; Meisner J. ; Chang A. M. ; Thompson K. C. ; Martínez T. J. First principles reaction discovery: from the Schrodinger equation to experimental prediction for methane pyrolysis. Chem. Sci. 2023, 14 , 7447–7464. 10.1039/D3SC01202F.37449065
+Garay-Ruiz D. ; Álvarez-Moreno M. ; Bo C. ; Martínez-Núñez E. New Tools for Taming Complex Reaction Networks: The Unimolecular Decomposition of Indole Revisited. ACS Phys. Chem. Au 2022, 2 , 225–236. 10.1021/acsphyschemau.1c00051.36855573
+Stan A. ; Esch B. v. d. ; Ochsenfeld C. Fully Automated Generation of Prebiotically Relevant Reaction Networks from Optimized Nanoreactor Simulations. J. Chem. Theory Comput. 2022, 18 , 6700–6712. 10.1021/acs.jctc.2c00754.36270030
+Sutton J. E. ; Vlachos D. G. Building large microkinetic models with first-principles accuracy at reduced computational cost. Chem. Eng. Sci. 2015, 121 , 190–199. 10.1016/j.ces.2014.09.011.
+Meskine H. ; Matera S. ; Scheffler M. ; Reuter K. ; Metiu H. Examination of the concept of degree of rate control by first-principles kinetic Monte Carlo simulations. Surf. Sci. 2009, 603 , 1724–1730. 10.1016/j.susc.2008.08.036.
+Zhao Z.-J. ; Li Z. ; Cui Y. ; Zhu H. ; Schneider W. F. ; Delgass W. N. ; Ribeiro F. ; Greeley J. Importance of metal-oxide interfaces in heterogeneous catalysis: A combined DFT, microkinetic, and experimental study of water-gas shift on Au/MgO. J. Catal. 2017, 345 , 157–169. 10.1016/j.jcat.2016.11.008.
+Proppe J. ; Reiher M. Mechanism Deduction from Noisy Chemical Reaction Networks. J. Chem. Theory Comput. 2019, 15 , 357–370. 10.1021/acs.jctc.8b00310.30507200
+Gao C. W. ; Liu M. ; Green W. H. Uncertainty analysis of correlated parameters in automated reaction mechanism generation. Int. J. Chem. Kinet. 2020, 52 , 266–282. 10.1002/kin.21348.
+Ulissi Z. W. ; Medford A. J. ; Bligaard T. ; Nørskov J. K. To address surface reaction network complexity using scaling relations machine learning and DFT calculations. Nat. Commun. 2017, 8 , 14621 10.1038/ncomms14621.28262694
+Kreitz B. ; Sargsyan K. ; Blöndal K. ; Mazeau E. J. ; West R. H. ; Wehinger G. D. ; Turek T. ; Goldsmith C. F. Quantifying the Impact of Parametric Uncertainty on Automatic Mechanism Generation for CO2 Hydrogenation on Ni(111). JACS Au 2021, 1 , 1656–1673. 10.1021/jacsau.1c00276.34723269
+Kreitz B. ; Wehinger G. D. ; Goldsmith C. F. ; Turek T. Microkinetic Modeling of the Transient CO2Methanation with DFT-Based Uncertainties in a Berty Reactor. ChemCatChem 2022, 14 , e202200570 10.1002/cctc.202200570.
+Kreitz B. ; Lott P. ; Studt F. ; Medford A. J. ; Deutschmann O. ; Goldsmith C. F. Automated Generation of Microkinetics for Heterogeneously Catalyzed Reactions Considering Correlated Uncertainties. Angew. Chem., Int. Ed. 2023, 62 , e202306514 10.1002/anie.202306514.
+Morris M. D. Factorial Sampling Plans for Preliminary Computational Experiments. Technometrics 1991, 33 , 161–174. 10.1080/00401706.1991.10484804.
+Eyring H. The Activated Complex in Chemical Reactions. J. Chem. Phys. 1935, 3 , 107–115. 10.1063/1.1749604.
+Truhlar D. G. ; Garrett B. C. ; Klippenstein S. J. Current Status of Transition-State Theory. J. Phys. Chem. 1996, 100 , 12771–12800. 10.1021/jp953748q.
+Saltelli A. ; Ratto M. ; Tarantola S. ; Campolongo F. Sensitivity Analysis for Chemical Models. Chem. Rev. 2005, 105 , 2811–2828. 10.1021/cr040659d.16011325
+Saltelli A. ; Annoni P. How to avoid a perfunctory sensitivity analysis. Environ. Model. Softw. 2010, 25 , 1508–1517. 10.1016/j.envsoft.2010.04.012.
+Campolongo F. ; Cariboni J. ; Saltelli A. An effective screening design for sensitivity analysis of large models. Environ. Model. Softw. 2007, 22 , 1509–1518. 10.1016/j.envsoft.2006.10.004.
+Wick A. E. ; Felix D. ; Steen K. ; Eschenmoser A. CLAISEN’sche Umlagerungen bei Allyl- und Benzylalkoholen mit Hilfe von Acetalen des N, N-Dimethylacetamids. Vorläufige Mitteilung. Helv. Chim. Acta 1964, 47 , 2425–2429. 10.1002/hlca.19640470835.
+Felix D. ; Gschwend-Steen K. ; Wick A. E. ; Eschenmoser A. Claisen’sche Umlagerungen bei Allyl- und Benzylalkoholen mit 1-Dimethylamino-1-methoxy-äthen. Helv. Chim. Acta 1969, 52 , 1030–1042. 10.1002/hlca.19690520418.
+Martín Castro A. M. Claisen Rearrangement over the Past Nine Decades. Chem. Rev. 2004, 104 , 2939–3002. 10.1021/cr020703u.15186185
+Kürti L. ; Czakó B. Strategic Applications of Named Reactions in Organic Synthesis; Elsevier: San Diego, CA, 2005.
+Daniewski A. ; Wovkulich P. ; Uskokovic M. Remote Diastereoselection in the Asymmetric Synthesis of Pravastatin. J. Org. Chem. 1992, 57 , 7133–7139. 10.1021/jo00052a029.
+Chen C. Y. ; Hart D. J. A Diels-Alder Approach to Stemona Alkaloids: Total Synthesis of Stenine. J. Org. Chem. 1993, 58 , 3840–3849. 10.1021/jo00067a015.
+Williams D. R. ; Brugel T. A. Intramolecular Diels-Alder Cyclizations of (E)-1-Nitro-1,7,9-decatrienes: Synthesis of the AB Ring System of Norzoanthamine. Org. Lett. 2000, 2 , 1023–1026. 10.1021/ol9904085.10804544
+Loh T.-P. ; Hu Q.-Y. Synthetic Studies toward Anisatin: A Formal Synthesis of (±)-8-Deoxyanisatin. Org. Lett. 2001, 3 , 279–281. 10.1021/ol006918c.11430054
+Software for Chemical Interaction Networks. https://scine.ethz.ch/ (accessed 12-10-2023).
+Sobez J.-G. ; Reiher M. Molassembler: Molecular Graph Construction, Modification, and Conformer Generation for Inorganic and Organic Molecules. J. Chem. Inf. Model. 2020, 60 , 3884–3900. 10.1021/acs.jcim.0c00503.32610018
+Bensberg M. ; Grimmel S. A. ; Sobez J.-G. ; Steiner M. ; Unsleber J. P. ; Reiher M. qcscine/molassembler: Release 2.0.0, 2023.10.5281/zenodo.7928074.
+Ben-Naim A. Y. Solvation Thermodynamics; Springer Science & Business Media, 1987.
+Bartlett R. J. ; Musiał M. Coupled-cluster theory in quantum chemistry. Rev. Mod. Phys. 2007, 79 , 291–352. 10.1103/RevModPhys.79.291.
+Shavitt I. ; Bartlett R. J. Many-Body Methods in Chemistry and Physics: MBPT and Coupled-Cluster Theory; Cambridge University Press, 2009.
+Adamo C. ; Barone V. Toward reliable density functional methods without adjustable parameters: The PBE0 model. J. Chem. Phys. 1999, 110 , 6158–6170. 10.1063/1.478522.
+Perdew J. P. ; Burke K. ; Ernzerhof M. Generalized Gradient Approximation Made Simple. Phys. Rev. Lett. 1996, 77 , 3865–3868. 10.1103/PhysRevLett.77.3865.10062328
+Grimme S. ; Antony J. ; Ehrlich S. ; Krieg H. A consistent and accurate ab initio parametrization of density functional dispersion correction (DFT-D) for the 94 elements H-Pu. J. Chem. Phys. 2010, 132 , 154104 10.1063/1.3382344.20423165
+Grimme S. ; Ehrlich S. ; Goerigk L. Effect of the damping function in dispersion corrected density functional theory. J. Comput. Chem. 2011, 32 , 1456–1465. 10.1002/jcc.21759.21370243
+Bannwarth C. ; Ehlert S. ; Grimme S. GFN2-xTB—An Accurate and Broadly Parametrized Self-Consistent Tight-Binding Quantum Chemical Method with Multipole Electrostatics and Density-Dependent Dispersion Contributions. J. Chem. Theory Comput. 2019, 15 , 1652–1671. 10.1021/acs.jctc.8b01176.30741547
+Riplinger C. ; Sandhoefer B. ; Hansen A. ; Neese F. Natural triple excitations in local coupled cluster calculations with pair natural orbitals. J. Chem. Phys. 2013, 139 , 134101 10.1063/1.4821834.24116546
+Riplinger C. ; Pinski P. ; Becker U. ; Valeev E. F. ; Neese F. Sparse maps—A systematic infrastructure for reduced-scaling electronic structure methods. II. Linear scaling domain based pair natural orbital coupled cluster theory. J. Chem. Phys. 2016, 144 , 024109 10.1063/1.4939030.26772556
+Weigend F. ; Ahlrichs R. Balanced basis sets of split valence, triple zeta valence and quadruple zeta valence quality for H to Rn: Design and assessment of accuracy. Phys. Chem. Chem. Phys. 2005, 7 , 3297–3305. 10.1039/b508541a.16240044
+Klamt A. ; Schüürmann G. COSMO: a new approach to dielectric screening in solvents with explicit expressions for the screening energy and its gradient. J. Chem. Soc., Perkin Trans. 2 1993, 799–805. 10.1039/P29930000799.
+Onufriev A. ; Bashford D. ; Case D. A. Exploring Protein Native States and Large-Scale Conformational Changes With a Modified Generalized Born Model. Proteins: Struct., Funct., Bioinf. 2004, 55 , 383–394. 10.1002/prot.20033.
+Sigalov G. ; Fenley A. ; Onufriev A. Analytical electrostatics for biomolecules: Beyond the generalized Born approximation. J. Chem. Phys. 2006, 124 , 124902 10.1063/1.2177251.16599720
+Barone V. ; Cossi M. Quantum Calculation of Molecular Energies and Energy Gradients in Solution by a Conductor Solvent Model. J. Phys. Chem. A 1998, 102 , 1995–2001. 10.1021/jp9716997.
+Vaucher A. C. ; Reiher M. Minimum Energy Paths and Transition States by Curve Optimization. J. Chem. Theory Comput. 2018, 14 , 3091–3099. 10.1021/acs.jctc.8b00169.29648812
+Unsleber J. P. ; Grimmel S. A. ; Reiher M. Chemoton 2.0: Autonomous Exploration of Chemical Reaction Networks. J. Chem. Theory Comput. 2022, 18 , 5393–5409. 10.1021/acs.jctc.2c00193.35926118
+Bensberg M. ; Grimmel S. A. ; Simm G. N. ; Sobez J.-G. ; Steiner M. ; Türtscher P. L. ; Unsleber J. P. ; Weymuth T. ; Reiher M. qcscine/chemoton: Release 2.2.0, 2022.10.5281/zenodo.6984579.
+Bensberg M. ; qcscine/puffin: Release 1.2.0, 2023.10.5281/ZENODO.7928099.
+Brunken C. ; qcscine/readuct: Release 4.1.0, 2022.10.5281/zenodo.6984575.
+Bensberg M. ; qcscine/readuct: Release 5.0.0, 2023.10.5281/ZENODO.7928089.
+Ahlrichs R. ; Bär M. ; Häser M. ; Horn H. ; Kölmel C. Electronic structure calculations on workstation computers: The program system turbomole. Chem. Phys. Lett. 1989, 162 , 165–169. 10.1016/0009-2614(89)85118-8.
+TURBOMOLE V7.4.1 2019, a development of University of Karlsruhe and Forschungszentrum Karlsruhe GmbH, 1989–2007; TURBOMOLE GmbH, since 2007. http://www.turbomole.com.
+Bannwarth C. ; Caldeweyher E. ; Ehlert S. ; Hansen A. ; Pracht P. ; Seibert J. ; Spicher S. ; Grimme S. Extended tight-binding quantum chemistry methods. Wiley Interdiscip. Rev.: Comput. Mol. Sci. 2020, 11 , ee01493 10.1002/wcms.1493.
+Neese F. Software update: The ORCA program system—Version 5.0. Wiley Interdiscip. Rev.: Comput. Mol. Sci. 2022, 12 , e1606 10.1002/wcms.1606.
+Herman J. ; Usher W. SALib: An open-source Python library for Sensitivity Analysis. J. Open Source Softw. 2017, 2 , 97 10.21105/joss.00097.
+Iwanaga T. ; Usher W. ; Herman J. Toward SALib 2.0: Advancing the accessibility and interpretability of global sensitivity analyses. SESMO 2022, 4 , 18155 10.18174/sesmo.18155.
+Johnson M. S. ; Pang H.-W. ; Payne A. M. ; Green W. H. ReactionMechanismSimulator.jl: A Modern Approach to Chemical Kinetic Mechanism Simulation and Analysis. ChemRxiv 2023, 10.26434/chemrxiv-2023-tj34t.
+Liakos D. G. ; Sparta M. ; Kesharwani M. K. ; Martin J. M. L. ; Neese F. Exploring the Accuracy Limits of Local Pair Natural Orbital Coupled-Cluster Theory. J. Chem. Theory Comput. 2015, 11 , 1525–1539. 10.1021/ct501129s.26889511
+Bensberg M. ; Reiher M. IRES-KIEA Exploration I: Local Sensitivity-driven Refinement, 2023.10.5281/zenodo.10013792.
+Bensberg M. ; Reiher M. IRES-KIEA Exploration II: Morris Sensitivity-analysis-driven Refinement, 2023.10.5281/zenodo.10020754.
+Bergeler M. ; Simm G. N. ; Proppe J. ; Reiher M. Heuristics-Guided Exploration of Reaction Mechanisms. J. Chem. Theory Comput. 2015, 11 , 5712–5722. 10.1021/acs.jctc.5b00866.26642988
+Grimmel S. A. ; Reiher M. The electrostatic potential as a descriptor for the protonation propensity in automated exploration of reaction mechanisms. Faraday Discuss. 2019, 220 , 443–463. 10.1039/C9FD00061E.31528869
+Grimmel S. A. ; Reiher M. On the Predictive Power of Chemical Concepts. Chimia 2021, 75 , 311 10.2533/chimia.2021.311.33902801
+Wellendorff J. ; Lundgaard K. T. ; Møgelhøj A. ; Petzold V. ; Landis D. D. ; Nørskov J. K. ; Bligaard T. ; Jacobsen K. W. Density functionals for surface science: Exchange-correlation model development with Bayesian error estimation. Phys. Rev. B 2012, 85 , 235149 10.1103/PhysRevB.85.235149.
+Simm G. N. ; Reiher M. Systematic Error Estimation for Chemical Reaction Energies. J. Chem. Theory Comput. 2016, 12 , 2762–2773. 10.1021/acs.jctc.6b00318.27159007
+Proppe J. ; Husch T. ; Simm G. N. ; Reiher M. Uncertainty quantification for quantum chemical models of complex reaction networks. Faraday Discuss. 2016, 195 , 497–520. 10.1039/C6FD00144K.27730243

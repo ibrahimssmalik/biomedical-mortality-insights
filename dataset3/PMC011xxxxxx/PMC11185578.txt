@@ -1,0 +1,572 @@
+
+==== Front
+bioRxiv
+BIORXIV
+bioRxiv
+Cold Spring Harbor Laboratory
+
+38895288
+10.1101/2024.05.30.596711
+preprint
+1
+Article
+Efficient Seeding for Error-Prone Sequences with SubseqHash2
+http://orcid.org/0000-0001-8499-4740
+Li Xiang 1
+http://orcid.org/0000-0001-5470-6621
+Chen Ke 1
+http://orcid.org/0000-0001-6112-5139
+Shao Mingfu 12*
+1 Department of Computer Science and Engineering, The Pennsylvania State University, United States
+2 Huck Institutes of the Life Science, The Pennsylvania State University, United Statess
+* correspondence should be addressed to mxs2589@psu.edu
+03 6 2024
+2024.05.30.596711https://creativecommons.org/licenses/by/4.0/ This work is licensed under a Creative Commons Attribution 4.0 International License, which allows reusers to distribute, remix, adapt, and build upon the material in any medium or format, so long as attribution is given to the creator. The license allows for commercial use.
+nihpp-2024.05.30.596711.pdf
+Seeding is an essential preparatory step for large-scale sequence comparisons. Substring-based seeding methods such as kmers are ideal for sequences with low error rates but struggle to achieve high sensitivity while maintaining a reasonable precision for error-prone long reads. SubseqHash, a novel subsequence-based seeding method we recently developed, achieves superior accuracy to substring-based methods in seeding sequences with high mutation/error rates, while the only drawback is its computation speed. In this paper, we propose SubseqHash2, an improved algorithm that can compute multiple sets of seeds in one run by defining k orders over all length-k subsequences and identifying the optimal subsequence under each of the k orders in a single dynamic programming framework. The algorithm is further accelerated using SIMD instructions. SubseqHash2 achieves a 10–50× speedup over repeating SubseqHash while maintaining the high accuracy of seeds. We demonstrate that SubseqHash2 drastically outperforms popular substring-based methods including kmers, minimizers, syncmers, and Strobemers for three fundamental applications. In read mapping, SubseqHash2 can generate adequate seed-matches for aligning hard reads that minimap2 fails on. In sequence alignment, SubseqHash2 achieves high coverage of correct seeds and low coverage of incorrect seeds. In overlap detection, seeds produced by SubseqHash2 lead to more correct overlapping pairs at the same false-positive rate. With all the algorithmic breakthroughs of SubseqHash2, we clear the path for the wide adoption of subsequence-based seeds in long-read analysis. SubseqHash2 is available at https://github.com/Shao-Group/SubseqHash2.
+==== Body
+pmc1 Introduction
+
+The ever-growing, gigantic size of sequencing data poses a great challenge for sequence comparison. Seeding is a powerful technique that avoids the expensive computation of all-versus-all, full-length comparisons and is thus widely used in scalable methods. Broadly speaking, seeding transforms a long sequence into a list of shorter ones, often of a regular length, known as seeds. Seeds across sequences can be matched (i.e., compared for identity) in constant time with hash tables. A matching pair of seeds, commonly referred to as a seed-match or anchor, indicates a potential biological relevance and suggests a candidate mapping location. The collected seed-matches may be processed differently to fulfill specific tasks. For example, the seed-chain-extend strategy finds collinear chains of seed-matches to maximize a predefined scoring function. This strategy, often combined with a fine-grained local alignment procedure to fill up the gaps between chained seed-matches, has been widely adopted in read mapping and sequence alignment [2, 3, 18, 1, 9] and is recently shown [26] theoretically to be both accurate and efficient. Another example is identifying all overlapping pairs in a large set of sequences, a critical and the most time-consuming step in constructing the overlap/string graph [10, 19, 6] for genome assembly (following the overlap-layout-consensus paradigm). For this task, seed-matches are used to bucket sequences, thereby confining the search for overlapping pairs within individual buckets and significantly reducing the number of pairs that need to be compared. All these applications demand a seeding scheme that admits both high sensitivity, namely producing many seed-matches on biologically related or similar sequences, and high precision, i.e., producing fewer or ideally zero seed-matches on dissimilar sequences. Both properties are desirable in downstream analyses for producing accurate outcomes; high precision often also implies a reduction of running time.
+
+Substring-based seeding methods, most notably kmers (i.e., substrings of length k), have been predominant in sequence analysis, mainly due to their simplicity and extraordinary performance on data with low error rates. However, when comparing sequences with high error rates such as homologous genes from distant species or PacBio and Oxford Nanopore long reads, the choice of k is usually full of compromises and frustrations. Using a large k guarantees high precision but is prohibitive for its extremely low sensitivity. Conversely, a small k, improves sensitivity, but because unrelated sequences may share many short kmers by chance, it often results in poor precision. This inherent dilemma of kmers makes it much less effective when the mutation/error rate is high. Many tools are forced to use a small k and compensate for the low precision by fine-grained follow-up steps such as chaining to filter out false positives, which significantly increases processing time and highlights the deficiency of using kmers for seeding. Existing sketching methods such as minimizers [25, 22, 21, 16] and syncmers [8] can reduce the number of seeds and seed-matches but cannot solve the sensitivity-precision perplexity of kmers. (See the comparisons of kmers, minimizers, and syncmers in Figures 4, 5, and 6) Spaced seeds [5, 13]. and indel seeds [15] accommodate errors by masking positions with specific patterns, but only mutations at designated positions can be handled. Another strategy that recently gains popularity is to combine multiple short kmers to produce a longer seed; examples include neighboring minimizer pairs 7, Order Min Hash [17], and Strobemers [23, 14, 24]. Nonetheless, as these methods are all substring-based, they cannot fully resolve the intrinsic weakness of kmers against mutations. Additionally, sketching and combining can be considered orthogonal to the basic seeding methods in the sense that they can be applied with any basic seeding scheme (see Section 2.5).
+
+In [12], we proposed a novel subsequence-based seeding approach named SubseqHash. The key intuition is that two strings have a small edit distance if and only if they share long subsequences. More concretely, two length-n strings with an edit distance of e must share some subsequence of length at least n-e, and two length-n strings sharing a subsequence of length k must admit an edit distance at most 2(n-k). In contrast, two length-n strings with an edit distance of e can only guarantee to share a substring/kmer of length n-ke, as a single edit can break k continuous kmers. SubseqHash is formally defined as a function hπ(x) that maps a length-n string x to the smallest length-k subsequence of x according to π, which is an order over all length-k strings/subsequences. Note that the number of subsequences of x grows exponentially; we made an algorithmic breakthrough to overcome this: we designed a specific order π termed the ABC order, along with an algorithm to calculate hπ(x) under an ABC order π in O(nkd) time where d is a parameter that balances the probability of hash collision and the running time. We demonstrated that the probability of hash collision Prhπ(x)=hπ(y) is close to the Jaccard similarity of two sets of subsequences, defined as Jkx,y:=Sk(x)∩Sk(y)/Sk(x)∪Sk(y) where Sk(⋅) denotes the set of length-k subsequences in a string. SubseqHash inherently tolerates errors/edits by design, making it particularly suitable for seeding sequences with high error rates.
+
+Although SubseqHash achieved better accuracy than substring-based methods on data with high error rates, there is still room for improvement. Specifically, a single run of SubseqHash cannot achieve both high sensitivity and high precision. To control false positives, we typically choose a large n (e.g., n=30,40,50) and a k that is close to n (e.g., k=0.7n,0.8n,0.9n), as dissimilar strings are not expected to share subsequences of that long and hence a hash collision will not happen, resulting in the desired high precision. But with such n and k, the probability of hash collision p:=Prhπ(x)=hπ(y) is not high enough for similar strings x and y, since the portion of shared length-k subsequences measured with Jk(x,y) is small, leading to low sensitivity. To address this, we proposed a new seeding scheme by repeating SubseqHash multiple times (say t times), with independent and random ABC orders. Suppose that p is the probability of a hash collision when invoking SubseqHash once, the probability of having at least one hash collision among the t pairs of seeds can be boosted to 1-(1-p)t. Note that for similar strings, p is strictly positive (thanks to the fact that similar strings share long subsequences), thus sensitivity is markedly enhanced. Conversely, dissimilar strings, which are unlikely to share any long subsequence, will still have a zero or negligibly small probability of hash collision, implying minimal precision degradation with repeats. SubseqHash combined with repeating can yield both high sensitivity and precision, as we experimentally demonstrated in Section 3.1 and in the SubseqHash paper [12].
+
+However, the above seeding scheme is computationally inefficient. In practice, sliding windows of length-n are used on long reads and SubseqHash is repeatedly apply to each window. Let N be the length of a long read and hence it contains N-n+1=O(N) length-n windows. The overall running time of seeding for this single long read is O(Nnkdt), which could be prohibitive for certain applications. This computational demand limits the widespread use of SubseqHash. We address this challenge in this paper by introducing SubseqHash2, which seeds for a length-N long read with t repeats in O(Nnk) time, a dt-fold speedup over SubseqHash. The acceleration is achieved by two algorithmic innovations. First, we design the ABCk orders, which defines k orders, and a new dynamic programming algorithm that finds the optimal subsequences for the k orders simutaneously. A single run of this algorithm generates k seeds, leading to a t-fold speedup over SubseqHash for any t≤k. Second, recognizing the independence of the subproblems in the dynamic programming algorithm, we leverage SIMD (single instruction, multiple data) parallelism that solves d subproblems in parallel with one set of instructions. This gains another d-fold speedup, for d up to 32. In practice, SubseqHash2 may not experience exactly a dt-fold speedup due to the overheads, but the acceleration scales with dt. For example, with n=30 and a typical choice of k=25 and d=31 the observed speedup is about 50×.
+
+In addition to the improved efficiency, the design of SubseqHash2 allows for symmetries in the score function, enable a string and its reverse complement to produce the same sets of seeds. This feature is highly desireable in sequence analysis, as it effectively halves both running time and storage requirements. We also show that SubseqHash2 can be extended to handle multiple windows and be combined with kmers. SubseqHash2 is now ready for practical use, as demonstrated in three applications including read mapping, pairwise alignment, and overlap detection. In all experiments, SubseqHash2 obtains much higher accuracy compared with substring-based seeding methods; it consistently mirrors the seed quality and accuracy of SubseqHash but with a substantial reduction in running time.
+
+2 SubseqHash2
+
+The key idea of SubseqHash2 is the introduction of a pivot position that bifurcates the length-k subsequence into two disjoint subsequences. For each pivot, a score function can be defined by amalgamating the scores of the two subsequences and the pivot position, resulting in k score functions (i.e., k orders). Intriguingly, the optimal subsequences under the k orders can be computed together in a single dynamic programming framework, which takes 1/k running time compared to SubseqHash. The algorithm is further accelerated by SIMD, which solves d subproblems simutaneously, leading to a d-fold speedup. We also introduce the two variants of SubseqHash2: SubseqHash2r and SubseqHash2w.
+
+2.1 The ABCk Orders
+
+We define the k orders over Σk, termed the ABCk orders. (See an example in Appendix B) They are governed by an integer d and 9 tables: forward tables AF, BF, CF, reverse tables AR, BR, CR, and pivot tables AP, BP, CP. Tables AF and AR are of dimension k×d×|Σ|, i.e., AF,AR∈Zk×d×|Σ|. Table AP is of dimension k×|Σ|, i.e., AP∈Zk×|Σ|. Tables BF and BR are of dimension k×d×|Σ|, and table BP is of dimension k×|Σ|; each element in them is a pair, namely, BF[i][j][σ], BR[i][j][σ], BPiσ∈+1,+1,+1,-1,-1,+1,-1,-1,1≤i≤k,0≤j≤d-1, and σ∈Σ. Tables CF, CR and CP are of dimension k×|Σ|, where CF[i][σ], CR[i][σ], CPiσ∈0,1,⋯,d-1,1≤i≤k and σ∈Σ. These tables can be filled either by picking values from their specific ranges randomly, or in a symmetric way for a desired property (Section 2.4).
+
+These nine tables, once filled, determine k orders over Σk, named π1,π2,⋯,πk. All these orders utilize forward functions ψF and ωF, as well as reverse functions ψR and ωR, which we describe now. The three forward tables are used in the forward functions while the three reverse tables are used in the reverse functions. Let s∈Σl be a string of length l, where l≤k. Write s=s1s2⋯sl. Denote the first and the second element in the pair BF[i][j][σ] by BF[i][j][σ]1 and BF[i][j][σ]2, respectively; the same applies for the tables BR and BP. Then the functions are defined by the following recurrences: ψFs1⋯sl=ψFs1⋯sl-1+CF[l]slmodd,
+
+ψRs1⋯sl=ψRs1⋯sl-1+CR[l]slmodd,
+
+ωFs1⋯sl=ωFs1⋯sl-1⋅BFlψFs1⋯slsl1+AFlψFs1⋯slsl⋅BFlψFs1⋯slsl2,
+
+ωRs1⋯sl=ωRs1⋯sl-1⋅BRlψRs1⋯slsl1+ARlψRs1⋯slsl⋅BRlψRs1⋯slsl2.
+
+The initial values are set to ψF(s)=ψR(s)=0 and ωF(s)=ωR(s)=0 for empty string s.
+
+We now define the k orders πi, i=1,2,⋯,k, over Σk. Each order πi is essentially a score function that maps a length-k string to a pair. Let z=z1z2⋯zk∈Σk. Intuitively, πi picks zi as the pivot and combines the forward function and the reverse function using the pivot tables. Formally, we define πiz:=ψi(z),ωi(z), where ψiz:=ψRzi-1zi-2⋯z1+CP[i]zi+ψFzi+1zi+2⋯zkmodd
+
+ωiz:=ωRzi-1zi-2⋯z1⋅BPizi1+APizi+ωFzi+1zi+2⋯zk⋅BPizi2.
+
+For any two z1,z2∈Σk, we define πiz1<πiz2, i.e., z1 is ranked before z2 in order πi, if and only if ψiz1<ψiz2, or ψiz1=ψiz2 and ωiz1>ωiz2.
+
+Similar to the ABC order introduced in [12], the techniques of using ±1 in BF, BR and BP tables, the modular operation, and the pivot splitting all aim for assigning shuffled scores to two strings with small edit distance, so that similar strings are distant in the resulting order. This is critical in achieving a higher probability of hash collision. Note also that the k orders in the ABCk orders are not independent as they use shared forward and reverse functions, but we experimentally show that the k orders behave independently in practice, and SubseqHash2 achieves almost identical results with repeating SubseqHash using independent tables (see Section 3).
+
+2.2 Algorithm for Computing Seeds
+
+A common practice in handling (long) sequences is to generate seeds for each of its sliding window (i.e., length-n substring). Here, we design an algorithm that finds seeds for all windows in a given long sequence at one time, which runs Θ(k) times faster than processing each sliding window separately. Let X be a sequence of length N,N>n. We use X[w∣b] to denote the length-b substring of X starting from position w, i.e., Xwb:=XwXw+1⋯Xw+b-1. We define Πiw:=minz∈SkXwn πizandzi*w:=argminz∈SkXwn πiz,
+
+for every 1≤i≤k and 1≤w≤N-n+1. The set zi*[w]∣1≤i≤k gives the k optimal seeds for window X[w∣n], corresponding to the k orders πi∣1≤i≤k, while Πi[w]∣1≤i≤k gives the optimal scores.
+
+Given X, we design an algorithm to calculate Πi[w] and zi*[w]. As shown in Figure 1, the algorithm consists of two steps, iterating and optimizing, following a typical dynamic programming scheme. In the iterating step, subproblems are defined and solved with recurrences. In the optimizing step, the smallest subsequences under each order for every window are calculated. Different windows may reuse the same subproblems, making this algorithm Θ(k) times faster than processing windows separately.
+
+For any string x, we use Sl(x) to denote the set of length-l subsequences of x, l≤|x|. For each 1≤w≤N-n+1, 1≤b≤n, 1≤l≤k, and 0≤j<d, we define subproblem Fmin[w][b][l][j], where w and b specify window X[w∣b], l indicates the length-l subsequences of X[w∣b], j restricts that the ψ value of the subsequences must be j, and Fmin[w][b][l][j] is defined as the smallest ω value among all such subsequences. Similarly we can also define subproblems Fmax[w][b][l][j]. Their formal definitions are given below. Fminwblj:=mins∈SlXwbandψFs=j ωFs,
+
+Fmaxwblj:=maxs∈SlXwbandψFs=j ωFs.
+
+We also define subproblems Rmin[w][b][l][j] and Rmax[w][b][l][j], which are to compute the minimized and maximized ω value among all reversed length-l subsequences in window X[w∣b] given their ψ value must be equal to j. Their definitions are given below, in which we use s← to represent the reversed string of s (i.e., if s=ACGAT then s←=TAGCA). Rminwblj:=mins∈Sl(X[w∣b])andψR(s←)=j ωR(s←),
+
+Rmax[w][b][l][j]:=maxs∈Sl(X[w∣b])andψR(s←)=j ωR(s←).
+
+The iterating-steps solves all above subproblems. Since both ψ and ω functions are recursively defined, it is straightforward to give the recurrences. Specifically, for Fmin and Fmax we consider if the last (the l-th) letter of the optimal s comes from the the last (i.e. Xw+b-1) letter of the window. Whether Fmin or Fmax gets used for the smaller subproblem depends on the binary vector in the corresponding BF table. The recurrences are given below, in which we define σ:=Xw+b-1 and j′:=j-CF[l][σ]+dmodd: Fminwblj=minFmin[w][b-1][l][j]AF[l][j][σ]⋅BF[l][j][σ]2++Fmin[w][b-1][l-1]j′,ifBF[l][j][σ]1=+1-Fmax[w][b-1][l-1]j′,ifBF[l][j][σ]1=-1
+
+Fmax[w][b][l][j]=maxFmax[w][b-1][l][j]AF[l][j][σ]⋅BF[l][j][σ]2++Fmax[w][b-1][l-1]j′,ifBF[l][j][σ]1=+1-Fmin[w][b-1][l-1]j′,ifBF[l][j][σ]1=-1
+
+For Rmin and Rmax we consider whether the last letter of the optimal s←, which is the first letter of s, comes from the first letter of the window. Define σ:=Xw and j′:=j-CR[l][σ]+dmodd. We have Rmin[w][b][l][j]=minRmin[w+1][b-1][l][j]AR[l][j][σ]⋅BR[l][j][σ]2++Rmin[w+1][b-1][l-1]j′,ifBR[l][j][σ]1=+1-Rmax[w+1][b-1][l-1]j′,ifBR[l][j][σ]1=-1
+
+Rmax[w][b][l][j]=maxRmax[w+1][b-1][l][j]AR[l][j][σ]⋅BR[l][j][σ]2++Rmax[w+1][b-1][l-1]j′,ifBR[l][j][σ]1=+1-Rmin[w+1][b-1][l-1]j′,ifBR[l][j][σ]1=-1
+
+Initially, for any 1≤w≤N-n+1 and 1≤b≤n, Fmin[w][b][0][0]=Fmax[w][b][0][0]=0,Rmin[w][b][0][0]=Rmax[w][b][0][0]=0, Fmin[w][b][0][j]=Fmax[w][b][0][j]=0, and Rmin[w][b][0][j]=Rmax[w][b][0][j]=NaN if j≠0. When applying above recurrences to solve all subproblems, if any of the arithmetic operations {+,-} involves NaN as an operand, then the result is also an NaN. The min and max operations ignore NaN and only work on numerical operands, unless there is none, in which case an NaN is returned. We essentially use NaN to indicate that no feasible subsequence exists for a subproblem. There are O(Nnkd) subproblems defined; solving all of them using above recurrences takes O(Nnkd) time.
+
+The optimizing-step calculates the optimal score Πiw:=minz∈Sk(X[w∣n]) πi(z) and the optimal subsequence zi*[w] under each order πi for each window X[w∣n] by using the solutions of above subproblems. We enumerate where the i-letter of zi*[w], which is the pivot position for order πi, comes from in X[w∣n]. Having, say Xw+b-1 is the i-the letter for a particular b, 1≤b≤n, then calculating Πi[w] becomes two smaller problems involving finding a length-(i-1) subsequence s1 from X[w∣b-1] and a length-(k-i) subsequence s2 from X[w+b∣n-b]. Formally, we write Πi[w]=min1≤b≤n Πiwb,
+
+Πiwb:=mins1∈Si-1Xwb-1ands2∈Sk-iXw+bn-bπis1Xw+b-1s2.
+
+Recall that πi⋅:=ψi(⋅),ωi(⋅), Therefore we need to find the optimal ψi and ωi, defined as Ψiwb:=mins1∈Si-1(X[w∣b-1])ands2∈Sk-i(X[w+b∣n-b]) ψis1Xw+b-1s2,
+
+Ωiwb:=mins1∈Si-1Xwb-1ands2∈Sk-iXw+bn-bandψis1Xw+b-1s2=Ψiwb ωis1Xw+b-1s2.
+
+We design an O(d) time algorithm to calculate Ψi[w][b]. Recall the definition of ψi and note that Xw+b-1 is the pivot, we have ψis1Xw+b-1s2=(ψR(s1←)+CP[i]Xw+b+1+ψF(s2))modd.
+
+We first collect values ψR(s1←) and ψFs2 can take; we use two vectors, V1 and V2, to store them. For each j=0,1,⋯,d-1, we define j∈V1 if and only if there exists s1←∈Si-1(X[w∣b-1]) such that ψR(s1←)=j; similarly, we define j∈V2 if and only if there exists s2∈Sk-i(X[w+b∣n-b]) such that ψFs2=j. These two (sorted) vectors can be calculated easily given the solutions of the subproblems in the iterating step. In fact, j∈V1 if and only if Rmin[w][b-1][i-1][j]≠NaN, and j∈V2 if and only if Fmin[w+b][n-b][k-i][j]≠NaN. Therefore Ψi[w][b] can be calculated as: Ψi[w][b]=minj1∈V1 andj2∈V2j1+CP[i]Xw+b+1+j2modd
+
+This optimization problem can be solved in O(d) time, assuming that a binary vector of size d can be fit in a machine word, or in O(d⋅logd) time for arbitrary d. We leave the algorithmic details in Appendix A.
+
+As for Ωi[w][b], to satisfy that ψis1Xw+b-1s2=Ψi[w][b], we enumerate how it gets distributed across the three parts: if we assume that ψF(s1←)=j1, then we know ψRs2=Ψi[w][b]-j1-CP[i]Xw+b-1+dmodd, which we define as j2. Recall that ωis1Xw+b-1s2=ωR(s1←)⋅BPiXw+b-11+APiXw+b-1+ωFs2⋅BPiXw+b-12,
+
+we have Ωi[w][b]=max0≤j1<d maxs1∈Si-1(X[w∣b-1])andψR(s1)=j1 ωR(s1←)⋅BP[i]Xw+b-11+AP[i]Xw+b-1+maxs2∈Sk-i(X[w+b∣n-b])andψF(s)=j2ωF(s)⋅BP[i]Xw+b-12.
+
+The two optimization problems here are already solved in the iterating-step: the binary values in BP[i]Xw+b-1 determines whether Fmin/Rmin or Fmax/Rmax should be used. If we define Riwbj1:=+Rmax[w][b-1][i-1]j1,ifBP[i]Xw+b-11=+1-Rmin[w][b-1][i-1]j1,ifBP[i]Xw+b-11=-1
+
+and Fiwbj2:=+Fmax[w+b][n-b][k-i]j2,ifBP[i]Xw+b-12=+1-Fmin[w+b][n-b][k-i]j2,ifBP[i]Xw+b-12=-1
+
+Then Ri[w][b]j1 and Fi[w][b]j2 exactly give the optimal solution of the first and third term in the parenthesis. Formally, Ωiwb=max0≤j1<d Riwbj1+APiXw+b-1+Fiwbj2.
+
+Calculating Ωi[w][b] and thus Πi[w][b]=Ψi[w][b],Ωi[w][b] takes O(d) time for a single pair of w and b. Hence, the total running time of optimizing-step is O(Nnkd).
+
+In the end, Πi[w] is computed as min1≤b≤n Πi[w][b], and the optimal subsequence zi*[w] can be obtained by traceback. Therefore, the entire algorithm that finds k seeds for every length-n window in a given length-N sequence also runs in O(Nnkd) time.
+
+2.3 SIMD Parallelism
+
+The total running time of the above algorithm is O(Nnkd), as both iterating-step and optimizing-step require either filling or tracking back of a dynamic programming table of dimension N×n×k×d. Here we use SIMD instructions to speedup the algortihm. SIMD instructions are widely supported by modern CPUs that can leverage wide registers to perform operations on multiple data elements in parallel. Many dynamic programming algorithms are not feasible to use SIMD to speedup as the subproblems usually depend on each other. In our case, the subproblems in the last dimension of the table can be made independent, and hence these subproblems can be solved together with SIMD instructions.
+
+The iterating-step solves O(Nnkd) subproblems in O(Nnkd) time. With SIMD parallelism, we can concurrently compute d subproblems. Within the recurrences, operations such as addition, multiplication, minimum, and maximum operations can be replaced with SIMD instructions in the CPU intrinsics instruction set. Take the subproblem Fmin[w][b][l][j] as an example, we can get all the values of Fmin[w][b][l][j], 0≤j<d in O(1) time. Fmin[w][b][l][j]=minFmin[w][b-1][l][j]AF[l][j][σ]⋅BF[l][j][σ]2++Fmin[w][b-1][l-1]j′,ifBF[l][j][σ]1=+1-Fmax[w][b-1][l-1]j′,ifBF[l][j][σ]1=-1
+
+We first load all the values of AF[l][j][σ], BF[l][j][σ]2, ,0≤j<d into two registers. When iterating j from 0 to d-1, the multiplication of AF[l][j][σ] and BF[l][j][σ]2 can be simplified as a single SIMD multiply instruction can directly get all the results. Besides, we can transform BF[l][j][σ]1 into single mask number(an integer) where each bit represents the selection of +Fmin[w][b-1][l-1]j′ or -Fmax[w][b-1][l-1]j′. Similarly addition, maximum and minimum operations can also be replaced by SIMD instructions. In summary, transforming all operations in the recurrence into SIMD instructions reduces the time complexity of the entire iterating-steps to O(Nnk).
+
+In the optimizing-step, calculating Ωi[w][b] can also benefit from similar SIMD instructions which results in O(1) time. Although Ψ[w[b] still requires O(d) running time, it is notably faster comparing to iterating-step and calculating Ωi[w][b]. Consequently, SIMD instructions contribute significantly to saving time in the overall seed calculation.
+
+In detail, we require that d can not exceed 32 which allows to save at most 32 different 16-bits values in a 512-bits register. Regardless of the value of d, the overall running time remains nearly constant.
+
+2.4 SubseqHash2r: Variant for Reverse Complement
+
+In sequence analysis, it is a much desired property to not distinguish a sequence and its reverse complement. We can achieve this property by using symmetric tables in an ABCk order so that a length n string and its reverse complement can be mapped into the same set of k seeds. We refer to this variant of SubseqHash2 as SubseqHash2r. Note that this symmetry is enabled by the multiple orders defined in the ABCk order, and hence cannot be directly transferred to SubseqHash.
+
+Let x∈Σn be a length-n string and let x- be its reverse complement. We aim for having that i-th seed of x to be equal to the (k-i+1)-th seed of x-, for every 1≤i≤k, formally: argminz∈Skxπiz=argminz∈Sk(x-)πk-i+1z=argminz∈Skxπk-i+1(z-).
+
+This condition is met if πi(z)=πk-i+1(z-), for every 1≤i≤k.
+
+Here we derive the required property on the ABCk tables in order to generate the same set of seeds for a string and its reverse complement. Let z=z1z2⋯zk and therefore z-=zk-zk-1-⋯z1-, where we use zk- to represent the “complement” of letter zk. We require πi(z)=πk-i+1(z-), for every 1≤i≤k. Recall that πk-i+1(z-)=(ψk-i+1(z-),ωk-i+1(z-)) and ψiz=ψRzi-1zi-2⋯z1+CPizi+ψFzi+1zi+2⋯zkmodd,
+
+ψk-i+1(z-)=ψRzi+1-zi+2-⋯zk-+CPk-i+1zi-+ψFzi-1-zi-2-⋯z1-modd.
+
+In order to make ψk-i+1(z-)=ψi(z) we require the following CP[k-i+1]zi-=CP[i]zi
+
+ψRzi+i-zi+2-⋯zk-=ψFzi+1zi+2⋯zk
+
+ψFzi-1-zi-2-⋯z1-=ψRzi-1zi-2⋯z1
+
+By the definitions of ψF and ψR, they lead to the following for every 1≤i≤k and z∈Σ. CP[k-i+1][z]=CP[i][z‾]
+
+CF[i][z]=CR[i][z‾]
+
+The same approach can be used to derive the requirements needed for making ωk-i+1(z-)=ωi(z), which we directly show below, for every 1≤i≤k, z∈Σ, and 0≤j<d: AP[k-i+1][z]=AP[i][z‾]
+
+BP[k-i+1][z]1=BP[i][z‾]2
+
+AF[i][j][z]=AR[i][j][z‾]
+
+BF[i][j][z]1=BR[i][j][z‾]1
+
+BF[i][j][z]2=BR[i][j][z‾]2
+
+2.5 SubseqHash2w: Variant Concatenating a Substring
+
+The recently developed method strobemer extracts a substring and some minimizers from the subsequent windows and concatenates them as a seed [23, 24, 14]. We apply this idea to SubseqHash2, creating a new variant termed SubseqHash2w. In SubseqHash2w, a seed is formed by two parts: a substring and the smallest subsequence from the following window. We use an additional parameter k0 to specify the length of the preceding substring. For an input x of length k0+n, SubseqHash 2w extracts the first substring of length k0, and then compute k seeds of length k from the remaining string of length n using the above algorithm. The leading substring of length k0 will be concatenated with each of the k seeds, resulting in k seeds of length k0+k. In experiments, we compare SubseqHash2w with strobemer.
+
+2.6 Selection of Parameters
+
+SubseqHash2 has parameters n, k, d, and t. The combination of n and k balances the sensitivity and precision of the produced seeds. For a fixed n, a larger k provides lower sensitivity and fewer false positives. Different values of n may have different performance while larger n also takes more running time. The sensitivity can be increased if d is increased; with SubseqHash2 we can large d as its running time is independent of d for up to d=32. Parameter t specifies the number of seeds in a window (length-n string), which should be in the range of [1,k]. The selection of t can be application-dependent; in general, data with higher error rates might need a larger t to produce enough seed-matches. The algorithm is implemented to allowing for specifying t, in which case the optimizing-step can be sped up to just generate t seeds. SubseqHash2w has an additional parameter k0, which also balances sensitivity and precision. In the experiments, we use k0=k/2.
+
+3 Results
+
+We first present an analysis of the probability of hash collision as a function of edit distance for different seeding methods, illustrating their basic properties. Next, we benchmark the running time of SubseqHash and SubseqHash2. Last, we compare different seeding methods for three applications: read mapping, pairwise sequence alignment, and overlap detection.
+
+3.1 Comparison of Probability of Hash Collision
+
+Most seeding methods can be interpreted as a (hashing) function that maps a string (typically a window in a long sequence in practice) into a seed. For examples, minimizer maps a length-n string to its smallest length-k substring, and SubseqHash/SubseqHash2 maps a length-k string to its smallest length-k subsequence. It is desirable for such a seeding method h to be both sensitive and precise (aka locality-sensitive), i.e., the probability of hash collision Pr(h(x)=h(y)) is high (resp. low) if the edit distance between two strings x and y, written as edit(x,y), is small (resp. large). When repeating h by t times, a length-n string x will be mapped into t seeds, written as hi(x), 1≤i≤t, and a seeding method is desired to achieve a high probability of having at least one hash collision Pr∨1≤i≤thi(x)=hi(y) when edit(x,y) is small, and a high probability of not having any hash collision Pr∧1≤i≤thi(x)≠hi(y) when edit(x,y) is large.
+
+The probability of hash collisions can be estimated using simulations. We randomly generate pairs of strings over alphabet {A,C,G,T}. A simulated pair will be put into category-i if the edit distance between them is i,i=1,2,⋯,10. We simulate 100,000 pairs in each category. We apply minimizer, SubseqHash, and SubseqHash2 on the simulated pairs with repetition (t=10 or t=k) and without repetition (t=1). Minimizer is repeated by using different random seeds in its hash function in defining the order for kmers. SubseqHash is repeated by using random, independent tables used in the ABC order. SubseqHash2 generates t sets of seeds in a single run. The frequency of hash collisions (at least one hash collision in the case of repetitions) in each category will be used to estimate the probability.
+
+The estimated probabilities are shown in Figure 2 and Supplementary Figures 1, 2, 3. First, observe that SubseqHash2 and SubseqHash with the same number of repeats exhibits nearly identical probability. This is exactly the goal of SubseqHash2: the same performance as SubseqHash but running in a much reduced time complexity. Second, repeating is effective for SubseqHash2 and SubseqHash, demonstrated by the facts that the probability can be drastically increased with small edit distance, while remaining nearly zero with large edit distance. On the contrary, repeating is not effective for minimizer, as the probability remains low even with small edit distance. We also included the results of using all kmers as seeds (therefore a pair of string has at least one hash collision with “all kmer” if they share at least one kmer). As expected, the probability of repeating minimizers is close to and bounded by that of using all kmers. For experiments in the following Sections, we simply include the results of “all kmers” to approximate the results of repeating minimizer.
+
+3.2 Comparison of Running Time
+
+We compare the running time of SubseqHash and SubseqHash2 in Figure 3 and Supplementary Figure 4. Both methods are applied to the SRX499318 dataset (with PacBio long reads), and we report the average CPU time per read. With the same parameters d and t, SubseqHash2 can be 50 times faster than SubseqHash. SubseqHash2 repeating k times can be even faster than SubseqHash without repeating. It is also noteworthy that the running time of SubseqHash2 only experiences a slight increase as d and t grow, suggesting that the efficiency of SubseqHash2 remains nearly independent of d and t, confirming our theoretical analysis that the time complexity is substantially improved.
+
+We also compare with kmer-based methods on the same dataset. Not surprisingly, kmers, Minimizers, and syncmers are exceedingly fast, taking less than 5 seconds across almost all choices of parameters, as they only need a linear scan of each read. Strobemers at a typical configuration (two strobes of length 15 within a window of size 50) consumes 145.19 seconds with 10 repeats. In comparison, SubseqHash2, configured with n=30, k=25, d=31, and 10 repeats, uses 577.45 seconds, placing it in a comparable time range as Strobemers. Notably, SubseqHash, with the identical (n,k,d,t) as SubseqHash2, requires a substantially longer running time of 15,364 seconds to complete the task. We note that repeat is a sensible option for both Strobemers and SubseqHash2, in order to achieve their best performances in three following applications.
+
+3.3 Read Mapping
+
+we now consider the task of mapping error-prone long reads to reference genomes. For this purpose, we simulate a set of reads using PBSIM2 [20] from chromosome X of Drosophila melanogaster (AE014298.5) that mirrors the sequencing error profile (reported in [27]) of the PacBio SRX499318 dataset. Reads that share long substrings with the parts of the reference where they originate can be mapped easily using either seeding methods. The real challenge lies in identifying true seed matches for reads (or parts of reads) that barely share any meaningfully long substring with the reference. Our seeding method is designed to tackle such “hard” reads. We argue that this is a valid and intended pipeline—it would be unwise to completely abandon the agile substring-based methods with existing highly optimized implementations such as minimap2 [11] for the easier tasks; instead, we use them as a filter to expose cases where only subsequence-based seeds can provide a satisfactory solution. From all the simulated reads, 4,295 unmapped read fragments from the results of minimap2 that are longer than 1000 bp are kept for our analysis.
+
+SubseqHash2 is compared with minimizer, closed syncmer, and all-kmers, for generating seeds on both the reads and the reference chromosome. As we do not know the strand of reads, we use SubseqHash2r, with one run being able to cover both strands; ther methods need to be applied both on the reads and their reverse complements. All seeding methods are set to generate seeds of length k from sliding windows of length n; seed-matches are then collected between the reads and the reference. When repeats are used, seed-matches from repeated runs are pooled. Note that a seed-match specifies k aligned characters across the two sequences. We define a seed-match to be true if over 50% of its k aligned characters coincide with the ground truth;otherwise, we call it a false seed-match.
+
+In the seed-extend or seed-chain-extend framework of read mapping, more true seed-matches and fewer false seed-matches are definitely desirable. We therefore report the precision of seed-matches, defined as the number of true seed-matches divided by the total number of seed-matches. Additionally, it is also crucial that these seed-matches can be evenly distributed across the read, ensuring sufficient information for chaining and producing a complete alignment. To assess this, we partition all reads into segments of length 200 bp. An ideal seeding would cover every segment with true seed-matches. We hence also report a segment sensitivity, defined as the percentage of segments with at least one true seed-match.
+
+In Figure 4 and Supplementary Figure 5, we present these metrics acquired by various methods. Observe that the segment sensitivity of substring-based methods drops rapidly as k increases. This is because in these “hard” reads the exact match of long kmers with reference is infrequent, as otherwise minimap2 would align them correctly. In contrast, SubseqHash2 with repeats demonstrates the ability to capture adequate true seed matches while precision increases, resulting in a curve significantly above others. Furthermore, the curves of substring-based methods confirm that on “hard” regions, no choice of k can produce a satisfactory balance between sensitivity and precision; whereas SubseqHash2 with repeats achieves a four times higher sensitivity at the peak precision of kmers. This attests to the superiority of SubseqHash2 in generating high-quality seeds for aligning difficult reads.
+
+We compare SubseqHash2w with Strobemer (Randstrobe [23] with two windows), as both employ multiple windows. To repeat Strobemer, we change the random seed in its hash function. Without repeating SubseqHash2w shows slightly better performance. However, with repetitions, SubseqHash2w demonstrates a substantial improvement, highlighting the effectiveness of repetition in SubseqHash and SubseqHash2.
+
+3.4 Pairwise Sequence Alignment
+
+We then evaluate the performance of seeding methods for pairwise sequence alignment through simulations. For each error rate r=0.05,0.1,0.15, we simulate 10 pairs of long sequences and report the average measures. We simulate a pair by randomly generating a sequence of length L=1,000,000 as its first sequence, followed by applying an edit, with probability of r/3 being a substitution, insertion, or deletion, at each position, to get its second sequence. We compute the coverage of true (resp. false) seed-matches, defined as the proportion of characters encompassed by true (resp. false) seed-matches. High true coverage and low false coverage are desirable, as the former implies long-range of correct alignment while the latter implies low chance of producing incorrect alignment. These two measures can be interpreted as sensitivity and precision of a seeding method for sequence alignment.
+
+We compare SubseqHash2 with other four methods: minimizers, closed syncmer, all-kmers, and SubseqHash. The results are given in Figure 5 and Supplementary Figures 6, 7, 8. Again, SubseqHash2 mirrors the accuracy from SubseqHash at the same level of repetitions, as we aimed for. With repetitions, SubseqHash2/SubseqHash considerably outperforms substring-based methods at all error rates. The results of SubseqHash2w and Strobemer are also shown. Although Strobemer performs better without repeating, SubseqHash2w significantly outperforms with repetitions.
+
+3.5 Overlap Detection
+
+Overlap graph is the fundamental data structure used by many long-read genome assemblers where each pair of overlapping reads are connected. Accurately identifying such pairs is thus crucial: having too many false positives tends to produce a tangled graph, while missing true positives can cause gaps in the assembly. Seeding methods are used to alleviate the computational burden by efficiently filtering out a large fraction of non-overlapping pairs: each read is first transformed into a set of seeds; pairs of reads are considered candidates for further verification only if they share a common seed. Usually, heuristics are applied such as filtering out high-frequency seeds, requiring more seed-matches to trigger a candidate pair, chaining co-linear seed-matches, and applying other fine-grained verification methods (e.g., local alignment), all of which can improve the final overlap results. We note that such pre- and post-processing steps are independent of the choice of seeds, so we omit them in this experiment to have a direct comparison of performances among different seeding schemes.
+
+Two PacBio long reads datasets, SRX533603 (E. coli) and SRX499318 (D. melanogaster) from [4] are used. Reads are first mapped to reference genomes with minimap2 to construct a ground-truth for evaluation. From both datasets, 10,000 reads are sampled from those that are confidently mapped. A pair of reads are considered truly overlap (i.e., ground-truth) if their mapped regions on the reference overlap by at least 15bp. Sensitivity and precision are defined as the fractions of reported pairs that are correct over all ground-truth pairs and over all reported pairs, respectively. Again, in order to be able to identify overlapping reads from opposite strands, with the exception of SubseqHash2r, other methods collect seeds twice from each read, one for each strand.
+
+The precision-sensitivity curves are compared in Figure 6 and Supplementary Figures 9–11. SubseqHash and SubseqHash2 provide significantly higher sensitivity than substring-based seeds at the same level of precision, except when precision approaches zero where all methods achieve almost perfect sensitivity at the cost of reporting an excessive amount of false-positive pairs, which defeats the purpose of seeding. For substring-based seeds, the extreme of repeating is to include all-kmers, which produces little improvement. Repeating helps (random) Strobemers but only to a limited extent (observe that strobemer curves with 10 and k repeats almost overlap). This is because its components are kmers and hence have a restricted range of choices; furthermore, all the kmers in two similar windows can be easily destroyed by just a few errors, in which case no matching Strobemers can be found regardless of the number of repeats. In contrast, the performance of SubseqHash/SubseqHash2 can still benefit from more repeats, justifying the motivation of producing k seeds in one run.
+
+4 Discussion
+
+We introduced SubseqHash2, an advanced subsequence-based seeding method. Remarkably, it can be 50 times faster than its predecessor, SubseqHash, while preserving high seed quality. The innovative strategy of using a pivot position allows SubseqHash2 to produce up to k seeds for a window in a single pass. This approach substantially reduces the computational time of producing t≤k sets of seeds from O(Nnkdt) to O(Nnkd) and grants SubseqHash2 the flexibility to adapt its seed count to enhance performance in various sequence analysis tasks without incurring additional computation. Additionally, we employ SIMD instructions in the dynamic programming algorithm for seed computation, enabling parallel computation of d subproblems and further reducing the dynamic programming running time to O(Nnk). Throughout our experiments, SubseqHash2 matches the performance of SubseqHash while delivering a significant reduction in actual running time. Moreover, these algorithmic innovations allow for generating the same sets of seeds for a sequence and its reverse complement, which further halves the running time for reads with unknown strand information. SubseqHash2 is versatile, can be combined with kmers in seeding as needed.
+
+We recognize that the superior seed quality of our approach comes at the cost of a more complicated algorithm, and therefore, despite being substantially improved, still slower comparing to the simple and fast substring-based seeding methods. We are actively exploring ideas for further acceleration, both in terms of algorithmic design and implementation optimization. On the other hand, we believe strategically combining the agility of substring-based methods and the high sensitivity of subsequence-based seeding can potentially produce an ideal solution for analyzing data with high mutation/error rates, as demonstrated by our read mapping experiment. Given the unsatisfied accuracy of substring-based methods on error-prone data, as well as the common struggle of choosing k, we are optimistic that SubseqHash2, as a less swift but more accurate alternative, can establish its value across a broader spectrum of applications.
+
+Supplementary Material
+
+Supplement 1
+
+Acknowledgment
+
+This work is supported by the US National Science Foundation (2019797 and 2145171 to M.S.) and by the US National Institutes of Health (R01HG011065 to M.S.).
+
+A Algorithm for calculating Ψi[w][b]
+
+Calculating Ψi[w][b] goes down to solve this abstracted problem: given integer d, integer d0, and two sorted lists V1 and V2 for which all elements are in {0,1,⋯,d-1}, calculate minj1∈V1,j2∈V2 j1+d0+j2modd. The constant d0 stands for CP[i]Xw+b+1 in the original task. Below we design two algorithms: the first one runs in O(d) time assuming that a 2d bit-vector can be fit in a machine word; the second algorithm runs in O(d⋅logd) solves this problem for arbitrarily large d.
+
+Algorithm 1.
+
+We first transfer V1 into a number x1 stored as a d-bit vector: x1:=∑j∈V1 2j.
+
+We use x1[j] to represent the j-th bit of its underlying bit-vector, formally defined as x1j:=x1/2jmod2. Clearly, for any 0≤j<d, we have x1[j]=1 if and only if j∈V1.
+
+We then calculate x, defined below. For each element j∈V2 we shift the bit-vector of x1 to the left by j bits to get a new bit-vector (of size 2d bits, with possible padding 0 s to its left). We calculate x by bit-wise OR over these new bit-vectors. Clearly, x is of size 2d bits. x:=⋁j∈V2 x1×2j.
+
+We now show that, the i-th bit of x equals to 1, i.e., x[i]=1, if and only if there exists j1∈V1 and j2∈V2, such that j1+j2=i. Considering how x is calculated, we have that x[i]=1 if and only if there must be j2∈V2 such that x1×2j2[i]=1. We can write: x[i]=1⟺∃j2∈V2s.t.x1×2j2[i]=1⟺∃j2∈V2s.t.x1i-j2=1⟺∃j2∈V2s.t.i-j2∈V1⟺∃j1∈V1,j2∈V2s.t.j1+j2=i.
+
+Now we transform x back to a set V by defining x[i]=1 if and only if i∈V. In other words, V now stores all the possible values that can be obtained by j1+j2 where j1∈V1 and j2∈V2. The final solution can be calculated by enumerating elements in V: minj1∈V1,j2∈V2 j1+d0+j2modd:=mini∈V i+d0modd.
+
+In this algorithm, computing x1 takes O(d) time; calculating x takes O(d) time as well because there are at most d multiplication (bit-shifting) and d bitwise OR operations, which of which can be done in O(1) time. The final minimization takes O(d) time. Therefore, the overall running time of this algorithm is O(d).
+
+Algorithm 2.
+
+We have another O(d⋅logd) algorithm for general cases. For each value j1 in V1, the optimal value from V2 is j*:=2d-j1-d0modd, as in this case j1+j*+d0modd=0. But j* might not exist in V2. To find the optimal value in V2, we note that for each j2∈V2 the objective function can be represented in a simple closed form: j1+d0+j2modd=j2-j*ifj*≤j2<dd-j*+j2if0≤j2<j*
+
+This closed form can also be illustrated and verified using the table given below. j2	0	1	…	j* − 1	j*	j* + 1	…	d − 1	
+(j1 + d0 + j2) mod d	d − j *	d − j* + 1	…	d — 1	0	1	…	d − 1 − j*	
+
+For each j1, above closed form gives an easy way to find optimal value in V2: among these j2 in V2 satisfying j*≤j2, the optimal one (which gives the smallest objective value) would be the smallest such j2; among these j2 in V2 satisfying j2<j*, the optimal one (which gives the smallest objective value) would be the smallest such j2 as well. Note that, for any j2≥j*, it always gives a smaller objective value than any j2<j*.
+
+Hence, we can apply binary search on V2 to find the optimal j2. Specifically, we search V2 to find the first value that is equal to or larger than j*. If it exists, denoting it as p, we calculate the corresponding objective value as p-j*. Otherwise, we find the smallest value in V2 (which can be done in O(1) time as we assume both V1 and V2 are sorted), denoting it as q, we calculate the corresponding objective value as d-j*+q. The overall optimal objective value will be the smallest one by enumerating all j1∈V1.
+
+For each j1∈V1, above binary search takes O(logd) time; the entire algorithm runs in O(d⋅logd) time.
+
+B An example of the ABCk order
+
+We give an example for the ABCk order, determined by the random tables shown in Tables 1, 2, and 3 with =6, d=5, and Σ={A,C,G,T}. The score of z=CTAACT can be calculated following the recurrences, with detailed given below. We first compute ψF, ωF using tables AF, BF, and CF, and ψR,ωR with tables AR, BR, and CR:	Reverse	Pivot	Forward	ψR	ωR	ψF	ωF	
+π1	Ø	C	TAACT	0	0	3	−155	
+π2	C	T	AACT	3	−18	3	−52	
+π3	TC	A	ACT	0	−37	2	−156	
+π4	ATC	A	CT	4	1	2	−36	
+π5	AATC	C	T	0	9	0	79	
+π6	CAATC	T	0	2	−191	0	0	
+
+Then we can calculate the values of k score functions π1,π2,⋯,π6 for z=CTAACT based on ψF,ωF, ψR, ωR, and table AP, BP, CP. ψ1(CTAACT)=(ϕR(Ø)+CP1C+ϕFTAACT)mod5=4,
+
+ω1(CTAACT)=ωR(Ø)⋅BP[1][C]1+AP[1][C]+ωF(TAACT)⋅BP[1][C]2=237.
+
+ψ2(CTAACT)=ϕRC+CP2T+ϕFAACTmod5=1,
+
+ω2(CTAACT)=ωR(C)⋅BP[2][T]1+AP[2][T]+ωF(AACT)⋅BP[2][T]2=-165.
+
+ψ3(CTAACT)=ϕRTC+CP3A+ϕFACTmod5=0,
+
+ω3(CTAACT)=ωR(TC)⋅BP[3][A]1+AP[3][A]+ωF(ACT)⋅BP[3][A]2=-131.
+
+ψ4(CTAACT)=ϕRATC+CP4A+ϕFCTmod5=1,
+
+ω4(CTAACT)=ωR(ATC)⋅BP[4][A]1+AP[4][A]+ωF(CT)⋅BP[4][A]2=84.
+
+ψ5(CTAACT)=ϕRAATC+CP5C+ϕFTmod5=1,
+
+ω5(CTAACT)=ωR(AATC)⋅BP[5][C]1+AP[5][C]+ωF(T)⋅BP[5][C]2=-106.
+
+ψ6(CTAACT)=(ϕRCAATC+CP6T+ϕF(Ø))mod5=4,
+
+ω6(CTAACT)=ωR(CAATC)⋅BP[6][T]1+AP[6][T]+ωF(Ø)⋅BP[6][T]2=207.
+
+The k scores of z=CTAACT are listed below. Similarly, we also get the scores of z′=CCAACT. π1(CTAACT)=(4,237)π1(CCAACT)=(1,-25)
+
+π2CTAACT=1,-165π2(CCAACT)=(2,155)
+
+π3(CTAACT)=(0,-131)π3(CCAACT)=(1,-151)
+
+π4(CTAACT)=(1,84)π4(CCAACT)=(2,119)
+
+π5(CTAACT)=(1,-106)π5(CCAACT)=(3,-21)
+
+π6(CTAACT)=(4,207)π6(CCAACT)=(2,186)
+
+Note that the edit distance between z and z′ is 1, but all the k scores are drastically changed. This is a desired property and is the goal of the design of the ABCk orders. Because of this, each of the k orders in the ABCk order behaves similarly to a pure random order, so that the probability of hash collision between two strings can be approximately the Jaccard index between the two sets of length-k subsequences.
+
+Figure 1 Illustration of the algorithm computing seeds for each window of length n=7 of the given long sequence (on top; length N=17). The left panel shows the iterating step, in which the blue arrows show the Fmin and Fmax subproblems and purple arrows show the Rmin and Rmax subproblems. The right panel shows the optimizing step for a particular window (highlighted); the subproblems required for finding the optimal seeds in this window, which are available in the iterating step, are also highlighted.
+
+Figure 2 The probability of hash collision (at least one hash collision in the case of t=10 and t=k=24) estimated for different seeding methods with n=30 and k=24. “minimizer t” represents repeating minimizer t times. “SH dt” and “SH2 dt” represent SubseqHash and SubseqHash2 with parameter d and repeating t times.
+
+Figure 3 The average CPU time (second) of SubseqHash and SubseqHash2 per read. “SH ndt ” and “SH2r ndt ” represent SubseqHash and SubseqHash2r with window size of n, parameter d, and repeating t times; for both cases the lines connect points with varying k.
+
+Figure 4 Comparison of averaged precision of seed-matches and sensitivity of segments. In the left figure, line “all-kmers” connects points with varying k from 10 to 25; “minimizer n” represents a window size of n, with points on it corresponding to varying k. “syncmer k ” represents closed syncmer with a length-k seed; the line connects points with varying s from 2 to k-1 In the right figure, “SH2w ndt ” represents SubseqHash2w with window size of n, parameter d, and repeating t times; k0=k/2. “Strobemer nt” represents Strobemer (two windows) with window size of n and repeating t times; the line connects points with varying parameter k from 5 to 20.
+
+Figure 5 The true and false coverages of different seeding methods on data with error rate r=10%. The same parameters as in Section 3.3 are used.
+
+Figure 6 Overlap detection results on 10,000 reads sampled from the E. coli SRX533603 dataset with window size 60 and d=31. For minimizers with window sizes n=25,30,35, each curve is drawn with six seed lengths k evenly spaced between 10 and n (when k=n, all k-mers are in the seed set). For syncmers with seed lengths k=14,18,22, each curve is draw with five s-mer lengths evenly spaced between 2 and k (when s=k, all k-mers are selected). For SubseqHash, SubseqHash2r, strobemer, and SubseqHash2w, the window size is n=60. For SubseqHash, SubseqHash2r, and SubseqHash2w, the seed lengths k=⌊rn⌋ for r=0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85 are plotted. For strobemer, a seed consists of two k-mers for k=⌊rn/2⌋ with r=0.35,0.45,0.55,0.65,0.75, where the first k-mer is the leading k-mer in the window, and the second k-mer is selected by the randstrobe algorithm from the remaining part of the window. For SubseqHash2w, a seed of length k consists of the leading k0=⌊k/3⌋-mer in the window and a SubseqHash2 seed of length ⌈2k/3⌉ from the remaining part of the window.
+
+Table 1 An example of random tables AP, BP, CP used in an ABCk order. Entries in table AP are integers drawn from [−100; −10] ∪ [10; 100].
+
+(a) Table AP	
+	σ	
+i	A	C	G	T	
+	
+1	−24	82	−34	11	
+2	−90	85	33	−95	
+3	−12	89	29	−12	
+4	49	71	−73	−18	
+5	−84	−36	91	70	
+6	49	−17	−32	16	
+	
+(b) Table Bp	
+	σ	
+i	A	C	G	T	
+	
+1	(−1, 1)	(−1, −1)	(1, 1)	(1, −1)	
+2	(−1, 1)	(−1, −1)	(1, −1)	(1, 1)	
+3	(−1, 1)	(1, −1)	(−1, −1)	(1, 1)	
+4	(−1, −1)	(1, 1)	(−1, 1)	(1, −1)	
+5	(1, 1)	(1, −1)	(−1, 1)	(−1, −1)	
+6	(1, −1)	(−1, −1)	(1, 1)	(−1, 1)	
+	
+(c) Table Cp	
+	σ	
+i	A	C	G	T	
+	
+1	3	1	4	2	
+2	3	1	4	0	
+3	3	1	4	0	
+4	0	2	4	3	
+5	3	1	4	2	
+6	4	3	0	2	
+
+Table 2 An example of random tables AF, BF, CF used in an ABCk order. Entries in table AF are integers drawn from [10; 100].
+
+(a) Table AF	
+		σ	
+i	j	A	C	G	T	
+	
+1	0	52	87	27	79	
+1	46	40	52	70	
+2	56	36	82	91	
+3	99	22	52	23	
+4	99	87	50	29	
+	
+2	0	79	97	46	19	
+1	57	49	65	87	
+2	70	57	39	72	
+3	56	32	58	70	
+4	62	96	42	38	
+	
+3	0	98	15	36	34	
+1	14	89	62	39	
+2	65	32	96	25	
+3	21	84	40	97	
+4	17	83	37	70	
+	
+4	0	23	14	96	60	
+1	98	46	74	31	
+2	72	96	77	79	
+3	41	20	89	99	
+4	38	80	95	82	
+	
+5	0	70	44	37	87	
+1	78	96	79	32	
+2	98	10	30	98	
+3	92	10	58	97	
+4	61	94	24	35	
+	
+6	0	84	34	16	30	
+1	48	62	82	43	
+2	69	84	92	51	
+3	94	65	95	52	
+4	87	32	89	44	
+	
+(b) Table BF	
+		σ	
+i	j	A	C	G	T	
+	
+1	0	(1, −1)	(−1, 1)	(−1, −1)	(1, 1)	
+1	(1, −1)	(−1, 1)	(−1, −1)	(1, 1)	
+2	(1, −1)	(−1, −1)	(−1, 1)	(1, 1)	
+3	(1, −1)	(1, 1)	(−1, 1)	(−1, −1)	
+4	(1, −1)	(−1, 1)	(1, 1)	(−1, −1)	
+	
+2	0	(−1, −1)	(−1, 1)	(1, 1)	(1, −1)	
+1	(−1, −1)	(1, 1)	(−1, 1)	(1, −1)	
+2	(−1, 1)	(1, 1)	(1, −1)	(−1, −1)	
+3	(1, 1)	(1, −1)	(−1, 1)	(−1, −1)	
+4	(−1, 1)	(−1, −1)	(1, 1)	(1, −1)	
+	
+3	0	(1, −1)	(1, 1)	(−1, −1)	(−1, 1)	
+1	(−1, −1)	(−1, 1)	(1, −1)	(1, 1)	
+2	(−1, −1)	(−1, 1)	(1, 1)	(1, −1)	
+3	(1, 1)	(−1, −1)	(−1, 1)	(1, −1)	
+4	(1, 1)	(−1, 1)	(1, −1)	(−1, −1)	
+	
+4	0	(1, −1)	(−1, −1)	(1, 1)	(−1, 1)	
+1	(1, −1)	(−1, −1)	(−1, 1)	(1, 1)	
+2	(−1, 1)	(1, −1)	(1, 1)	(−1, −1)	
+3	(−1, 1)	(−1, −1)	(1, 1)	(1, −1)	
+4	(1, −1)	(1, 1)	(−1, −1)	(−1, 1)	
+	
+5	0	(1, −1)	(−1, −1)	(1, 1)	(−1, 1)	
+1	(−1, 1)	(1, −1)	(1, 1)	(−1, −1)	
+2	(1, −1)	(1, 1)	(−1, 1)	(−1,−1)	
+3	(1, 1)	(−1, 1)	(−1, −1)	(1, −1)	
+4	(1, −1)	(−1, 1)	(1, 1)	(−1, −1)	
+	
+6	0	(−1, −1)	(1, 1)	(−1, 1)	(1, −1)	
+1	(1, 1)	(−1, 1)	(1, −1)	(−1, −1)	
+2	(1, 1)	(−1, 1)	(−1, −1)	(1, −1)	
+3	(−1, 1)	(1, −1)	(1, 1)	(−1, −1)	
+4	(−1, −1)	(1, 1)	(1, −1)	(−1, 1)	
+	
+(c) Table CF	
+	σ	
+i	A	C	G	T	
+	
+1	4	2	3	0	
+2	2	4	3	0	
+3	1	0	2	4	
+4	1	3	0	2	
+5	1	0	4	2	
+6	1	3	2	4	
+
+Table 3 An example of random tables AR, BR, CR used in an ABCk order. Entries in table AR are integers drawn from [10; 100].
+
+(a) Table AR	
+		σ	
+i	j	A	C	G	T	
+	
+1	0	15	44	68	42	
+1	28	47	71	79	
+2	48	48	88	14	
+3	64	18	99	60	
+4	11	92	74	96	
+	
+2	0	15	23	92	33	
+1	96	35	89	87	
+2	12	67	21	83	
+3	43	29	85	99	
+4	39	18	14	70	
+	
+3	0	37	48	60	99	
+1	84	24	98	19	
+2	51	23	35	79	
+3	66	91	91	26	
+4	29	67	93	31	
+	
+4	0	46	46	91	94	
+1	14	49	73	31	
+2	49	94	16	44	
+3	48	71	66	62	
+4	35	12	67	35	
+	
+5	0	93	38	65	86	
+1	96	66	91	80	
+2	91	42	33	72	
+3	11	41	45	45	
+4	60	23	29	24	
+	
+6	0	79	95	17	44	
+1	26	63	65	23	
+2	77	36	71	48	
+3	29	91	49	63	
+4	99	31	92	71	
+	
+(b) Table BR	
+		σ	
+i	j	A	C	G	T	
+	
+1	0	(−1, −1)	(1, −1)	(−1, 1)	(1, 1)	
+1	(−1, −1)	(1, −1)	(1, 1)	(−1, 1)	
+2	(−1, −1)	(1, −1)	(1, 1)	(−1, 1)	
+3	(−1, −1)	(1, −1)	(1, 1)	(−1, 1)	
+4	(−1, −1)	(1, −1)	(−1, 1)	(1, 1)	
+	
+2	0	(1, −1)	(−1, −1)	(−1, 1)	(1, 1)	
+1	(1, 1)	(−1, −1)	(1, −1)	(−1, 1)	
+2	(1, −1)	(−1, 1)	(−1, −1)	(1, 1)	
+3	(−1, −1)	(1, 1)	(−1, 1)	(1, −1)	
+4	(−1, −1)	(1, −1)	(1, 1)	(−1, 1)	
+	
+3	0	(1, 1)	(1, −1)	(−1, −1)	(−1, 1)	
+1	(1, −1)	(−1, −1)	(1, 1)	(−1, 1)	
+2	(−1, 1)	(1, 1)	(−1, −1)	(1, −1)	
+3	(1, −1)	(1, 1)	(−1, −1)	(−1, 1)	
+4	(−1, −1)	(1, −1)	(1, 1)	(−1, 1)	
+	
+4	0	(−1, −1)	(1, −1)	(−1, 1)	(1, 1)	
+1	(1, 1)	(−1, 1)	(1, −1)	(−1, −1)	
+2	(1, 1)	(−1, 1)	(−1, −1)	(1, −1)	
+3	(1, 1)	(1, −1)	(−1, −1)	(−1, 1)	
+4	(1, 1)	(−1, 1)	(−1, −1)	(1, −1)	
+	
+5	0	(−1, −1)	(−1, 1)	(1, 1)	(1, −1)	
+1	(1, 1)	(−1, 1)	(1, −1)	(−1, −1)	
+2	(−1, 1)	(1, −1)	(1, 1)	(−1, −1)	
+3	(−1, −1)	(1, 1)	(1, −1)	(−1, 1)	
+4	(−1, −1)	(1, −1)	(1, 1)	(−1, 1)	
+	
+6	0	(−1, 1)	(−1, −1)	(1, 1)	(1, −1)	
+1	(−1, 1)	(−1, −1)	(1, 1)	(1, −1)	
+2	(−1, −1)	(1, 1)	(−1, 1)	(1, −1)	
+3	(1, −1)	(−1, −1)	(1, 1)	(−1, 1)	
+4	(1, 1)	(−1, 1)	(1, −1)	(−1, −1)	
+	
+(c) Table CR	
+	σ	
+i	A	C	G	T	
+	
+1	0	3	1	2	
+2	4	3	1	2	
+3	4	2	1	0	
+4	2	1	4	3	
+5	0	3	4	2	
+6	3	1	0	2
+==== Refs
+References
+
+[1] Abouelhoda Mohamed Ibrahim and Ohlebusch Enno . Chaining algorithms for multiple genome comparison. Journal of Discrete Algorithms, 3 (2–4 ):321–341, 2005.
+[2] Altschul Stephen F , Gish Warren , Miller Webb , Myers Eugene W , and Lipman David J . Basic local alignment search tool. Journal of Molecular Biology, 215 (3 ):403–410, 1990.2231712
+[3] Altschul Stephen F , Madden Thomas L , Schäffer Alejandro A , Zhang Jinghui , Zhang Zheng , Miller Webb , and Lipman David J . Gapped BLAST and PSI-BLAST: a new generation of protein database search programs. Nucleic Acids Research, 25 (17 ):3389–3402, 1997.9254694
+[4] Berlin Konstantin , Koren Sergey , Chin Chen-Shan , Drake James P , Landolin Jane M , and Phillippy Adam M . Assembling large genomes with single-molecule sequencing and locality-sensitive hashing. Nature Biotechnology, 33 (6 ):623–630, 2015.
+[5] Califano Andrea and Rigoutsos Isidore . FLASH: A fast look-up algorithm for string homology. In Proceedings of IEEE Conference on Computer Vision and Pattern Recognition (CVPR’93), pages 353–359. IEEE, 1993.
+[6] Cheng Haoyu , Concepcion Gregory T , Feng Xiaowen , Zhang Haowen , and Li Heng . Haplotype-resolved de novo assembly using phased assembly graphs with hifiasm. Nature Methods, 18 (2 ):170–175,2021.33526886
+[7] Chin Chen-Shan and Khalak Asif . Human genome assembly in 100 minutes. bioRxiv, page 705616, 2019.
+[8] Edgar Robert . Syncmers are more sensitive than minimizers for selecting conserved k-mers in biological sequences. PeerJ, 9 :e10805, 2021.33604186
+[9] Jain Chirag , Gibney Daniel , and Thankachan Sharma V . Co-linear chaining with overlaps and gap costs. In Proc. 26th Int’l Conf. Comput. Mol. Biol. (RECOMB’22), pages 246–262. Springer, 2022.
+[10] Koren Sergey , Walenz Brian P , Berlin Konstantin , Miller Jason R , Bergman Nicholas H , and Phillippy Adam M . Canu: scalable and accurate long-read assembly via adaptive k-mer weighting and repeat separation. Genome Research, 27 (5 ):722–736, 2017.28298431
+[11] Li Heng . Minimap2: pairwise alignment for nucleotide sequences. Bioinformatics, 34 (18 ):3094–3100, 2018.29750242
+[12] Li Xiang , Shi Qian , Chen Ke , and Shao Mingfu . Seeding with minimized subsequence. Bioinformatics, 39 (Supplement_1 ):i232–i241, 06 2023. doi:10.1093/bioinformatics/btad218 37387132
+[13] Ma Bin , Tromp John , and Li Ming . Patternhunter: faster and more sensitive homology search. Bioinformatics, 18 (3 ):440–445, 2002.11934743
+[14] Maier Benjamin Dominik and Sahlin Kristoffer . Entropy predicts fuzzy-seed sensitivity. bioRxiv, page 2022.10 .13 .512198, 2022.
+[15] Mak Denise , Gelfand Yevgeniy , and Benson Gary . Indel seeds for homology search. Bioinformatics, 22 (14 ):e341–e349,072006. 16873491
+[16] Guillaume Marçais Dan DeBlasio , and Kingsford Carl . Asymptotically optimal minimizers schemes. Bioinformatics, 34 (13 ):113–i22, 2018.
+[17] Guillaume Marçais Dan DeBlasio , Pandey Prashant , and Kingsford Carl . Locality-sensitive hashing for the edit distance. Bioinformatics, 35 (14 ):i127–i135, 2019.31510667
+[18] Myers Gene and Miller Webb . Chaining multiple-alignment fragments in sub-quadratic time. In Proceedings of the 6th ACM-SIAM Symposium on Discrete Algorithms (SODA’95), volume 95 , pages 38–47,1995.
+[19] Nurk Sergey , Walenz Brian P , Rhie Arang , Vollger Mitchell R , Logsdon Glennis A , Grothe Robert , Miga Karen H , Eichler Evan E , Phillippy Adam M , and Koren Sergey . HiCanu: accurate assembly of segmental duplications, satellites, and allelic variants from high-fidelity long reads. Genome Research, 30 (9 ):1291–1305, 2020.32801147
+[20] Ono Yukiteru , Asai Kiyoshi , and Hamada Michiaki . PBSIM2: a simulator for long-read sequencers with a novel generative model of quality scores. Bioinformatics, 37 (5 ):589–595, 092020
+[21] Roberts Michael , Hayes Wayne , Hunt Brian R , Mount Stephen M , and Yorke James A . Reducing storage requirements for biological sequence comparison. Bioinformatics, 20 (18 ):3363–3369, 2004.15256412
+[22] Roberts Michael , Hunt Brian R , Yorke James A , Bolanos Randall A , and Delcher Arthur L . A preprocessor for shotgun assembly of large genomes. Journal of Computational Biology, 11 (4 ):734–752,2004.15579242
+[23] Sahlin Kristoffer . Effective sequence similarity detection with strobemers. Genome Research, 31 (11 ):2080–2094,2021.34667119
+[24] Sahlin Kristoffer . Strobealign: flexible seed size enables ultra-fast and accurate read alignment. Genome Biology, 23 (1 ):1–27, 2022.34980209
+[25] Schleimer Saul , Wilkerson Daniel S , and Aiken Alex . Winnowing: local algorithms for document fingerprinting. In Proc. 2003 ACM SIGMOD Int’l Conf. Management of Data (SIGMOD/PODS’03), pages 76–85, 2003.
+[26] Shaw Jim and Yu Yun William . Seed-chain-extend alignment is accurate and runs in close to o(mlogn) time for similar sequences: a rigorous average-case analysis. bioRxiv, pages 2022–10, 2022.
+[27] Song Yan , Tang Haixu , Zhang Haoyu , and Zhang Qin . Overlap detection on long, error-prone sequencing reads via smooth q-gram. Bioinformatics, 36 (19 ):4838–4845, 2020.32311007

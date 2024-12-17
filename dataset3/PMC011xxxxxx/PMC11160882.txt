@@ -1,0 +1,324 @@
+
+==== Front
+ArXiv
+ArXiv
+arxiv
+ArXiv
+2331-8422
+Cornell University
+
+arXiv:2405.18532v1
+2405.18532
+1
+preprint
+Article
+Automatic Forward Model Parameterization with Bayesian Inference of Conformational Populations
+Raddi Robert M.
+Marshall Tim
+Voelz Vincent A.
+Department of Chemistry, Temple University, Philadelphia, PA 19122, USA.
+* vvoelz@temple.edu
+28 5 2024
+arXiv:2405.18532v1https://creativecommons.org/licenses/by/4.0/ This work is licensed under a Creative Commons Attribution 4.0 International License, which allows reusers to distribute, remix, adapt, and build upon the material in any medium or format, so long as attribution is given to the creator. The license allows for commercial use.
+nihpp-2405.18532v1.pdf
+To quantify how well theoretical predictions of structural ensembles agree with experimental measurements, we depend on the accuracy of forward models. These models are computational frameworks that generate observable quantities from molecular configurations based on empirical relationships linking specific molecular properties to experimental measurements. Bayesian Inference of Conformational Populations (BICePs) is a reweighting algorithm that reconciles simulated ensembles with ensemble-averaged experimental observations, even when such observations are sparse and/or noisy. This is achieved by sampling the posterior distribution of conformational populations under experimental restraints as well as sampling the posterior distribution of uncertainties due to random and systematic error. In this study, we enhance the algorithm for the refinement of empirical forward model (FM) parameters. We introduce and evaluate two novel methods for optimizing FM parameters. The first method treats FM parameters as nuisance parameters, integrating over them in the full posterior distribution. The second method employs variational minimization of a quantity called the BICePs score that reports the free energy of “turning on” the experimental restraints. This technique, coupled with improved likelihood functions for handling experimental outliers, facilitates force field validation and optimization, as illustrated in recent studies (Raddi et al. 2023, 2024). Using this approach, we refine parameters that modulate the Karplus relation, crucial for accurate predictions of J-coupling constants based on dihedral angles (ϕ) between interacting nuclei. We validate this approach first with a toy model system, and then for human ubiquitin, predicting six sets of Karplus parameters for JHNHα3, JHαC′3, JHNCβ3, JHNC′3, JC′Cβ3, JC′C′3. This approach, which does not rely on any predetermined parameterization, enhances predictive accuracy and can be used for many applications.
+==== Body
+pmcI. INTRODUCTION
+
+In the field of molecular modeling and dynamics, the accuracy of theoretical predictions that reflect real-world observations is crucial. Quantifying the agreement between theory and experiment is highly dependent on the accuracy of forward models—computational frameworks that predict observable quantities from molecular configurations. These models often depend on empirical relationships that link specific molecular properties to experimental measurements.
+
+Model validation and refinement of structural ensembles against NMR observables critically depends on reliable forward models (FMs) that have been robustly parameterized, so that FM error is minimal in the validation/refinement process. An important challenge in the parameterization of FMs is presented by random and systematic errors inherent to the experimental data. These errors need to be considered in the comparison and integration of experimental data with computational models for objective model selection and accurate uncertainty representation.
+
+A further challenge is presented by missing or insufficient examples of known structures than can be used to train forward models. For NMR observables that depend on backbone ϕ-angles, such as J-coupling constants, the reference data from X-ray crystallography may be missing or dynamically averaged, creating large uncertainties in the correct ϕ-angles. Numerous approaches1–4 have been developed to address some of these challenges. Some algorithms rely heavily on X-ray crystal structure data; others have many hyperparameters that need to be determined.
+
+To address these challenges, we extend the Bayesian Inference of Conformational Populations (BICePs) algorithm5,6 to refine FM parameters. BICePs, a reweighting algorithm, refines structural ensembles against sparse and/or noisy experimental observables, and has been used in many previous applications.7–10 BICePs infers all possible sources of error by sampling the posterior distribution of these parameters directly from the data through MCMC sampling BICePs also computes a free energy-like quantity called the BICePs score that can be used for model selection and model parameterization.6,11,12
+
+Recently, BICePs was enhanced with a replica-averaging forward model, making it a maximum-entropy (MaxEnt) reweighting method, and unique in that no adjustable regularization parameters are required to balance experimental information with the prior.6 With this new approach, the BICePs score becomes a powerful objective function to parameterize optimal models. Here, we show that the BICePs score, which reflects the total evidence for a model, can be used for variational optimization of FM parameters. The BICePs score contains a form of inherent regularization, and has specialized likelihood functions that allow for the automatic detection and down-weighting of the importance of experimental observables subject to systematic error.6
+
+To effectively refine FM parameters, we sample over the full posterior distribution of FM parameters. Through this approach, BICePs performs ensemble reweighting and FM parameter refinement simultaneously. Additionally, we show that by variational minimization of the BICePs score, we obtain the same result and show that the two approaches are equivalent, with each method requiring particular considerations. We first demonstrate our method’s effectiveness on a toy model system, and then optimize six distinct sets of Karplus parameters for the human protein ubiquitin, and compare our findings with previously established results. Through this, we aim to showcase a systematic and robust approach to enhancing the accuracy of theoretical predictions, thereby bridging the gap between computational models and experimental observations.
+
+II. THEORY
+
+Posterior sampling of forward model parameters gives reliable parameter uncertainties. BICePs uses a Bayesian statistical framework, inspired by Inferential Structure Determination (ISD)13, to model the posterior distribution p(X,σ), for conformational states X, and nuisance parameters σ, which characterize the extent of uncertainty in the experimental observables D: (1) pX,σD∝pDX,σpXpσ.
+
+Here, p(D∣X,σ) is a likelihood function that uses a forward model to enforce the experimental restraints, p(X) is a prior distribution of conformational populations from some theoretical model, and p(σ)∼σ-1 is a non-informative Jeffrey’s prior.
+
+We now consider a specific forward model g(X,θ) with a set of FM parameters θ that we wish to additionally include in the posterior, (2) p(X,σ,θ∣D)∝p(D∣X,σ,θ)p(X)p(σ)p(θ)
+
+Replica-averaging.
+
+When BICePs is equipped with a replica-averaged forward model, it becomes a MaxEnt reweighting method in the limit of large numbers of replicas14–19. Consider a set of N replicas, X=Xr, where Xr is the conformational state being sampled by replica r. To compare the sampled replicas with ensemble-averaged experimental observables, we define a replica-averaged forward model g(X,θ)=1N∑rN gXr,θ. This quantity is an estimator of the true ensemble-average, with an error due to finite sampling for observable j estimated using standard error of the mean (SEM):14,19 σjSEM=1N∑rN gjXr,θ-gj(X,θ)2. Thus, σjSEM decreases as the square root of the number of replicas.
+
+In the scenario that observables can be collected into different types, e.g., a particular type of vicinal J-coupling, then each collection can be described with its own set of parameters and error distribution. For K distinct sets of FM parameters θ=θk, the joint posterior distribution for all parameters is (3) p(X,σ,θ∣D)∝∏r=1Np(Xr)∏k=1Kp(Dk∣g(X,θk),σk)p(σk)p(θk)
+
+where X is a set of N conformation replicas, and θk is the kth set of FM parameters. The kth set has an uncertainty parameter σk=σkSEM2+σkB2, that describes the total error, arising from both finite sampling σkSEM2, and uncertainty in the experimental measurements, known as a Bayesian uncertainty parameter σkB. The prior distribution of uncertainties pσk is treated as a non-informative Jeffrey’s prior σk-1 for each collection of observables, and the posterior of FM parameters p(θ∣D) is recovered by marginalization over all X and σ: (4) p(θ∣D)=∑X∫p(X,σ,θ∣D)dσ
+
+Gradients speed up convergence.
+
+In our methodology, Markov chain Monte Carlo (MCMC) is used to sample the posterior with acceptances following the Metropolis-Hastings (M-H) criterion. Our algorithm can be used with or without gradients. However, significantly faster convergence, especially in higher dimensions, is achieved through an integration of stochastic gradient descent approach. Our gradient descent approach allows for informed updates to the FM parameters, incorporating stochastic noise to facilitate the escape from local minima and enhance exploration of the parameter space.
+
+The update mechanism is succinctly encapsulated in the equation: (5) θtrial=θold-lrate⋅∇u+η⋅𝒩(0,1)
+
+where θtrial and θold denote the trial parameters and previous parameters, respectively. The learning rate is denoted by lrate, ∇u signifies the computed gradient of BICePs energy function with respect to the parameters θ, and η scales the noise drawn from a standard normal distribution 𝒩(0,1).
+
+This strategic parameter update protocol is designed to satisfy the M-H criterion, ensuring that each step in the parameter space not only moves towards minimizing the energy of the forward model but also adheres to the probabilistic acceptance of potentially non-optimal moves to avoid local optima traps. Ergodic sampling is ensured by "turning off" the gradient after burn-in. The sampling procedure involves: (1) acquiring derivatives of the FM parameters, (2) perturbing these parameters based on the derived information, (3) predict observables using perturbed FM parameters and compute the total energy, and (4) assessing the new energy against the previous to determine acceptance based on the M-H criterion. This ensures a thorough and effective search of the parameter space, leveraging both the landscape topology and stochastic elements to guide the exploration.
+
+The Good-Bad model accounts for systematic error due to outlier measurements
+
+BICePs now is equipped with sophisticated likelihood models that are extremely robust in the presence of systematic error6. Recently, we demonstrated the ability of the Student’s model to account for systematic error for force field optimization12. In this work, we use a likelihood function called the Good-Bad model to demonstrate the validity of forward model refinement. The derivatives of the Good-Bad model are far less complicated than the Student’s model.
+
+The Good-Bad likelihood model6 assumes that the level of noise is mostly uniform, except for a few erratic measurements. This limits the number of uncertainty parameters that need to be sampled, while still capturing outliers. Consider a model where uncertainties σj for particular observables j are distributed about some typical uncertainty σB according to a conditional probability pσj∣σB. We derive a posterior for the kth parameter set having a single uncertainty parameter σB by marginalizing over all σj (6) p(X,σ0,θk∣D)∝∏r=1Np(Xr)∏j=1Nd∫σSEM∞p(dj∣gj(X,θk),σj)p(σj∣σ0)dσj
+
+where σ0=σB2+σSEM2. Under the Good-Bad model, we say that the "good" data consists of observables normally distributed about their true values with effective variance σ02, while the "bad" data is subject to systematic error, leading to a larger effective variance φ2σ02, where φ≥1.
+
+By this assignment, pσj∣σ0 from equation 6 becomes (7) pσj∣σ0,ω,φ=ωδσj-φσ0+(1-ω)δσj-σ0
+
+where 0≤ω<1 describes the fraction of "bad" observables. Since the value of ω is unknown, it is treated as a nuisance parameter, and marginalized over its range. The resulting posterior is (8) p(X,σ0,φ,θk∣D)∝∏r=1N{p(Xr)∏j=1Nd∫01dω∫σSEM∞exp(−(dj−gj(X,θk))22σj2)ωδ(σj−φσ0)+(1−ω)δ(σj−σ0)2πσjdσj}=∏r=1N{p(Xr)∏j=1Nd((1−H(σSEM−σ0))22πσ0exp(−(dj−gj(X,θk))22σ02)+(1−H(σSEM−φσ0))2φ2πσ0exp(−(dj−gj(X,θk))22φ2σ02))},
+
+where H is the Heaviside step function. After marginalization, we are left with the Bayesian uncertainty parameter σ0B, and an additional parameter φ. Both parameters are sampled in the posterior. When φ=1, the model reverts to a Gaussian likelihood model. When considering the full posterior, this extra nuisance parameter is given a non-informative Jeffrey’s prior, p(φ)∼φ-1.
+
+For a single set of FM parameters (for simplicity), the BICePs energy function, u=-logpX,σ0,φ,θ∣D, the negative logarithm of the posterior in its full form is given by (9) u=∑r=1N−log(p(Xr))−N∑j=1Ndlog[(1−H(σSEM−σ0))22πσ0exp(−(dj−gj(X,θ))22σ02)+(1−H(σSEM−φσ0))2φ2πσ0exp(−(dj−gj(X,θ))22φ2σ02)],
+
+and when φ=1 our energy function becomes (10) u=∑r=1N−log(p(Xr))+N[∑j=1Nd−log(12πσj)+(dj−gj(X,θ))22σj2−log(p(σj))].
+
+The first derivative of equation 9 with respect to the ith FM parameter θi is (11) ∂u∂θi=N∑j=1Nd∂gj(X,θ)∂θi(dj−gj(X,θ))φ2σ02{φ3(1−H(σSEM−σ0))exp((dj−gj(X,θ))22φ2σ02)+(1−H(−φσ0+σSEM))exp((dj−gj(X,θ))22σ02)}{φ(H(σSEM−σ0)−1)exp((dj−gj(X,θ))22φ2σ02)+(H(−φσ0+σSEM)−1)exp((dj−gj(X,θ))22σ02)},
+
+and in the case of φ=1 the gradient becomes (12) ∂u∂θi=−N[∑j=1Nd∂gj(X,θ)∂θi(dj−gj(X,θ))σj2].
+
+Second derivatives of the BICePs energy function and the BICePS score are useful for descent and uncertainty quantification using other forward models. We refrain from writing out the second derivative here, since the specific class of forward models we consider below all have second derivatives that go to zero. For more general cases, see Appendix A for more details. The energy of the Good-Bad likelihood model and its first and second derivatives are shown in Figure S1.
+
+III. RESULTS/DISCUSSION
+
+Testing algorithm performance on a toy model
+
+To investigate the efficacy of BICePs for this optimization problem, we introduce a simplified, yet comprehensive toy model. This model is designed to mimic the complexity of protein structure elements by generating ϕ-angles from a multimodal distribution, thereby emulating configurations characteristic of different secondary structure elements (Figure 1). This distribution encompasses three distinct modes, each characterized by a mean (μ), standard deviation (σ), and weight (w): beta sheets (μ=-110∘, σ=20∘, w=0.35), right-handed helices (μ=-60∘, σ=10∘, w=0.5), and left-handed helices (μ=60∘, σ=5∘, w=0.15). These parameters were chosen to accurately reflect the structural variability found in proteins. Angles ϕi were sampled from the multi-modal distribution, (13) p(ϕ|μ,σ)=∑lwl12πσl2exp(−(ϕ−μl)22σl2).
+
+The sampled ϕi were then used to calculate experimental J-coupling constants J(ϕ) using the Karplus relation with the true Karplus coefficients (A*,B*,C*).
+
+(14) J3ϕ=Acos2ϕ+Bcos(ϕ)+C
+
+Synthetic experimental J-coupling data is generated to represent a mixture of all conformational states, djExp=∑X J3ϕX,j⋅p(X), with FM parameters θ={A,B,C} set to their true values ({A=6.51,B=-1.76,C=1.6}). The initial forward model data is generated using reference Karplus parameters A0,B0,C0 and refined through the optimization process to showcase the algorithm’s adaptability and precision in parameter estimation.
+
+BICePs robustly finds optimal Karplus parameters in the presence of experimental errors.
+
+To evaluate the resilience of our algorithm against experimental inaccuracies, we introduced random and systematic errors of varying magnitudes (σdata) into the synthetic experimental scalar couplings. The performance of our Good-Bad likelihood model, a Gaussian likelihood model, and singular value decomposition (SVD) was compared under these conditions.
+
+SVD calculations. Using methods similar to previous efforts by others,20 we derived the Karplus parameters θ={A,B,C} using a weighted singular value decomposition (SVD) fitting approach to optimally fit the J-coupling values as a function of dihedral angles. For each observation j across Nd measurements, the matrix M was constructed with rows for each ϕ angle: (15) M=∑X p(X)cos2ϕ1,X+ϕ0∑X p(X)cosϕ1,X+ϕ01∑X p(X)cos2ϕ2,X+ϕ0∑X p(X)cosϕ2,X+ϕ01⋮⋮⋮∑X p(X)cos2ϕNd,X+ϕ0∑X p(X)cosϕNd,X+ϕ01
+
+where p(X) represents the true populations for state X, and ϕ0 is the phase shift of −60°.
+
+SVD was applied to decompose the matrix as M=UΣVT, and Karplus coefficients were derived using: (16) θ=VT(Σ+εI)-1UTJexp,
+
+where ε=1e-6 a small regularization term added to the diagonal of Σ to ensure stability of the pseudo-inverse, and Jexp represents the vector of experimental J-coupling values. This method ensures robust estimation of θ under ideal experimental conditions, given the true conformational populations. In practice, the true populations are not known a priori. The uncertainty in SVD coefficients was determined through 1k iterations of fitting, each omitting 10% of the data points chosen at random.
+
+Typical uncertainties in NMR frequency measurements range from 0.1 to 1.0 Hz, primarily influenced by magnetic field strength, instrument quality, sample conditions, and the specifics of the pulse sequence used. In these experiments, 100 conformational states and 60 synthetic experimental scalar couplings were used. We introduced systematic error by shifting the experimental J3 values by +2.0 Hz to +4.0 Hz for up to 20% of the data points. BICePs calculations were performed by averaging FM parameters over three chains of MCMC stating from different initial parameters ({A=9,B=-1,C=1}, {A=4,B=0,C=3}, {A=0,B=0,C=0}). Regardless of different starting parameters, posterior sampling universally converges to "true" optimal FM parameters. In these calculations, we used 32 BICePs replicas, and burned 10k steps followed by 50k steps of MCMC sampling.
+
+We evaluated model performance by the root-mean-square error (RMSE) between the true J-coupling values with parameters {A*=6.51,B*=-1.76,C*=1.6} and the J-coupling values using predicted Karplus coefficients for all 60 synthetic measurements, performed over 1k independent trials of random generations of toy model data. Average RMSE results, computed over 100 BICePs calculations, highlight the algorithm’s robustness and its ability to accurately predict FM parameters even in the presence of data perturbations. Error bars in our results represent the standard deviation across these calculations, providing a comprehensive measure of the algorithm’s reliability under various experimental accuracy.
+
+Our findings indicate that the Good-Bad likelihood model (red) exhibits superior resilience to experimental errors compared to a traditional Gaussian likelihood model (blue) and SVD (green) approaches (Figure 2). Predictions from SVD and the Gaussian likelihood model become notably less dependable when data incorporates errors, especially when σdata exceeds 0.5 Hz. On average, error in predictions (RMSE) from the Good-Bad model does not exceed 0.1 Hz over the full range of σdata.
+
+An example of a single trial of forward model parameter refinement using the toy model is shown in Figure S2, where BICePs predicts Karplus coefficients by posterior sampling over FM parameters. Both BICePs and Singular Value Decomposition (SVD) methods successfully reproduce the "true" Karplus curve. However, BICePs excels by accurately identifying the error present in the data σdata=0.471, as indicated in the marginal posterior of uncertainty pσJ. The BICePs predicted maximum a posteriori uncertainty was found to be σJ=0.272 with a variance scaling parameter of φJ=1.98. The marginal posterior distributions of FM parameters for the Good-Bad model were {A=6.6±0.04,B=-1.8±0.02,C=1.5±0.03}, and for SVD, {A=6.11±0.06,B=-1.63±0.04,C=1.80±0.04}.
+
+In addition to the Good-bad model, we refined parameters using the Student’s model ({A=6.8±0.03,B=-1.9±0.03,C=1.4±0.03}) to demonstrate that the Student’s model yields similar performance (Figure S3). The computed Gelman-Rubin (Rˆ) statistic for these calculations was found to be Rˆ=1.01 for each of the marginal posterior distributions of Karplus coefficients, which demonstrates that our chains converge to the same parameter location with similar variance.
+
+Furthermore, we assessed model performance across varying qualities of prior structural ensembles as illustrated in Figure S4. By introducing varying levels of prior error σprior (measured in degrees) through perturbations to the "true" ϕ angles, even in the presence of random and systematic error, we observed strong correlation between the BICePs score and the quality of the structural ensemble, with a coefficient of determination R2 of 0.99. For these calculations, we employed the Good-Bad model, utilizing 32 replicas, and conducted 1,000 random perturbations to the ϕ angles with errors up to σprior=4∘, and perturbations to the experimental data σdata=0.68±0.24Hz. Karplus’s warning about the perils of precise angle estimation21 underscores our approach’s necessity and performance in error aware modeling in structural biology.
+
+The comprehensive evaluation of our algorithm with this toy model underscores its efficacy in accurately determining FM parameters, reflecting scenarios commonly encountered in real-world applications. The robust performance of the algorithm, even in the face of random and systematic errors, can be attributed to BICePs’ sophisticated error-handling within its likelihood models. This approach also ensures that predicted FM parameters derived from sub-optimal structural ensembles remain reliable. Additionally, our findings reveal a strong correlation between the BICePs score and the quality of the structural ensemble, demonstrating an immense utility in this context.
+
+Variational minimization of the BICePs score to find optimal parameters.
+
+Treating the forward model parameters as nuisance parameters, and sampling over them with the full posterior is an efficient strategy that grants the ability to include all sources of error while refining the structural ensemble with FM parameters. However, in the limit of large number of FM parameters, the dimensionality of the posterior may ultimately become unwieldy and present the curse of dimensionality. Here, we introduce an alternative strategy for refining FM parameters that has previously demonstrated to be a viable approach to automated force field optimization12.
+
+In this approach, the FM parameters are no longer part of the joint posterior density. Instead, the posterior is conditioned on the set of FM parameters θ, that is, equation 2 becomes (17) p(X,σ∣D,θ)∝p(D,θ∣X,σ)p(X)p(σ)
+
+In this view, ensemble refinement is performed with a static set of FM parameters for each BICePs calculation.
+
+BICePs evaluates model quality by calculating a free energy-like quantity called the BICePs score. For a forward model with parameters θ, the BICePs score f(θ) is computed as the negative logarithm of a Bayes factor comparing the total evidence of a given model against a well-defined reference, marginalizing over all uncertainty, (18) f(θ)=-lnZ(θ)/Z0,
+
+where (19) Z(θ)=∬exp(-u(X,σ∣D,θ))dXdσ
+
+is the evidence for FM parameters θ, Z0 is the evidence for a suitable reference state, and u is the unchanged BICePs energy function (equation 9). To construct the reference state, we consider a series of likelihoods pξ(D,θ∣X,σ)∼[p(D∣X,σ)]ξ parameterized by ξ∈[0,1], and set the reference state as the thermodynamic ensemble corresponding to ξ=0. The BICePs score is then calculated as the change in free energy of "turning on" experimental restraints (ξ=0→1).
+
+It should be noted that in other applications of BICePs,6,12 the reference state for the BICePs score is defined using the λ=0 state for a series of a priors pλ(X)∼[p(X)]λ, and the BICePs score is computed as the free energy of (λ=0→1) and (ξ=0→1) transformations. Here, since we are only interested in evaluating and/or parameterizing the likelihood functions, we set p(X) to be uniform. Constructing p(X) is thus very straight-forward: it’s a collection of conformations all having equal statistical weight.
+
+The derivative of the BICePs score with respect to the FM parameters θ reduces to the difference of Boltzmann averaged values of ∂u/∂θ shown as (20) ∂f(θ)∂θi=∬1Z(θ)∂u∂θiexp(-u)dXdσ=⟨∂u∂θi⟩
+
+In this study, we demonstrate our methodology using first-order optimization methods, such as L-BFGS-B. For more complex forward models, the employment of second derivatives might become necessary. Interested readers are directed to the Supporting Information for second derivatives of the BICePs score with respect to FM parameters.
+
+Calculation of the BICePs score (a free energy difference) and its derivatives (expectation values of energy derivative observables) is performed using the MBAR free energy estimator,22 by sampling at several intermediates ξ=0→1, which enables accurate estimates of all quantities.
+
+Optimizing ξ-values.
+
+The accuracy of the BICePs score-depends on converged sampling and sufficient thermodynamic overlap of intermediates (ξ=0→1) in the BICePs computation. To ensure strong overlap, we optimize the ξ-values by spacing ensembles equidistantly in thermodynamic length, employing a strategy akin to the "thermodynamic trailblazing" method proposed by Rizzi et al.23 Our approach is facilitated by a custom optimization algorithm called <monospace>pylambdaopt</monospace> (Zhang et al., in preparation).
+
+The optimization process is a two-step process: First, a preliminary BICePs calculation is performed using provisional ξ-values, yielding estimates of the thermodynamic length ℓξn+1-ℓξn for each pair of intermediates24,25, derived from the variance in distributions pΔun,n+1, where Δun,n+1=un+1-un represents the change in the (reduced) BICePs energy incurred by bringing a sample from thermodynamic ensemble n to thermodynamic ensemble n+1.
+
+Second, cubic spline fitting is employed to derive a smooth and differentiable function ℓ(ξ) that accurately interpolates the computed ℓξi. Optimization through steepest-descent minimization is then applied to determine new ξi* values that minimize the loss function ℒ=∑n ℓξn+1-ℓξn2. This results in ξi* values uniformly spaced in terms of thermodynamic length, thus maximizing the thermodynamic overlap between adjacent ensembles and enhancing the precision of free energy calculations. These optimized ξi* values are subsequently used in production runs. An illustration of the ξ-values pre- and post-optimization is depicted in Figure S5. Refer to figures S6&S7 for overlap matrices pre- and post- optimization.
+
+Comparison of variational minimization of the BICePs score vs. sampling the full joint posterior
+
+In the comparison of the two approaches for parameter estimation and optimization in our model, we utilized a toy model (Figure S2) to evaluate the efficacy of each method under the same data conditions. Prior to FM parameter refinement, 11 ξ-values were optimized from {1.0, 0.9, 0.8, …, 0.0} to {1.0, 0.7, 0.56, 0.45, 0.36, 0.28, 0.2, 0.14, 0.08, 0.04, 0.0} (Figures S5-S7). Variational minimization using the Good-Bad model with 4 replicas (for reduced computational cost), where each evaluation of the objective function consisted of running 10k MCMC steps. Optimal parameters were determined to be {A=6.31±0.02,B=-1.69±0.03,C=1.69±0.01}, averaged over 3 independent runs with very low variance between runs, shown in Figure S8. Regardless of different starting parameters ({A=9,B=-1,C=1}, {A=4,B=0,C=3}, {A=0,B=0,C=0}), variational minimization converges to “true” optimal FM parameters. This analysis demonstrated that both the joint posterior sampling approach and variational minimization yield near equivalent performance when applied to this model.
+
+As a method for forward model optimization, variational minimization of the BICePs score has advantages and disadvantages. This method is particularly advantageous for handling many FM parameters, offering a potential solution to the curse of dimensionality faced by Monte Carlo Markov Chain (MCMC) methods. Additionally, it is easier for users to adapt different forward models, and performs exceptionally well in convex landscapes. When landscapes are non-convex, however, the inverse Hessian may not provide a comprehensive view of the parameter space’s uncertainty; instead, uncertainty estimation could be computed using the variance across multiple BICePs runs starting from different initial parameters. The variational minimization approach also requires careful consideration of disperse starting parameters to ensure global minimization.
+
+The joint posterior sampling method, which involves sampling the joint posterior distribution of forward model (FM) parameters, has several advantages. One significant benefit is that the posterior distribution provides a direct estimate of the uncertainties in forward model parameters and their covariance. Compared to variational minimization, this method generally has a faster runtime and is particularly effective in handling non-convex landscapes, allowing for robust parameter estimation even in complex scenarios. However, it is not without drawbacks. As the number of FM parameters increases, the posterior sampling method may encounter the curse of dimensionality, which makes it computationally challenging to explore the parameter space efficiently.
+
+In summary, while both approaches are valuable tools for parameter estimation in parameter and ensemble refinement, each has its strengths and weaknesses. The choice between these methods should be guided by the specific characteristics of the problem at hand, such as the landscape’s convexity and the number of parameters involved.
+
+Determination of optimal Karplus coefficients for ubiquitin
+
+To evaluate the performance of our algorithm, we applied BICePs to human ubiquitin to predict Karplus coefficients for six sets of scalar coupling constants: JHNHα3, JHαC′3, JHNCβ3, JHNC′3, JC′Cβ3, and JC′C′3. To test our algorithm’s robustness, we conducted a comprehensive evaluation for predicting optimal Karplus coefficients using three different structural ensembles as priors, each derived from distinct computational approaches: (1) 10 conformations from the NMR-refined structural ensemble, 1D3Z26, (2) 144 conformations from NMR-restrained simulations, 2NR227, and (3) 25 conformations from the RosettaFold2 (RF2) algorithm.28
+
+We then validated the forward model parameters derived from each prior using the BICePs score, R2 and mean absolute errors (MAE) for forward model predictions. As priors for these calculations, we used three independent structural ensembles: 1D3Z, 2NR2, and a 500-state conformational ensemble derived from a millisecond-long simulation of ubiquitin using CHARMM22*.29 For further details on these ensembles, refer to the SI methods section.
+
+To refine the forward model (FM) parameters, we employed full joint posterior distribution sampling. This method was chosen to navigate the non-convex parameter space efficiently, given its relatively low dimensionality (18 FM parameters). BICePs calculations were executed by averaging the FM parameters over four Markov Chain Monte Carlo (MCMC) chains, each starting from distinct initial parameters: {A=9,B=-1,C=1}, {A=4,B=0,C=3}, {A=0,B=0,C=0}, and {A=6,B=-1,C=0}. Flexible residues were excluded from the calculations, consistent with previous studies2,3. As a result, a total of 346 J-couplings were used in these refinements. We used the Good-Bad model with 32 BICePs replicas, discarding the first 50k steps as burn-in, followed by 50k steps for MCMC sampling. Unlike the parameters derived from 1D3Z and RF2, the Karplus coefficients obtained by using the 2NR2 ensemble required a burn-in of 100k steps to appropriately converge due to a larger number of conformational states. The six sets of refined Karplus coefficients resulting from the 1D3Z, 2NR2 and RF2 ensembles are presented in Table I.
+
+Figure 3 compares the Karplus curves derived from BICePs using the 1D3Z ensemble with previously published parameters obtained from NMR refinements, showing subtle differences. Both the marginal posterior distributions of the FM parameters and the Karplus curves for each scalar coupling demonstrate significant congruence with the historical NMR refinement results3,26. For all six types of J-coupling, see Figure S9.
+
+The predicted parameters, better represented by the marginal posterior distributions of the FM parameters, have large similarities across structural ensembles. BICePs-predicted coefficients using the 1D3Z ensemble (Figure S10) and predicted coefficients using the RF2 ensemble (Figure S11) are found to have very strong overlap. Furthermore, the traces of the FM parameters ober time (Figure S12) confirm convergence.
+
+One advantage of BICePs is that as FM parameters are being sampled, the posterior densities of FM uncertainties, p(σ), are also revealed (Figure S13). For certain sets of J-coupling constants (e.g., JHNHα3 and JHNC′3) the marginal posterior distribution of the variance scaling parameter p(φ) has a sampled mean slightly larger than 1.0, indicating that the functional form of the likelihood opted for long tails to account for a few outlier data points deviating from the mean.
+
+The BICePs free energy landscape for JHNC′3 Karplus parameters.
+
+In Figure 4, we show the free energy landscape, which is also equivalent to the BICePs score landscape fξ=0→1. The Karplus curve for JHNC′3 was found to overlap strongly with the results obtained by SVD when using ϕ angles from the X-ray crystal structure (Figure S9). Red data points are shown using the experimental J-couplings with ϕ angles derived from X-ray crystal pose 1UBQ30. The joint BICePs score landscape for the six sets of parameters is too complex to visualize. In an attempt to do our best, we constructed a smooth 2-D landscape for each pair of parameters within a set of scalar couplings by training a Gaussian process on the BICePs energy trace using a radial basis function (RBF) kernel. The landscape matches the computed BICePs scores, and shows minima in the correct locations. All BICePs score landscapes for each of the six sets of Karplus coefficients are illustrated in Figure S14.
+
+To demonstrate the transferability across different generative models and validate our parameters, we evaluated the accuracy of the back-calculated scalar couplings using the different sets of Karplus coefficients. In Figure 5, we illustrate how the various sets of parameters derived from different techniques and different structural ensembles exhibit similar performance metrics. Interestingly, applying BICePs-refined Karplus parameters to an ensemble generated by a molecular dynamics simulation (CHARMM22*),29 some parameter sets are revealed to be more transferable than others. The mean absolute error (MAE) and coefficient of determination (R2) for all six types of scalar couplings across different structural ensembles are shown in Figures S15-S17. On average, the BICePs-refined parameters derived from the 2NR2 ensemble (BICePs(2NR2)) give the lowest MAE between experiment and predictions for the CHARMM22* simulated ensemble, closely followed by BICePs(RF2) parameters, whereas Habeck 2005 has the highest due to known difficulties with JC′Cβ3.
+
+To objectively quantify which parameters produce the best predictions for ubiquitin, we compute BICePs scores, fξ=0→1 for each of the structural ensembles. This score directly relates to the quality of FM parameters and their predictive accuracy at reproducing experimental scalar couplings, while taking into consideration all sources of potential error. Lower BICePs scores indicate better agreement with experiment. Each row in Table II corresponds to BICePs scores using all six sets of Karplus coefficients used on different structural ensembles. The lowest score is shown in bold.
+
+BICePs scores, fξ=0→1 were computed to objectively rank the quality of FM parameters and their predictive accuracy at reproducing experimental scalar couplings (Table II). The left-most column in Table II corresponds to the parameters, where BICePs(1D3Z) are the parameters in Table I (set 1), which used 1D3Z ensemble to obtain Karplus coefficients. BICePs score columns, e.g., fξ=0→11d3z corresponds to BICePs scores evaluated for the 1D3Z ensemble. That is, the superscript corresponds to the structural ensemble used as a validation step. BICePs scores, f for each structural ensemble over all sets of parameters, averaged over five independent rounds of validation each. BICePs calculations burned for 1k steps, followed by 50k steps of MCMC sampling.
+
+Note that the BICePs score is an extensive quantity that grows linearly with the number of replicas. For this reason, our results report the reduced BICePs score, f(θ)/Nr. We can confirm that the BICePs score, fξ=0→11d3z=38.14±0.08 (Table II) is equivalent (within error) with the most probable landscape basin f=38.15±0.19 from sampling the energy landscape, computed as an averarge across four chains; an example for one chain is shown in Figure 4. This is additional evidence of the algorithm’s reliability and quality of the BICePs score, corroborating that the results from variational minimization of the BICePs score and full joint posterior sampling are equivalent.
+
+For both the 2NR2 and CHARMM22* structural ensembles, Bax 1997, BICePs(RF2) and BICePs(1D3Z) parameters give very similar BICePs scores, which suggests robust accuracy of FM parameters in reproducing experimental scalar couplings and the transferability of FM parameters across different prior structural ensembles. Furthermore, when it comes to the CHARMM22* simulated ensemble, the BICePs(2NR2) parameters give the lowest BICePs score. However, it is important to note that the structural ensemble 2NR2 was generated using CHARMM22 force field with additional experimental restraints during simulation.
+
+It is difficult to say which of the model parameters are the best for ubiquitin, so we compare the top four: BICePs(RF2), Bax 1997, BICePs(1D3Z), and BICePs(2NR2). The BICePs(2NR2) parameters are objectively better at predicting J-couplings from structures of ubiquitin generated from simulations using CHARMM22* force field. Futhermore, our BICePs(RF2) parameters have slightly better transferability across structural ensembles and have a better BICePs score over Bax 1997 parameters. In general, when looking across structural ensembles, the lowest BICePs scores come from the 1D3Z structural ensemble (fξ=0→11d3z) except for BICePs parameters derived from the 2NR2 ensemble (BICePs(2NR2)). This confirms that the 1D3Z structural ensemble gives the strongest agreement with experimental NMR observations.
+
+Ensembles from generative models like RosettaFold2 can be used for parameter refinement.
+
+The booming field of machine learning and artificial intelligence is swiftly transforming the field of modeling structure and dynamics in biological systems. Recent advancements in generative models, such as AlphaFold31, RosettaFold28 and others, have heralded a new era in the accurate prediction of structural ensembles. Leveraging the predictive power of these models as structural priors is expected to help refine ensemble predictions when integrated with similar algorithms to BICePs32. Here, we have demonstrated that structural ensembles generated from RosettaFold2 (RF2) can be reweighted to better align with experimental measurements, while simultaneously refining Karplus parameters. Validation of these parameters by the BICePs score and other statistics demonstrates improved accuracy across a varity of structural ensembles of ubiquitin.
+
+Automatic determination of unknown errors.
+
+Our method provides a notable advantage by automatically estimating all potential error sources throughout the ensemble refinement process. This estimation is facilitated through the analysis of posterior distributions, which are instrumental in deriving accurate error assessments for the Karplus coefficients. Consequently, this negates the need for cross-validation techniques commonly used in other approaches1,33.
+
+In the context of model validation, the BICePs score emerges as a superior metric over the traditional χ2 test. Unlike χ2, which presupposes a fixed and known error, BICePs dynamically ascertains the level of uncertainty, thereby providing a more nuanced and accurate measure of model quality.
+
+Bayesian ranking of Karplus-type relations
+
+The Karplus equation, a cornerstone for interpreting NMR spectroscopy data, comes in multiple forms to accommodate the diverse characteristics of molecular structures, from rigid to flexible34. The BICePs algorithm can determine coefficients and their uncertainties for any functional form, including those with additional parameters. Although we do pursue this aim in our current work, it is straightforward to use Bayesian model selection to objectively rank empirical models based on their BICePs scores, while automatically accounting for model complexity, thus providing a balance of model accuracy and parsimony.
+
+Adaptive variance as simulated annealing.
+
+As an alternative approach to determine optimal FM parameters, we propose that future work might utilize an annealing approach, in which the variance parameter σ2 is akin to the temperature. Initially, a high σ2 would enable extensive exploration of the parameter space to circumvent local optima. This exploration phase mimics the high-temperature regime in annealing, allowing for a broad search. Subsequently, we suggest a schedule of stepwise reduction in σ2, similar to cooling in simulated annealing, to gradually narrow the search area and determine the optimum solution. This method balances between wide-ranging search and focused refinement, potentially enhancing search efficiency and robustness in FM parameter optimization.
+
+IV. CONCLUSION
+
+In the quest for accurate forward model predictions, specifically for J-coupling, researchers often navigate the vast literature seeking Karplus parameters that align with their specific systems, occasionally settling for less-than-ideal solutions. Our work demonstrates BICePs as a robust tool for determining forward model (FM) parameters by sampling over their full posterior distribution. We used a toy model to demonstrate that variational minimization of the BICePs score is also a valid approach for FM parameter refinement.
+
+We have shown how the BICePs score–the free energy of “turning on” the restraints tethering the forward model predictions to the experimental values–serves as an effective validation metric for FM parameters. Using structural ensembles and experimental data for ubiquitin, BICePs determined six different sets of Karplus coefficients using different types of J-coupling measurements, while effectively addressing both random and systematic errors. From these results, one can see how this algorithm can be applied more generally to find other optimal forward model parameters. These advances not only contribute to the refinement of molecular simulations but also hold promise for a wide range of applications within the scientific community, particularly among those analyzing structural dynamics and performing model validation.
+
+Supplementary Material
+
+Supplement 1
+
+ACKNOWLEDGEMENTS
+
+RMR, TM and VAV are supported by National Institutes of Health grant R01GM123296. This research includes calculations carried out on HPC resources supported in part by the National Science Foundation through major research instrumentation grant number 1625061 and by the US Army Research Laboratory under contract number W911NF-16–2-0189.
+
+Figure 1. A versatile toy model for measuring the performance of forward model optimization.
+
+The ϕ-angles for each conformational state is pulled from a multi-modal distribution and corresponding energies. (a) This multi-modal distribution of ϕ-angles was intended to represent configurations with different secondary structure elements having three distinct modes described by the mean (μ), standard deviation (σ) and weight (w): beta sheets (μ=-110∘, σ=20∘, w=0.35), right-handed helices (μ=-60∘, σ=10∘, w=0.5), and left-handed helices (μ=60∘, σ=5∘, w=0.15). (b) Cartoon representation of the backbone torsion angle, ϕ.
+
+Figure 2. Comparative analysis in performance of the Good-Bad likelihood model (red), a Gaussian likelihood model (blue), and singular value decomposition (SVD) using the "true" ϕ angles with synthetic experimental data. Here, we induced random and systematic error of varying magnitude σdata to the experimental scalar couplings. Model performance was measured by computing RMSE (Hz) between the "true" scalar couplings and the couplings generated from the Karplus relations with predicted Karplus coefficients over 1,500 random perturbations to the experimental data, and represent the average of 100 BICePs calculations. Error bars represent the standard deviation. Predictions from SVD and the Gaussian likelihood model become notably less dependable when data incorporates errors, especially when σdata exceeds 0.5 Hz.
+
+Figure 3. Karplus curves with BICePs-refined Karplus coefficients using the 1d3z ensemble for (a-c) JC′C′3, JC′Cβ3, and JHαC′3. For comparison, SVD on 1ubq using experimental scalar coupling constants with ϕ-angles derived from the X-ray structure (black dashed line), and red dots correspond to the fitted data points. Additionally, parameterizations from Bax et al. 1997 (green) and parameterization from Habeck et al. 2005 (yellow) were overlaid for comparison. The thickness of the line corresponds to the uncertainty.
+
+Figure 4. Landscapes of the BICePs score with respect to the predicted Karplus coefficients for JHNC′3. Panels a, c and d illustrate the energy landscape f for pairs of Karplus coefficients when using the 1D3Z structural ensemble during refinement.
+
+Figure 5. Validation of BICePs-predicted Karplus coefficients perform similarly to Bax1997 and achieve minor improvements over Habeck2005 for scalar coupling predictions for the simulated ensemble of CHARMM22*. Each panel for (a) JHαC′3, (b) JC′Cβ3, and (c) JC′C′3 shows strong correlations between predictions and experiment. Karplus coefficients derived from BICePs using the 2NR2 ensemble gives the best performance for CHARMM22*. For the remaining sets of J-coupling, please see Figure S17.
+
+Table I. Coefficients for the Karplus relation J3ϕ=Acos2ϕ+ϕ0+Bcos(ϕ+ϕ0)+C, determined by BICePs sampling the joint posterior of FM parameters.
+
+		ϕ0	A (Hz)	B (Hz)	C (Hz)	
+	
+JC′C3	1	0°	1.71±0.02	−0.85±0.01	0.54±0.00	
+	2	0°	1.30±0.03	−0.91±0.01	0.62±0.01	
+	3	0°	1.62±0.03	−0.87±0.01	0.63±0.01	
+JC′Cβ3	1	60°	1.83±0.04	0.34±0.05	0.41±0.02	
+	2	60°	2.20±0.04	0.34±0.04	0.04±0.02	
+	3	60°	1.81±0.04	0.38±0.04	0.31±0.02	
+JHαC′3	1	120°	3.64±0.02	−2.14±0.02	1.27±0.02	
+	2	120°	4.10±0.03	−2.00±0.02	0.95±0.02	
+	3	120°	3.78±0.02	−2.12±0.02	1.21±0.02	
+JHNC′3	1	180°	4.33±0.04	−1.17±0.01	0.14±0.01	
+	2	180°	4.60±0.12	−0.57±0.03	−0.10±0.01	
+	3	180°	4.57±0.09	−1.20±0.03	0.13±0.01	
+JHNCβ3	1	60°	2.72±0.03	−0.35±0.03	0.12±0.01	
+	2	60°	3.00±0.04	−0.26±0.03	−0.28±0.02	
+	3	60°	2.52±0.03	−0.03±0.02	−0.09±0.02	
+JHNHα3	1	−60°	7.11±0.05	−1.38±0.03	1.43±0.04	
+	2	−60°	7.50±0.07	−1.50±0.02	1.50±0.06	
+	3	−60°	6.97±0.07	−1.49±0.04	1.63±0.05	
+1 1D3Z as the structural ensemble
+
+2 2NR2 as the structural ensemble
+
+3 RosettaFold2 (RF2) as the structural ensemble
+
+Table II. BICePs scores (32 replicas), f for each structural ensemble over all sets of parameters, averaged over five independent rounds of validation each.
+
+Parameters	fξ=0→11d3z	fξ=0→12nr2	fξ=0→1CHARMM22*	
+	
+Bax 19972,26	61.12±0.08	132.49±0.09	99.27±1.91	
+Habeck 20053	135.66±0.08	199.32±0.24	165.64±0.47	
+BICePs(1D3Z)	38.14±0.08	141.69±0.16	105.00±0.74	
+BICePs(2NR2)	118.42±0.14	113.15±1.34	76.27±0.66	
+BICePs(RF2)	68.07±0.60	129.42±0.15	88.04±0.21	
+
+CONFLICTS OF INTEREST
+
+Authors declare no conflicts of interest.
+==== Refs
+REFERENCES
+
+1 Fröhlking T. , Bernetti M. , and Bussi G. , “Simultaneous refinement of molecular dynamics ensembles and forward models using experimental data,” The Journal of Chemical Physics 158 (2023).
+2 Wang A. C. and Bax A. , “Determination of the backbone dihedral angles ϕ in human ubiquitin from reparametrized empirical karplus equations,” Journal of the American Chemical Society 118 , 2483–2494 (1996).
+3 Habeck M. , Rieping W. , and Nilges M. , “Bayesian Estimation of Karplus Parameters and Torsion Angles from Three-Bond Scalar Couplings Constants,” Journal of magnetic resonance 177 , 160–165 (2005).16085438
+4 Schmidt J. M. , Blumel M. , Lohr F. , and Rüterjans H. , “Self-consistent 3j coupling analysis for the joint calibration of karplus coefficients and evaluation of torsion angles,” Journal of biomolecular NMR 14 , 1–12 (1999).21136331
+5 Voelz V. A. , Ge Y. , and Raddi R. M. , “Reconciling Simulations and Experiments with BICePs: a Review,” Front. Mol. Biosci. 8 , 661520 (2021).34046431
+6 Raddi R. M. , Marshall T. , Ge Y. , and Voelz V. , “Model selection using replica averaging with bayesian inference of conformational populations,” chemrXiv preprint 10.26434/chemrxiv-2023-396mm (2023).
+7 Voelz V. a. and Zhou G. , “Bayesian Inference of Conformational State Populations from Computational Models and Sparse Experimental Observables,” J. Comput. Chem. 35 , 2215–2224 (2014).25250719
+8 Wan H. , Ge Y. , Razavi A. , and Voelz V. A. , “Reconciling Simulated Ensembles of Apomyoglobin with Experimental Hydrogen/Deuterium Exchange Data Using Bayesian Inference and Multiensemble Markov State Models.” J. Chem. Theory Comput. 16 , 1333–1348 (2020).31917926
+9 Hurley M. F. D. , Northrup J. D. , Ge Y. , Schafmeister C. E. , and Voelz V. A. , “Metal Cation-Binding Mechanisms of Q-Proline Peptoid Macrocycles in Solution,” J. Chem. Inf. Model. 61 , 2818–2828 (2021).34125519
+10 Raddi R. M. , Ge Y. , and Voelz V. A. , “BICePs V2. 0: Software for Ensemble Reweighting Using Bayesian Inference of Conformational Populations,” Journal of chemical information and modeling 63 , 2370–2381 (2023).37027181
+11 Ge Y. and Voelz V. A. , “Model Selection Using BICePs: a Bayesian Approach for Force Field Validation and Parameterization,” J. Phys. Chem. B 122 , 5610–5622 (2018).29518328
+12 Raddi R. M. and Voelz V. A. , “Automated optimization of force field parameters against ensemble-averaged measurements with bayesian inference of conformational populations,” arXiv preprint arXiv:2402.11169 (2024).
+13 Rieping W. , Habeck M. , and Nilges M. , “Inferential Structure Determination,” Science 309 , 303–306 (2005).16002620
+14 Pitera J. W. and Chodera J. D. , “On the Use of Experimental Observations to Bias Simulated Ensembles,” Journal of chemical theory and computation 8 , 3445–3451 (2012).26592995
+15 Cavalli A. , Camilloni C. , and Vendruscolo M. , “Molecular Dynamics Simulations with Replica-Averaged Structural Restraints Generate Structural Ensembles According to the Maximum Entropy Principle,” The Journal of chemical physics 138 , 03B603 (2013).
+16 Cesari A. , Reißer S. , and Bussi G. , “Using the Maximum Entropy Principle to Combine Simulations and Solution Experiments,” Computation 6 , 15 (2018).
+17 Roux B. and Weare J. , “On the Statistical Equivalence of Restrained-Ensemble Simulations with the Maximum Entropy Method,” The Journal of chemical physics 138 , 02B616 (2013).
+18 Hummer G. and Köfinger J. , “Bayesian Ensemble Refinement by Replica Simulations and Reweighting,” The Journal of chemical physics 143 , 12B634_1 (2015).
+19 Bonomi M. , Camilloni C. , Cavalli A. , and Vendruscolo M. , “Metainference: A Bayesian Inference Method for Heterogeneous Systems,” Sci. Adv. 2 , e1501177 (2016).26844300
+20 Hu J.-S. and Bax A. , “Determination of φ and χ1 angles in proteins from 13c-13c three-bond j couplings measured by three-dimensional heteronuclear nmr. how planar is the peptide bond?” (1997).
+21 Karplus M. , “Vicinal proton coupling in nuclear magnetic resonance,” Journal of the American Chemical Society 85 , 2870–2871 (1963).
+22 Shirts M. R. and Chodera J. D. , “Statistically Optimal Analysis of Samples from Multiple Equilibrium States,” J. Chem. Phys. 129 , 124105–11 (2008).19045004
+23 Rizzi A. , Improving Efficiency and Scalability of Free Energy Calculations through Automatic Protocol Optimization, Ph.D. thesis, Weill Medical College of Cornell University (2020).
+24 Sivak D. A. and Crooks G. E. , “Thermodynamic metrics and optimal paths,” Physical review letters 108 , 190602 (2012).23003019
+25 Shenfeld D. K. , Xu H. , Eastwood M. P. , Dror R. O. , and Shaw D. E. , “Minimizing Thermodynamic Length to Select Intermediate States for Free-Energy Calculations and Replica-Exchange Simulations,” Phys. Rev. E 80 , 46705 (2009).
+26 Cornilescu G. , Marquardt J. L. , Ottiger M. , and Bax A. , “Validation of protein structure from anisotropic carbonyl chemical shifts in a dilute liquid crystalline phase,” Journal of the American Chemical Society 120 , 6836–6837 (1998).
+27 Richter B. , Gsponer J. , Várnai P. , Salvatella X. , and Vendruscolo M. , “The mumo (minimal under-restraining minimal over-restraining) method for the determination of native state ensembles of proteins,” Journal of biomolecular NMR 37 , 117–135 (2007).17225069
+28 Baek M. , Anishchenko I. , Humphreys I. , Cong Q. , Baker D. , and DiMaio F. , “Efficient and accurate prediction of protein structure using rosettafold2,” bioRxiv, 2023–05 (2023).
+29 Piana S. , Lindorff-Larsen K. , and Shaw D. E. , “Atomic-level description of ubiquitin folding,” Proc. Natl. Acad. Sci. U. S. A. 110 , 5915–5920 (2013).23503848
+30 Vijay-Kumar S. , Bugg C. E. , and Cook W. J. , “Structure of ubiquitin refined at 1.8 åresolution,” Journal of molecular biology 194 , 531–544 (1987).3041007
+31 Jumper J. , Evans R. , Pritzel A. , Green T. , Figurnov M. , Ronneberger O. , Tunyasuvunakool K. , Bates R. , Žídek A. , Potapenko A. , , “Highly accurate protein structure prediction with alphafold,” Nature 596 , 583–589 (2021).34265844
+32 Brotzakis Z. F. , Zhang S. , and Vendruscolo M. , “Alphafold prediction of structural ensembles of disordered proteins,” bioRxiv, 2023–01 (2023).
+33 Vuister G. W. and Bax A. , “Quantitative j correlation: a new approach for measuring homonuclear three-bond j (hnh. alpha.) coupling constants in 15n-enriched proteins,” Journal of the American Chemical Society 115 , 7772–7777 (1993).
+34 Minch M. J. , “Orientational dependence of vicinal proton-proton nmr coupling constants: The karplus relationship,” Concepts in magnetic resonance 6 , 41–56 (1994).
+35 Mirdita M. , Schütze K. , Moriwaki Y. , Heo L. , Ovchinnikov S. , and Steinegger M. , “Colabfold: making protein folding accessible to all,” Nature methods 19 , 679–682 (2022).35637307
+36 Wehmeyer C. , Scherer M. K. , Hempel T. , Husic B. E. , Olsson S. , and Noé F. , “Introduction to markov state modeling with the pyemma software [article v1.0],” Living Journal of Computational Molecular Science 1 , 5965 (2019).
+37 Wu H. and Noé F. , “Variational approach for learning markov processes from time series data,” J. Nonlinear Sci. 30 , 23–66 (2020).
+38 Pérez-Hernández G. , Paul F. , Giorgino T. , De Fabritiis G. , and Noé F. , “Identification of slow molecular order parameters for markov model construction,” J. Chem. Phys. 139 , 015102 (2013).23822324
+39 J M. , “Some methods for classification and analysis of multivariate observations,” Proceedings of the Fifth Berkeley Symposium on Mathematical Statistics and Probability, Volume 1: Statistics (1967).

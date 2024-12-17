@@ -1,0 +1,197 @@
+
+==== Front
+Sensors (Basel)
+Sensors (Basel)
+sensors
+Sensors (Basel, Switzerland)
+1424-8220
+MDPI
+
+10.3390/s24113541
+sensors-24-03541
+Article
+Camera-Based Dynamic Vibration Analysis Using Transformer-Based Model CoTracker and Dynamic Mode Decomposition
+https://orcid.org/0000-0002-7789-9849
+Cheng Liangliang Conceptualization Methodology Software Formal analysis Investigation Resources Writing – original draft Writing – review & editing *
+de Groot Justin Methodology Software Formal analysis
+Xie Kun Methodology Software Formal analysis Writing – review & editing
+Si Yanxin Methodology Software Formal analysis Writing – review & editing
+https://orcid.org/0000-0001-6018-3951
+Han Xiaodong Validation Formal analysis Writing – review & editing
+Lavine Barry K. Academic Editor
+Dynamics and Vibration Group, Engineering and Technology Institute Groningen, Faculty of Science and Engineering, University of Groningen, 9712 CP Groningen, The Netherlands; j.de.groot.21@student.rug.nl (J.d.G.); k.xie@rug.nl (K.X.); y.si@rug.nl (Y.S.); clint.han@rug.nl (X.H.)
+* Correspondence: liangliang.cheng@rug.nl
+30 5 2024
+6 2024
+24 11 354110 5 2024
+28 5 2024
+30 5 2024
+© 2024 by the authors.
+2024
+https://creativecommons.org/licenses/by/4.0/ Licensee MDPI, Basel, Switzerland. This article is an open access article distributed under the terms and conditions of the Creative Commons Attribution (CC BY) license (https://creativecommons.org/licenses/by/4.0/).
+Accelerometers are commonly used to measure vibrations for condition monitoring in mechanical and civil structures; however, their high cost and point-based measurement approach present practical limitations. With rapid advancements in computer vision and deep learning, research into tracking the motion of individual pixels with vision cameras has increased. The recently developed CoTracker, a transformer-based model, has demonstrated excellence in motion tracking, yet its performance in measuring structural vibrations has not been fully explored. This paper investigates the efficacy of the CoTracker model in extracting full-field structural vibrations using cameras. It is initially applied to capture the dense point movements in video sequences of a cantilever beam recorded using a high-speed camera. Subsequently, modal analysis using delay-embedding dynamic mode decomposition (DMD) is conducted to extract modal parameters including natural frequencies, damping ratios, and mode shapes. The results, benchmarked against those from a reference accelerometer and the Finite Element Method (FEM) result, demonstrate CoTracker’s high potential for general applicability in structural vibration measurements.
+
+vibration
+modal analysis
+camera-based measurement
+deep learning
+CoTracker
+dynamic mode decomposition
+China Scholarship Council202306710006 202306440058 202307090011 Kun Xie acknowledges the financial support from China Scholarship Council (CSC, grant number 202306710006), Yanxin Si acknowledges the financial support from China Scholarship Council (CSC, grant number 202306440058) and Xiaodong Han acknowledges the financial support from China Scholarship Council (CSC, grant number 202307090011).
+==== Body
+pmc1. Introduction
+
+Dynamic vibration information, such as displacement, velocity, and acceleration, is essential to assessing structural integrity and predicting future conditions within Structural Health Monitoring (SHM) and Predictive Maintenance (PM) practices. Structural responses to external loading can yield critical insights into underlying structural dynamics (e.g., natural frequency, damping ratio, and mode shape) through conducting Experimental/Operational Modal Analysis (EMA/OMA) that reflects the structure’s physical properties such as stiffness [1,2]. For instance, a decline in natural frequency may signify a reduction in structural stiffness, and irregularities in mode shape may signal localized defects. Despite its importance, accurately measuring sufficient dynamic responses of real engineering structures remains a challenge due to limitations in current practical methods.
+
+Contact-type accelerometers are widely considered for vibration measurements in various mechanical, civil, and aerospace applications [3,4]. However, their inherent limitation of single-point, contact-type measurement often renders them incapable of capturing sufficient dynamic information about the structures [5]. For instance, fully understanding the mode shapes of bridges cannot be realized by only placing a few accelerometers. Moreover, the locations of the sensors should avoid the so-called mode nodes to ensure effective data collection. This leads to huge burdens (e.g., high labor/money/time cost) for conducting experimental campaigns of vibration tests using accelerometers. With the rapid advances in high-speed cameras regarding the hardware, camera-based motion capture techniques have gained considerable attention from researchers and managers in structural vibration monitoring owing to their simple, cost-effective, and non-contact sensing method [6,7,8].
+
+The efficiency of vision-based approaches, which take advantage of remote sensing, full-field measurements, and high precision, have been identified in many applications [9,10,11,12,13,14,15,16,17]. A variety of vision-based techniques have been designed and applied for displacement monitoring such as digital image correlation (DIC) [9], template matching [10], optical flow algorithms [11], feature tracking [12], up-sampled cross-correlation (UCC) [13], mean-shift tracking methods [14], and phase-based methods [15], among others [16,17]. Among these, DIC stands out for its ability to correlate and track image segments over time, while template matching utilizes known patterns to locate corresponding areas in different images. Optical flow algorithms estimate the motion of objects between frames and feature tracking methods follow distinct points or objects within the image sequence. The aforementioned techniques, despite their efficacy in motion estimation within image sequences, present several inherent limitations. Some require the application of painted patterns, which may be impractical for large-scale or in-service infrastructures, while others rely on assumptions of small motion, potentially limiting their performance and applicability in practical scenarios involving complex or large displacements.
+
+A deep learning model called CoTracker [18] for motion tracking, built on a transformer network using specialized attention layers to model the correlation of different points over time, was recently proposed by Nikita, etc. Unlike conventional methods that either employ optical flow for simultaneous motion estimation of all points or track each point separately, which may neglect inter-point relationships, possibly reducing performance, CoTracker addresses this by jointly tracking multiple points throughout a video, which blends ideas from both optical flow and tracking studies. The direct use of pretrained AI model parameters reduces application complexity and enhances the ability to capture structural motion at the pixel level, creating significant potential for a wide range of real-world applications. However, research into the feasibility and performance of CoTracker for vibration measurement in the field of Structural Health Monitoring (SHM) has not yet been explored.
+
+This paper primarily aims to conduct a preliminary feasibility study on the use of the trained CoTracker model for measuring the dynamic vibrations of a cantilever beam in a laboratory setting. The performance of CoTracker is benchmarked against signals measured by a reference accelerometer. Furthermore, the paper discusses the possibility and efficacy of conducting modal analysis to infer the structural dynamic properties (i.e., natural frequency, damping ratio, and mode shape) using a data-driven decomposition approach known as Dynamic Mode Decomposition (DMD) [19,20,21], initially introduced for flow dynamics but now applied beyond this field.
+
+The paper is organized into five main sections. Section 2 provides an overview of the CoTracker model and a detailed description of the methodology is presented in Section 3. Section 4 details a case study on a steel cantilever beam. The results obtained and the comparative benchmarking studies are also presented in Section 4. Finally, conclusions are drawn in Section 5.
+
+2. The Co-Tracker Model
+
+The current mainstream motion tracking methods mainly fall into two categories: one is the optical flow method which estimates the instantaneous velocity of all points in the video frame, but it is difficult to estimate long-term motion (especially when there is occlusion and the camera frame rate is low). The other is the tracking method, which involves selecting a limited number of points and directly tracking them over continuous time, but this does not utilize the interaction relationships between different points on the same object. CoTracker, however, employs the concepts of both methods: it uses a transformer to model the correlations of points on the same object and uses a sliding window to track ultra-long video sequences. The input of CoTracker is the video and a variable number of trajectory starting positions, and the output is the entire trajectory of the predefined positions. The main innovation of CoTracker lies in its capacity to utilize both temporal and group attention blocks within the transformer architecture. By alternating between these attention blocks, CoTracker gains a more thorough comprehension of motion dynamics and correlations among points. This approach allows Co-Tracker to tackle the constraints of conventional methods, which concentrate on tracking points separately.
+
+Note that the network’s input can be any position and any time within the video sequence. The architecture of CoTracker is presented in Figure 1, and the fundamental principle of CoTracker is detailed in [18] as follows: First, assume that the points are stationary to initialize the point coordinates P, then use a Convolutional Neural Network (CNN) to extract image features Q. A marker ‘v’ is introduced to denote whether the target is occluded. Subsequently, the input token, comprising the point coordinates (P), occlusion marker (v), and image features (Q), is processed by the transformer to model correlations. The output token, consisting of the updated position (P’) and image features (Q’), is then obtained. Furthermore, Co-Tracker offers flexible ways to define the tracking points: grid-based tracking, manual point selection, and user-defined segmentation mask. In this paper, a segmentation mask covering the beam edge is defined.
+
+3. Methodology
+
+3.1. Experimental Setup
+
+Experiments involve vibration measurement on a cantilever beam under both harmonic excitation due to a modal shaker and free vibration following an impact using a force hammer. The experimental setup is illustrated in Figure 1, where the beam has dimensions of 420 mm in length, 2 mm in width, and 30 mm in height. The sampling frequency of the accelerometer was 8192 Hz, and that of the high-speed CMOS camera with a high-resolution lens for sensor size up to 1” and a focal length of 16 mm was set to 150 Hz.
+
+More details regarding the experimental procedures are summarized as follows: (i) A single harmonic frequency of 20 Hz from the modal shaker will be generated to initially excite the beam, as shown in Figure 1a. Subsequently, the high-speed CMOS camera will be used to capture the sequence of vibration images after conducting camera calibration. (ii) Next, to extract the full-field vibrations from the observed beam structure, a segmentation map consisting of a 500-pixel side edge will be created. The segmented pixels will then be inputted into the trained CoTracker model to extract the time-domain vibration signals from the entire side edge of the beam. This will allow for better visualization of the vibration modes after conducting modal analysis in the next step; the measured vibrations using the camera will be benchmarked with that of the accelerometer (see Figure 1a). (iii) Further validations on the feasibility of the proposed methodology are conducted via the measurement of vibrations under hammer impact and the relevant modal parameters including natural frequency, damping ratio and mode shape will be identified using a data-driven approach, that is, delay-embedding dynamic mode decomposition.
+
+3.2. Camera Calibration
+
+The real-world coordinates of the measuring points on the object surface should be accurately mapped to the plane coordinates used in the camera settings during the vibration tests. This ensures that the absolute values (pixel displacement) obtained can be accurately converted to accelerations and compared to those measured using the accelerometer. To achieve this, a set of images of a planar calibration target with regularly spaced circular dots is captured using the imaging system at each position, with the target translated and/or rotated in three dimensions. These images are then processed to calculate the intrinsic and extrinsic parameters of the camera used. More details about the estimation of geometric parameters for a single camera can be found in various publications [22,23]. As shown in Figure 2, the recorded image is presented before and after calibration, which was performed using the MATLAB® Camera Calibrator App (version 2022b). The measured pixel motion will subsequently be converted to actual displacement by applying the ratio between the observed pixels of the beam structure in the frame and the actual physical geometry parameters of the beam, after applying the obtained calibration parameter matrix.
+
+3.3. Segmentation Map
+
+The CoTracker algorithm requires a grayscale contrast between the target and the background [18]. In images, the edges of objects contain the most information, as edges represent abrupt changes in grayscale values. Therefore, the segmentation map has been designed using the Canny edge detection method to cover the edges of the observed beam structure. Figure 3c presents the motion trajectory (including the first 15 frames) of all the points on the identified edge under a hammer impact, with a zoomed-in region. The extracted pixel motions of these points, in a total of 1207 pixels, are combined into a spatiotemporal matrix, which is later used for modal parameter extraction after applying the camera calibration parameters from Section 3.2. Figure 3a,b present the other two methods offered using CoTracker in tracking points: regular grid-based tracking and manually picked point-based tracking.
+
+3.4. Modal Analysis Using Delay-Embedding Dynamic Mode Decomposition (DMD)
+
+DMD is a data-driven decomposition technique [19]. It is a dimensionality reduction and modeling approach initially developed within the fluids community. Later, its inherent merit in the ability to decompose a matrix of high-dimensional time series data into a set of spatially coherent structures that exhibit the same linear dynamics over time (e.g., oscillations, exponential growth/decay) extended its application to fields such as video surveillance [20], epidemiology [21], and disease modeling [22]. However, when the spatial complexity is smaller than the spectral complexity, the standard DMD may not always yield the expected results, particularly in scenarios involving highly noisy data. A classic technique for dealing with long-term temporal behavior and high-dimensional noisy datasets is delay-embedding DMD. This method combines the ideas of classical DMD and a delay-embedding theorem [23] to augment a more versatile and robust state represented by a few measurement functions, with its former time-lagged snapshots for dynamic mode decomposition in various applications.
+
+To implement delay-embedding DMD, stacking S ≤ K copies of time-shifted data is performed first to form the following augmented input matrix:(1) Daug=x1x2…xK−S+1x2x3…xK−S+2⋮⋮⋱⋮xSxS+1…xK
+
+where x(t)∈Rm denotes a state vector of an m-dimensional dynamical system at time t. xk=xtk,  for k=1,......K, a set of temporally equispaced snapshots with tk=t1+(k−1)Δt. K is the number of sample snapshots. And S is the applied embedding dimension.
+
+A full snapshot matrix X1K=x1x2⋯xK is then constructed in the delay-embedding DMD. By superimposing standard DMD in a sliding window applied on the snapshot matrix X1K, with the sliding window moving from index 1 to S, snapshot subblocks X1K−S+1,X2K−S+2,....,XSK are obtained from the full snapshot matrix X1K. Daug is arranged into the following two augmented matrices:(2) X=X1K−S+1X2K−S+2⋯XS−1K−1,    X′=X2K−S+2⋯XS−1K−1XSK
+
+The goal of the delay-embedding DMD approach is to find a relationship between the future state X′ and the current state X, given by the following:(3) X′=RX
+
+where (4) R=X′X†
+
+X and X′ are the augmented matrices, X† denotes the pseudo-inverse matrix of X. The matrix, R, is referred to as delay-embedding DMD operator. The delay-embedding DMD modes and eigenvalues are defined as the eigenvectors and eigenvalues of R. A truncated singular value decomposition (SVD) is applied to X, then X=UΣV*, and * denotes Hermitian transpose of a matrix V. The pseudo-inverse matrix can be computed as follows:(5) X†=VΣ−1U*
+
+Defining the projected matrix of R via least-square fitting as follows:(6) R~≜U*RU=U*X′VΣ−1U*U=U*X′VΣ−1
+
+The delay-embedding DMD eigenvalues μ are then obtained by performing eigenvalue decomposition:(7) R~w=μw
+
+And the delay-embedding DMD modes corresponding to μ is defined by the following:(8) ϕ=Uw=X′VΣ−1w
+
+Denoting the i-th delay-embedding DMD eigenvalue as μi, the growth rate δi and the frequencies ωi  are given by the following:(9) δi+iωi=logμiΔt=si
+
+Therefore, natural frequencies fi, and modal damping ratios ζi can be extracted as follows:(10) fi=∣si∣/2π
+
+(11) ζi=−Resi/si
+
+The schematic architecture of modal analysis of the beam using delay-embedding DMD, based on the extracted vibration responses along the edge pixels covered by the segmentation map from Co-Tracker, is illustrated in Figure 4.
+
+4. Results and Discussions
+
+4.1. Modal Analysis Using Delay-Embedding Dynamic Mode Decomposition (DMD)
+
+To illustrate the feasibility and performance of using CoTracker to identify structural vibrations, a test was conducted on a cantilever beam (as shown in Figure 3) subjected to a harmonic excitation at 20 Hz using a modal shaker. The vibrational acceleration sensor data and CoTracker data, compared in the time-domain, are shown in Figure 5a. Note that the direct measurement from CoTracker is pixel displacement, and the corresponding acceleration is obtained via camera calibration, followed by applying the ratio of structural geometry in pixels to physical dimensions. The results indicate a good match between the two throughout the entire duration. For a quantitative comparison, the correlation reflecting the degree of association between the camera and accelerometer acceleration signals has been calculated to be over 90%. This further confirms the consistency between the acceleration signals extracted from the video using CoTracker and those measured using the accelerometer. Additionally, the frequency analysis of the acceleration data for both cases was conducted by performing a Fourier transform, as illustrated in Figure 5b. From Figure 5b, although there is a slight energy peak located around 30 Hz for CoTracker, it can be observed that CoTracker accurately identified the dominant frequency component around 20 Hz, which is identical to that of the accelerometer. The measurement difference with a mean value of −0.0225 and standard variation of 0.0970 between the Co-Tracker and the accelerometer is presented in Figure 5c.
+
+4.2. Modal Parameters Identification under Hammer Impact
+
+Since the comparison study in Section 4.1 validates the satisfactory performance of measuring structural vibrations using the AI model CoTracker, this section aims to explore the potential of identifying modal parameters, including natural frequency, damping ratio, and mode shape, based on the extracted vibrational signals from CoTracker. To achieve this, a hammer impact test is designed, as shown in Figure 4. The accelerations of 1207 pixels from the beam edge covered by the segmentation map are extracted using CoTracker. Subsequently, delay-embedding DMD is applied to these time signals to extract the aforementioned modal parameters.
+
+The input data matrix (full snapshot matrix) is constructed with dimensions of (number of delays × number of pixels) × number of sampling points. In this case, the number of delays (d) is set to 10, the number of pixels is 1207, and the number of sampling points is 601, with a sampling frequency of 120 Hz. The modal parameters have then been extracted using the DMD procedure described in Section 3.4 To construct a similar stabilization diagram in LSCF [24], this paper employs the idea of a pseudo-frequency/damping stabilization diagram from recent research [25]. Instead of increasing the mode order in the stabilization diagram of the LSCF method, this paper considers the stabilization of DMD eigenvalues by increasing the sampling frequency using a resampling strategy. The sampling frequency in this paper ranges from 5 Hz to 200 Hz, increasing by 5 Hz increments. The pseudo-frequency and damping stabilization diagrams are shown in Figure 6 and Figure 7, respectively.
+
+As can be seen from Figure 6, two stable modes at 8.5 Hz and 53 Hz, corresponding to stable damping ratios 0.012 and 0.020 in Figure 7, can be captured. Still, sparse numerical poles can be observed in both pseudo-frequency and damping stabilization diagrams, due to numerical calculations and noise. To validate the correctness of the two identified modes, the numerical solution of the cantilever beam of the first two natural frequencies and the mode shapes of flexural vibration is calculated in the commercial Finite Element Method (FEM) software COMSOL® Version 6.2.
+
+The FEM results indicate that the first two natural frequencies are 9 Hz and 56 Hz, respectively, considering the Young’s modulus and density of the beam as 190 GPa and 7850 kg/m3, which demonstrates a good match with the identified DMD frequencies. Furthermore, the DMD mode shapes, after a procedure of outlier removing and smooth averaging of the identified two modes, are presented in Table 1, which again shows a consistency with the corresponding FEM mode shapes.
+
+5. Conclusions
+
+This paper first explores the feasibility of using the current state-of-the-art tracking deep learning model, CoTracker, for measuring the structural vibrations of a cantilever beam structure. The measured results are compared with the acceleration data from a reference accelerometer. The comparison indicates the promising functionality of CoTracker in vibration measurement, particularly in terms of time/frequency measurement accuracy. Furthermore, a data-driven approach called delay-embedding DMD has been employed to identify the underlying flexural vibration modes, including natural frequencies and damping ratios. By leveraging the full-field capability of camera-based measurements at the pixel-level, the mode shapes can also be recognized using CoTracker. The identified modal parameters show satisfactory consistency with FEM solutions. This preliminary study confirms the effectiveness of integrating deep learning technologies into engineering problems in structural vibration domains. This illustrates its high potential in broader dynamics fields such as vibration control based on camera, motion magnification, and nonlinear dynamics. In the near future, camera-based measurement experiments on more complex and practical engineering structures will be conducted to further investigate the actual applicability of CoTracker and DMD in acquiring vibrations and identifying structural modal parameters.
+
+Author Contributions
+
+Conceptualization, L.C.; methodology, L.C., J.d.G. and K.X.; software, J.d.G., K.X. and Y.S.; validation, L.C., J.d.G. and K.X.; formal analysis, J.d.G., K.X., Y.S. and X.H.; resources, L.C.; writing—original draft preparation, L.C.; writing—review and editing, L.C., J.d.G., K.X. and Y.S.; visualization, L.C., K.X. and X.H.; supervision, L.C. and K.X.; project administration, L.C.; funding acquisition, L.C. All authors have read and agreed to the published version of the manuscript.
+
+Institutional Review Board Statement
+
+Not applicable.
+
+Informed Consent Statement
+
+Not applicable.
+
+Data Availability Statement
+
+The raw data supporting the conclusions of this article will be made available by the authors on request.
+
+Conflicts of Interest
+
+The authors declare no conflicts of interest.
+
+Figure 1 Experimental setup for measuring vibrations on a cantilever beam: (a) overall experimental setup; (b) high-speed camera with a high-resolution lens; (c) impact testing hammer.
+
+Figure 2 The recorded image: (a) before calibration; (b) after calibration.
+
+Figure 3 The three ways of designing tracking points (noted as rainbow dots): (a) regular grid-based tracking; (b) manually picked point-based tracking; (c) user-defined segmentation-based tracking (used in this paper): the trajectory plot of the edge points (including 15 frames) with a zoom-in view of the region marked by red dash box.
+
+Figure 4 Schematic architecture of modal analysis using delay-embedding DMD.
+
+Figure 5 The comparison between vibrational acceleration responses from the CoTracker model and accelerometer results under a harmonic test at 20 Hz: (a) time−domain; (b) frequency−domain; (c) measurement differences between the CoTracker and the accelerometer.
+
+Figure 6 The pseudo-frequency stabilization diagram using delay-embedding DMD.
+
+Figure 7 The pseudo-damping stabilization diagram using delay-embedding DMD.
+
+sensors-24-03541-t001_Table 1 Table 1 The 1st and 2nd mode shapes based on DMD and FEM.
+
+1st DMD mode shape		
+1st mode shape from COMSOL		
+2nd DMD mode shape		
+2nd mode shape from COMSOL		
+
+Disclaimer/Publisher’s Note: The statements, opinions and data contained in all publications are solely those of the individual author(s) and contributor(s) and not of MDPI and/or the editor(s). MDPI and/or the editor(s) disclaim responsibility for any injury to people or property resulting from any ideas, methods, instructions or products referred to in the content.
+==== Refs
+References
+
+1. Brincker R. Carlos V. Introduction to Operational Modal Analysis John Wiley & Sons Hoboken, NJ, USA 2015
+2. Cheng L. Cigada A. Experimental strain modal analysis for beam-like structure by using distributed fiber optics and its damage detection Meas. Sci. Technol. 2017 28 074001 10.1088/1361-6501/aa6c8c
+3. Bocca M. Eriksson L.M. Mahmood A. Jäntti R. Kullaa J. A synchronized wireless sensor network for experimental modal analysis in structural health monitoring Comput.-Aided Civ. Infrastruct. Eng. 2011 26 483 499 10.1111/j.1467-8667.2011.00718.x
+4. Xiong C. Lu H. Zhu J. Operational modal analysis of bridge structures with data from GNSS/accelerometer measurements Sensors 2017 17 436 10.3390/s17030436 28241472
+5. O’donoughue P. Gautier F. Meteyer E. Durand-Texte T. Secail-Geraud M. Foucart F. Robin O. Berry A. Melon M. Pézerat C. Comparison of three full-field optical measurement techniques applied to vibration analysis Sci. Rep. 2023 13 3261 10.1038/s41598-023-30053-9 36828866
+6. Chen J.G. Davis A. Wadhwa N. Durand F. Freeman W.T. Büyüköztürk O. Video camera–based vibration measurement for civil infrastructure applications J. Infrastruct. Syst. 2017 23 B4016013 10.1061/(ASCE)IS.1943-555X.0000348
+7. Busca G. Cigada A. Mazzoleni P. Zappa E. Vibration monitoring of multiple bridge points by means of a unique vision-based measuring system Exp. Mech. 2014 54 255 271 10.1007/s11340-013-9784-8
+8. Kalybek M. Bocian M. Nikitas N. Performance of optical structural vibration monitoring systems in experimental modal analysis Sensors 2021 21 1239 10.3390/s21041239 33578708
+9. Yu L. Pan B. Single-camera high-speed stereo-digital image correlation for full-field vibration measurement Mech. Syst. Signal Process. 2017 94 374 383 10.1016/j.ymssp.2017.03.008
+10. Xiao P. Wu Z.Y. Christenson R. Lobo-Aguilar S. Development of video analytics with template matching methods for using camera as sensor and application to highway bridge structural health monitoring J. Civ. Struct. Health Monit. 2020 10 405 424 10.1007/s13349-020-00392-6
+11. Collier S. Dare T. Accuracy of phase-based optical flow for vibration extraction J. Sound Vib. 2022 535 117112 10.1016/j.jsv.2022.117112
+12. Dong C.Z. Catbas F.N. A review of computer vision–based structural health monitoring at local and global levels Struct. Health Monit. 2021 20 692 743 10.1177/1475921720935585
+13. Ganesan R. Sankaranarayanan G. Kumar M.P. Raja V.B. Up-Sampled Cross-Correlation Based Object Tracking & Vibration Measurement in Agriculture Tractor System Intell. Autom. Soft Comput. 2022 36 667 681
+14. Pareek A. Arora N. Re-projected SURF features based mean-shift algorithm for visual tracking Procedia Comput. Sci. 2020 167 1553 1560 10.1016/j.procs.2020.03.366
+15. Zang Z. Yang X. Zhang G. Wang J. Chen J. Phase-based vibration frequency measurement from videos recorded by unstable cameras IEEE Trans. Instrum. Meas. 2022 71 1 14 10.1109/TIM.2022.3197750
+16. Yang R. Singh S.K. Tavakkoli M. Amiri N. Yang Y. Karami M.A. Rai R. CNN-LSTM deep learning architecture for computer vision-based modal frequency detection Mech. Syst. Signal Process. 2020 144 106885 10.1016/j.ymssp.2020.106885
+17. Bao W. Ren Y. Wang N. Hu G. Yang X. Detection of abnormal vibration dampers on transmission lines in UAV remote sensing images with PMA-YOLO Remote Sens. 2021 13 4134 10.3390/rs13204134
+18. Karaev N. Rocco I. Graham B. Neverova N. Vedaldi A. Rupprecht C. Cotracker: It is better to track together arXiv 2023 2307.07635
+19. Kutz J.N. Brunton S.L. Brunton B.W. Proctor J.L. Dynamic Mode Decomposition: Data-Driven Modeling of Complex Systems Society for Industrial and Applied Mathematics Philadelphia, PA, USA 2016
+20. Grosek J. Kutz J.N. Dynamic mode decomposition for real-time background/foreground separation in video arXiv 2014 1404.7592
+21. Bistrian D.A. Dimitriu G. Navon I.M. Application of deterministic and randomized dynamic mode decomposition in epidemiology and fluid dynamics Ann. Alexandru Ioan Cuza Univ.-Math. 2020 66 251
+22. Groun N. Villalba-Orero M. Lara-Pezzi E. Valero E. Garicano-Mena J. Le Clainche S. Higher order dynamic mode decomposition: From fluid dynamics to heart disease analysis Comput. Biol. Med. 2022 144 105384 10.1016/j.compbiomed.2022.105384 35278772
+23. Nedzhibov G. Delay-Embedding Spatio-Temporal Dynamic Mode Decomposition Mathematics 2024 12 762 10.3390/math12050762
+24. Guillaume P. Verboven P. Vanlanduit S. Van Der Auweraer H. Peeters B. A poly-reference implementation of the least-squares complex frequency-domain estimator Proceedings of the IMAC, A Conference & Exposition on Structural Dynamics, Society for Experimental Mechanics Kissimmee, FL, USA 3–6 February 2003 Volume 21
+25. Saito A. Kuno T. Data-driven experimental modal analysis by dynamic mode decomposition J. Sound Vib. 2020 481 115434 10.1016/j.jsv.2020.115434

@@ -1,0 +1,168 @@
+
+==== Front
+Bioinformatics
+Bioinformatics
+bioinformatics
+Bioinformatics
+1367-4803
+1367-4811
+Oxford University Press
+
+38837370
+10.1093/bioinformatics/btae350
+btae350
+Applications Note
+Data and Text Mining
+AcademicSubjects/SCI01060
+Bigtools: a high-performance BigWig and BigBed library in Rust
+Huey Jack D Program in Molecular Medicine, UMass Chan Medical School, Worcester, MA 01605, United States
+Diabetes Center of Excellence, UMass Chan Medical School, Worcester, MA 01605, United States
+
+https://orcid.org/0000-0001-5814-0864
+Abdennur Nezar Department of Genomics and Computational Biology, UMass Chan Medical School, Worcester, MA 01605, United States
+Department of Systems Biology, UMass Chan Medical School, Worcester, MA 01605, United States
+
+Wren Jonathan Associate Editor
+Corresponding authors. Program in Molecular Medicine and Diabetes Center of Excellence, UMass Chan Medical School, 368 Plantation Street, Worcester, MA 01605, United States. E-mail: jack.huey@umassmed.edu (J.D.H.); Department of Genomics and Computational Biology and Department of Systems Biology, UMass Chan Medical School, 368 Plantation Street, Worcester, MA 01605, United States. E-mail: nezar.abdennur@umassmed.edu (N.A.)
+6 2024
+11 6 2024
+11 6 2024
+40 6 btae35007 3 2024
+20 5 2024
+27 5 2024
+29 5 2024
+11 6 2024
+© The Author(s) 2024. Published by Oxford University Press.
+2024
+https://creativecommons.org/licenses/by/4.0/ This is an Open Access article distributed under the terms of the Creative Commons Attribution License (https://creativecommons.org/licenses/by/4.0/), which permits unrestricted reuse, distribution, and reproduction in any medium, provided the original work is properly cited.
+
+Abstract
+
+Motivation
+
+The BigWig and BigBed file formats were originally designed for the visualization of next-generation sequencing data through a genome browser. Due to their versatility, these formats have long since become ubiquitous for the storage of processed sequencing data and regularly serve as the basis for downstream data analysis. As the number and size of sequencing experiments continues to accelerate, there is an increasing demand to efficiently generate and query BigWig and BigBed files in a scalable and robust manner, and to efficiently integrate these functionalities into data analysis environments and third-party applications.
+
+Results
+
+Here, we present Bigtools, a feature-complete, high-performance, and integrable software library for generating and querying both BigWig and BigBed files. Bigtools is written in the Rust programming language and includes a flexible suite of command line tools as well as bindings to Python.
+
+Availability and implementation
+
+Bigtools is cross-platform and released under the MIT license. It is distributed on Crates.io, Bioconda, and the Python Package Index, and the source code is available at https://github.com/jackh726/bigtools.
+
+NIH Common Fund 4D Nucleome Program UM1 HG011536
+==== Body
+pmc1 Introduction
+
+BigWig and BigBed, collectively referred to as Big Binary Indexed (BBI) files, are compressed, binary, and indexed formats for storing reference genome-aligned next-generation sequencing (NGS) information (Kent et al. 2010). BigBed is the binary equivalent of the Browser Extensible Data (BED) text format that represents features associated with (potentially overlapping) genomic intervals, e.g. peak calls or transcript annotations. Analogously, BigWig is the binary reincarnation of the textual Wiggle and BedGraph formats, which encode a quantitative step-function mapping unique floating point values to bases in the genome, while accommodating missing values, e.g. read pileups from a NGS experiment. Introduced in 2009, these file types are among the most common data artifacts derived from bulk and pseudo-bulk omic experimental modalities.
+
+BBI files were designed for the display of large, distributed datasets in the UCSC Genome Browser; however, these features have made BigWig and BigBed useful beyond genome browsers, and today they are widely used for data analysis. For example, as of the end of 2023, the ENCODE Project data portal (Sloan et al. 2016) provides for analysis purposes approximately 15 000 BigWig files and 17 000 BigBed files comprising 17 different schemas, excluding archived data. In BBI files, the primary data, index, and summary data or “zoom levels” at several resolutions are stored within the same file. The block compression and sparse index design allows for efficient random and remote access. However, because of their complex binary architecture, BBI files require specialized supporting software to enable reading, writing, and random access.
+
+As the availability and use of BBI files grows, there is a growing desire to integrate BBI functionality into third-party bioinformatic applications. Since their inception, the command line interface (CLI) binaries from Kent et al. (2010), hereon referred to as the UCSC tools, have served as the canonical software for generating and interacting with BigWig and BigBed files. While it is possible to interface directly with the C code that powers the UCSC tool executables [e.g. bx-python (https://github.com/bxlab/bx-python), rtracklayer (Lawrence et al. 2009), bwtool (Pohl and Beato 2014), plastid (Dunn and Weissman 2016), and pybbi (Abdennur et al. 2023)], architectural limitations hinder its suitability as a standalone BBI library. This prevents widespread use of the UCSC reference implementation for application programming or for integration in interactive computing environments, particularly for languages with a runtime like Python, R, or Javascript.
+
+Aside from the need for third-party integration, there is also a growing need for increased computational flexibility to tailor to different environments and use cases. First, while BBI files have traditionally been served statically on web servers, today users commonly require fast and easy querying of data locally for bioinformatic analyses. Similarly, data processing and generation of BBI files must also scale with rising volumes of raw NGS data. While traditionally done on high-performance computing clusters, data processing is also expanding into cloud compute platforms, particularly in large research consortia. In such environments, optimizing compute resources directly translates to decreased operating costs as well as reduced environmental impact.
+
+We introduce Bigtools, a full-featured Rust library for BBI file creation, access, and manipulation that supports flexible resource usage and parallelization. Leveraging this library, Bigtools also includes versatile and high-performance CLI tools and Python bindings.
+
+2 Bigtools is a full-featured BBI library
+
+Due to the limitations of the UCSC reference implementation, a number of alternative BBI software implementations have emerged in different languages, having varying levels of feature support and caveats [libBigWig and pyBigWig (Ryan 2016, Ryan et al. 2016), @gmod/bbi (Diesh et al. 2023), Big (https://github.com/JetBrains-Research/big), bigwig-reader (https://github.com/weng-lab/bigwig-reader), see Table 1]. These implementations are most commonly limited by either a lack of support for BigBed files (reading or writing), or a lack of support for writing BBI files altogether. The library with the most complete support for reading and writing both file formats, Big, is written in Kotlin and thus restricted to the Java Virtual Machine (JVM) runtime and JVM-based languages.
+
+Table 1. Comparison of Big Binary Indexed file software implementations.
+
+	UCSC	libBigWig	Big	@gmod/bbi	bigwig-reader	Bigtools	
+		& pyBigWig					
+Language	C	C	Kotlin	Typescript	Typescript	Rust	
+Read	Yes	Yes	Yes	Yes	Yes	Yes	
+Write	Yes	Partiala	Yes	No	No	Yes	
+Library	No	Yes	Yes	Yes	Yes	Yes	
+Includes bindings	No	Yes	No	No	No	Yes	
+Includes CLI	Yes	No	No	No	No	Yes	
+Multithreaded	No	No	No	No	No	Yes	
+a Writing BigBed is not supported.
+
+Bigtools is an independent and full-featured library for efficient creation, access, and manipulation of BBI files. It provides complete read and write support for both BigWig and BigBed files. Bigtools supports (i) granular random access to BBI files, including access to BBI file metadata, zoom levels, and summary records, (ii) interpreting custom BigBed records using embedded schemas written in the autoSql definition language (Kent and Brumbaugh 2002), (iii) parallelization of reading and writing over multiple threads or cores, and (iv) optional memory-efficient single-pass creation of BBI files. The latter feature eliminates the requirements to start from a text representation, allowing for writing from standard input or progressive generation of data programmatically. We provide more details about the design of these operations as Supplementary Information.
+
+Bigtools is written in Rust, which offers modern packaging and development tooling alongside its guarantees of memory-safety. Importantly, Bigtools can be effortlessly used by other Rust libraries and binaries through the Cargo package manager and crates.io package registry (https://doc.rust-lang.org/cargo/). Additionally, because Rust allows creation of C-compatible data structures and functions that can be called through any language that offers C Application Binary Interface (ABI) compatibility, there exist many Rust packages that make it easy to create and distribute bindings for commonly used languages. Along with the Bigtools library and CLI tools, we provide a companion Python library, Pybigtools, built using the PyO3 crate (https://pyo3.rs/). Similar to the pyBigWig bindings for the libBigWig C library (Ryan et al. 2016), this Python library exposes the I/O features of the Bigtools Rust library to Python and interfaces directly with efficient data structures in Python, including NumPy (Harris et al. 2020) arrays.
+
+3 Bigtools offers high-performance and flexible CLI tools
+
+While alternative implementations for reading and writing BigWig and BigBed files are popular, none so far offer alternative CLI tools. This limits their use, particularly in pipelines and scripts. Here, we show that the Bigtools CLI has not only substantial performance improvements over the reference implementation but also a number of ergonomic benefits that can make it more versatile and easier to use.
+
+To measure differences in performance between Bigtools and the reference implementation, we have set up a number of benchmarks (Table 2) comparing the processing of real-world data available from the ENCODE Project Consortium (2012). Each benchmark primarily measures the run time and maximum memory, but also samples CPU usage and memory over time. The benchmarks were run on an MSI GE66 running Ubuntu 22.04 and were repeated three times.
+
+Table 2. Performance comparison between Bigtools and UCSC tools.
+
+	Wall time (sec)	Max memory (MB)	
+Benchmark	UCSC	Bigtools ST	Bigtools MT	UCSC	Bigtools ST	Bigtools MT	
+bigwigaverageoverbed	14.7 ± 0.1	6.1 ± 0.2	2.6 ± 0.1	2267.5 ± 0.1	72.3 ± 0.1	359.7 ± 2.0	
+bigwigmerge	110.1 ± 2.1	63.0 ± 1.9	N/A	2975.4 ± 0.1	8.7 ± 0.1	N/A	
+bedgraphtobigwig	90.5 ± 1.5	47.3 ± 1.1	15.9 ± 0.0	218.8 ± 0.2	15.0 ± 0.2	54.0 ± 6.1	
+bedtobigbed	59.1 ± 0.7	38.9 ± 1.2	14.6 ± 0.2	366.7 ± 0.2	10.4 ± 0.3	31.6 ± 0.8	
+ST, single-threaded; MT, multithreaded (six threads).
+
+First, we compare single-threaded performance between Bigtools and the UCSC implementation. The wall time of Bigtools varies between approximately 1.5× to 2.5× faster than the UCSC tools. In addition, the Bigtools tools use considerably less memory (∼15× to 340×) than the UCSC tools. Notably, for tools like bigWigAverageOverBed and bigWigMerge, where the UCSC implementation loads in whole chromosomes at a time, Bigtools implements lazy computation which reduces the memory consumption by over an order of magnitude.
+
+Second, unlike the UCSC tools, Bigtools offers multithreaded implementations for nearly all CLI tools (excluding only bigwigmerge). Increasing the number of threads to just two results in between approximately 3% to 41% faster wall time, while scaling up to six threads results in between approximately 24% to 73% faster wall time (Table 2). Memory usage does increase moderately for most of the tools, but remains comfortably below that of the UCSC tools.
+
+Aside from performance, Bigtools offers a number of ergonomic benefits over the UCSC implementation. First, Bigtools offers several options for configuration that allow flexibility over the input representation. For example, while writing a BigWig file, the UCSC implementation reads through the input bedGraph file multiple times, which prohibits creating a BigWig from standard input. By contrast, Bigtools provides the option to write BBI files in a single pass of the input data, including from standard input. These configuration options also allow tuning of performance to the size of the input data: multiple passes are fine for smaller files, but results in significant time overhead for very large files. When writing via a single-pass Bigtools utilizes temporary files to avoid a memory overhead from index and zoom building, though this can be disabled. In addition to various configuration options, Bigtools also works as a drop-in replacement for the equivalent UCSC tools, supporting the most commonly used CLI flags. Finally, Bigtools can be used either as a single binary with each tool as a subcommand or as separate binaries for each tool.
+
+4 Conclusion
+
+In summary, we present here a full-featured and high-performance library written in Rust for reading and writing BigWig and BigBed files, along with associated CLI tools and a Python library. Bigtools adds to the growing arsenal of core NGS tools in the Rust ecosystem, including Rust-Bio (Köster 2016) and noodles (https://github.com/zaeleus/noodles). It offers a number of configuration options that allow flexibility depending on file size and resource requirements, including scaling to multiple cores. Thus, Bigtools is ideal not only for local use where users may want to prioritize quick, parallel processing in return for higher processor and memory use, but also for cloud or batch workflows where users may want to prioritize minimal system resources in return for slightly longer computation.
+
+Bigtools offers substantial benefits over previous library implementations of BigWig and BigBed reading/writing. Namely, Bigtools provides: (i) all features available in the UCSC tools, (ii) ease of integration and cross-language compatibility, and (iii) improved performance. In fact, during its development, it has already seen uptake as a dependency in several software packages, including SnapATAC2 (Zhang et al. 2024), ProteinPaint (Zhou et al. 2016), and Oxbow (Manz et al. 2024), highlighting its utility.
+
+The Bigtools Rust library and CLI executable are available through crates.io using Rust’s Cargo package manager:$ cargo install bigtools
+
+The executables are also available on GitHub and on the Bioconda distribution channel (Grüning et al. 2018) via the Conda package manager:$ conda install -c bioconda bigtools
+
+Pybigtools is available on PyPI and on Bioconda:$ pip install pybigtools
+
+$ conda install -c bioconda pybigtools
+
+Bigtools is cross-platform and the executables and Python package are distributed for multiple platforms (including Linux, MacOS, and Windows) and architectures. Documentation for the Bigtools library and CLI can be found at https://docs.rs/bigtools and documentation for Pybigtools can be found at https://bigtools.readthedocs.io/. Code for the benchmarks in this paper can be found in the GitHub repository.
+
+Supplementary Material
+
+btae350_Supplementary_Data
+
+Acknowledgements
+
+We thank Vedat Yilmaz, Peter Kerpedjiev, Trevor Manz, Garrett Ng, and the Weng and Maehr labs for helpful discussions and suggestions.
+
+Supplementary data
+
+Supplementary data are available at Bioinformatics online.
+
+Conflict of interest
+
+None declared.
+
+Funding
+
+This work was supported by the NIH Common Fund 4D Nucleome Program [UM1 HG011536 to J.D.H. and N.A.].
+
+Data availability
+
+The source code is available at https://github.com/jackh726/bigtools.
+==== Refs
+References
+
+Abdennur N , KerpedjievP, KellerM. nvictus/pybbi. Zenodo, December 2023. 10.5281/zenodo.10382980
+Diesh C , StevensGJ, XieP et al JBrowse 2: a modular genome browser with views of synteny and structural variation. Genome Biol 2023;24 :1–21.36609515
+Dunn JG , WeissmanJS. Plastid: nucleotide-resolution analysis of next-generation sequencing and genomics data. BMC Genomics 2016;17 :958. 10.1186/s12864-016-3278-x 27875984
+ENCODE Project Consortium An integrated encyclopedia of DNA elements in the human genome. Nature 2012;489 :57–74.22955616
+Grüning B , DaleR, SjödinA, et al ; Bioconda Team. Bioconda: sustainable and comprehensive software distribution for the life sciences. Nature Methods 2018;15 :475–6.29967506
+Harris CR , MillmanKJ, van der WaltSJ et al Array programming with NumPy. Nature 2020;585 :357–62.32939066
+Kent J , BrumbaughH. autoSQL and autoXML: code generators from the genome project. Linux J 2002;2002 :1.
+Kent WJ , ZweigAS, BarberG et al BigWig and BigBed: enabling browsing of large distributed datasets. Bioinformatics 2010;26 :2204–7.20639541
+Köster J. Rust-Bio: a fast and safe bioinformatics library. Bioinformatics 2016;32 :444–6.26446134
+Lawrence M , GentlemanR, CareyV. Rtracklayer: an R package for interfacing with genome browsers. Bioinformatics 2009;25 :1841–2.19468054
+Manz T , NgG, HueyJ et al abdenlab/oxbow. Zenodo, January 2024. 10.5281/zenodo.10573865
+Pohl A , BeatoM. Bwtool: a tool for bigWig files. Bioinformatics 2014;30 :1618–9.24489365
+Ryan D. dpryan79/libbigwig. Zenodo, January 2016. 10.5281/zenodo.594078
+Ryan D , GrüningB, RamirezF. dpryan79/pybigwig. Zenodo, January 2016. 10.5281/zenodo.594045
+Sloan CA , ChanET, DavidsonJM et al ENCODE data at the ENCODE portal. Nucleic Acids Res 2016;44 :D726–32.26527727
+Zhang KAI , ZemkeNR, ArmandEJ et al A fast, scalable and versatile tool for analysis of single-cell omics data. Nat Methods 2024;21 :217–27. 10.1038/s41592-023-02139-9.38191932
+Zhou X , EdmonsonMN, WilkinsonMR et al Exploring genomic alteration in pediatric cancer using ProteinPaint. Nat Genet 2016;48 :4–6.26711108

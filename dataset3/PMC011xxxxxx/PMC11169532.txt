@@ -1,0 +1,569 @@
+
+==== Front
+Nat Commun
+Nat Commun
+Nature Communications
+2041-1723
+Nature Publishing Group UK London
+
+38866768
+49445
+10.1038/s41467-024-49445-0
+Article
+Simulating multiple variability in spatially resolved transcriptomics with scCube
+Qian Jingyang 12
+Bao Hudong 1
+http://orcid.org/0000-0002-1928-3878
+Shao Xin 12
+http://orcid.org/0000-0001-9538-848X
+Fang Yin 3
+http://orcid.org/0000-0002-6697-8998
+Liao Jie 12
+http://orcid.org/0000-0001-9991-6892
+Chen Zhuo 3
+http://orcid.org/0000-0003-3144-9460
+Li Chengyu 12
+Guo Wenbo 12
+Hu Yining 12
+Li Anyao 12
+Yao Yue 12
+http://orcid.org/0000-0002-6336-3007
+Fan Xiaohui fanxh@zju.edu.cn
+
+124
+http://orcid.org/0009-0004-5289-7873
+Cheng Yiyu chengyy@zju.edu.cn
+
+12
+1 https://ror.org/00a2xv884 grid.13402.34 0000 0004 1759 700X College of Pharmaceutical Sciences, Zhejiang University, Hangzhou, 310058 China
+2 https://ror.org/00a2xv884 grid.13402.34 0000 0004 1759 700X National Key Laboratory of Chinese Medicine Modernization, Innovation Center of Yangtze River Delta, Zhejiang University, 314100 Jiaxing, China
+3 https://ror.org/00a2xv884 grid.13402.34 0000 0004 1759 700X College of Computer Science and Technology, Zhejiang University, Hangzhou, 310013 China
+4 grid.13402.34 0000 0004 1759 700X Zhejiang Key Laboratory of Precision Diagnosis and Therapy for Major Gynecological Diseases, Women’s Hospital, Zhejiang University School of Medicine, Hangzhou, 310006 China
+12 6 2024
+12 6 2024
+2024
+15 502128 9 2023
+3 6 2024
+© The Author(s) 2024
+https://creativecommons.org/licenses/by/4.0/ Open Access This article is licensed under a Creative Commons Attribution 4.0 International License, which permits use, sharing, adaptation, distribution and reproduction in any medium or format, as long as you give appropriate credit to the original author(s) and the source, provide a link to the Creative Commons licence, and indicate if changes were made. The images or other third party material in this article are included in the article’s Creative Commons licence, unless indicated otherwise in a credit line to the material. If material is not included in the article’s Creative Commons licence and your intended use is not permitted by statutory regulation or exceeds the permitted use, you will need to obtain permission directly from the copyright holder. To view a copy of this licence, visit http://creativecommons.org/licenses/by/4.0/.
+A pressing challenge in spatially resolved transcriptomics (SRT) is to benchmark the computational methods. A widely-used approach involves utilizing simulated data. However, biases exist in terms of the currently available simulated SRT data, which seriously affects the accuracy of method evaluation and validation. Herein, we present scCube (https://github.com/ZJUFanLab/scCube), a Python package for independent, reproducible, and technology-diverse simulation of SRT data. scCube not only enables the preservation of spatial expression patterns of genes in reference-based simulations, but also generates simulated data with different spatial variability (covering the spatial pattern type, the resolution, the spot arrangement, the targeted gene type, and the tissue slice dimension, etc.) in reference-free simulations. We comprehensively benchmark scCube with existing single-cell or SRT simulators, and demonstrate the utility of scCube in benchmarking spot deconvolution, gene imputation, and resolution enhancement methods in detail through three applications.
+
+Unbiasedly benchmarking SRT computational methods remains a pressing challenge. Here, authors develop scCube, a simulation framework enabling scalable, reproducible, and unbiased generation of simulated SRT data, allowing researchers to benchmark and evaluate different methods.
+
+Subject terms
+
+Computational biology and bioinformatics
+RNA sequencing
+Statistical methods
+RNA sequencing
+Computational models
+https://doi.org/10.13039/501100001809 National Natural Science Foundation of China (National Science Foundation of China) U23A20513 Fan Xiaohui issue-copyright-statement© Springer Nature Limited 2024
+==== Body
+pmcIntroduction
+
+The emergence and rapid development of spatially resolved transcriptomics (SRT) technologies offer an unprecedented opportunity to understand the cell composition, molecular architecture, and functional details of tissues at spatial levels1. Various emerging cutting-edge technologies, including imaging-based2–4, spatial barcoding next-generation sequencing (NGS)-based5–7, and laser capture microdissection (LCM)-based8,9 approaches, have been successfully employed across diverse biological fields, such as developmental biology10, cancer11, and neuroscience12,13.
+
+As SRT data have become available, there has been an increasing advancement of computational tools for downstream analysis. Currently, more than 300 software packages have been developed for various spatial transcriptomic data analysis14, such as spatially variable gene detection15–18, cell type deconvolution19–26, unmeasured gene imputation27–31, spatial domain identification18,32,33, and spatial cell-cell interaction inference34,35. While these computational methods are often based on reasonable assumptions, it is difficult to benchmark and evaluate their performance without gold standards.
+
+Currently, a wildly-used approach for assessing the performance of computational methods involves utilizing simulated SRT data constructed from scRNA-seq data. However, variations exist in terms of the scRNA-seq data selection and the approach used to generate simulated SRT data across different benchmarking experiments. In most cases, the simulated data are constructed specifically based on the assumptions that underlie the computational method being evaluated, which may introduce bias in the evaluation process. Additionally, the lack of reproducibility in the description of most simulation steps can impede the potential reuse of these methods by other researchers. Several methods have recently emerged to generate synthetic SRT data. For example, SRTsim simulates the gene expression counts with a count model inferred from the reference data and then allocates the simulated counts to spatial locations in the synthetic data36. scDesign3 applies a probabilistic model which can incorporate diverse cell covariates to simulate the gene expression changes across spatial locations37. However, both SRTsim and scDesign3 make the simulations based on the SRT data, leading to inherent limitations of the generated data, such as limited gene detection and low cellular resolution. Furthermore, scDesign3 cannot simulate the SRT data with new spatial locations specified by users, which greatly restricts its application; SRTsim, though, can assign simulated expression counts for each new location based on its k nearest neighboring locations measured in the reference data, this strategy may fail to preserve the spatial expression patterns of genes when there is a large discrepancy in tissue shape or cell type spatial distribution between the reference and synthetic data, such as the slices of different brain donors in the DLPFC datasets by Maynard et al.38. Therefore, a general simulation framework that can simulate the independent, reproducible, and various SRT data to better facilitate the development of spatial transcriptomic data analysis methods is still in demand.
+
+To this end, we introduce scCube, an SRT simulator for simulating multiple spatial variability in spatial resolved transcriptomics and generating unbiased simulated SRT data. Based on the variational autoencoder (VAE) framework, scCube can simulate the gene expression profiles of different cell (or spot) populations in scRNA-seq (or SRT) data. Next, the spatial distribution patterns for specific populations can then be generated by the reference-based or reference-free strategy. We evaluated the simulation performance of scCube with existing single-cell or SRT simulators across various real SRT datasets, and demonstrated the utility of scCube in three benchmarking applications. The results indicated that scCube is a user-friendly framework to simulate unbiased SRT data, enabling researchers to benchmark and evaluate different computational methods more lightly and accurately.
+
+Results
+
+Design concept of scCube
+
+The workflow of scCube consists of two components: 1) gene expression simulation, and 2) spatial pattern simulation (Fig. 1). In the gene expression simulation step, scCube applies a variational autoencoder (VAE) model39 to simulate the gene expression profiles of cell (or spot) populations within the characterized clustering spaces20 (Fig. 1a; Methods). One of the main advantages of VAE is the ability to generate new data points compared with classical autoencoders, which is highly in line with the design requirements for a simulator. In the current version, scCube includes about 300 trained models of various tissues derived from four human and mouse scRNA-seq atlas (Tabula Muris40, Tabula Sapiens41, MCA42, and HCL43) as well as eight high-quality SRT datasets (Supplementary Data 1). These models can be conveniently employed through the Python package by users to generate the new gene expression profiles of specific tissues. Additionally, scCube is also equipped to accommodate external scRNA-seq or SRT datasets provided by users to train new models. Next, scCube will simulate unique spatial distribution patterns for the specific cell (or spot) populations set by users. In this step, scCube provide two strategies, reference-based and reference-free, to simulate the various spatial patterns in real SRT data. In the reference-based simulations, for each cell (or spot) population, scCube constructs a mapping between the cells (or spots) in generated data and the positions in the spatial reference using the optimal transport algorithm, and then maps the generated cells (or spots) to positions with the maximum likelihood of spatial origin (Fig. 1b; Methods). In the reference-free simulations, scCube further provides two strategies. Users can either choose to generate the random spatial patterns with the default spatial autocorrelation function, or flexibly simulate the highly customized complex spatial patterns by combining different types as well as numbers of basis patterns provided by scCube (Fig. 1c; Methods). By combining the simulated gene expression profiles and spatial patterns, scCube can generate unbiased SRT data corresponding to diverse spatial variations, such as the spatial pattern continuity of cell populations, the resolution for spot-based SRT data, the number and type of targeted genes for imaging-based SRT data, the dimension of the tissue slice, and so on (Supplementary Fig. S1). What’s more, scCube also builds in a set of visualization functions, which helps users investigate simulated datasets more intuitively.Fig. 1 Schematic workflow of scCube.
+
+a Conceptual framework of gene expression simulation step with scCube. A variational autoencoder (VAE) model is applied to simulate the gene expression profiles of cell (or spot) populations in scRNA-seq (or SRT) data. b, c Conceptual framework of spatial pattern simulation step with scCube. In the reference-based simulations (b), a mapping between the cells (or spots) in generated data and the positions in the spatial reference is first constructed using the optimal transport algorithm, and the generated cells (or spots) then are mapped to positions with the maximum likelihood of spatial origin. In the reference-free simulations (c), the spatial positions with the same number as the cells (or spots) in the generated data are randomly generated first. Then, scCube generates the random spatial patterns with the default spatial autocorrelation function, or the customized complex spatial patterns by combining different types as well as numbers of basis patterns.
+
+Simulation performance evaluation of the reference-based strategy of scCube
+
+We first comprehensively compared the simulation performance of the reference-based strategy of scCube with other existing simulators, including two SRT simulators, SRTsim36 and scDesign337, as well as six single-cell simulators, scDesign244, SymSim45, ZINB-WaVE46, and three variations of Splatter47 (Splat, Splat Simple, and Kersplat). To achieve this, 29 real SRT datasets from seven different tissues generated by six sequencing technologies that include 10X Visium, ST, Stereo-seq, MERFISH, STARmap, and 10X Xenium were utilized as the benchmark datasets (Supplementary Fig. S2 and Supplementary Data 2). The simulation performance was evaluated by the Pearson correlation coefficient (PCCGEV) and mean absolute error (MAEGEV) values between the gene expression vector for each gene across spatial positions in real and simulated data, as well as the Pearson correlation coefficient (PCCGBM) values between the gene expression value for each gene from the simulated data’s spatial locations predicted by the two generalized boosted regression models (GBMs) trained on the real data and simulated data separately (Methods). As shown in Fig. 2a, b and Supplementary Figs. S3-4, scCube outperformed other SRT and single-cell simulators over most of the seven benchmark datasets from different tissues, with the highest average PCCGEV and PCCGBM values as well as the lowest average MAEGEV values (except for the human DLPFC 10X Visium and zebrafish embryo Stereo-seq datasets) between the real spatial expression patterns of all genes and the corresponding simulated spatial expression patterns. Consistently, scCube also exhibited excellent simulation performance over all tissue slices of the human DLPFC 10X Visium and mouse hypothalamus MERFISH datasets (Supplementary Fig. S5). We further demonstrated the spatial expression patterns of several representative marker genes in the real and simulated data. As illustrated in Fig. 2c and Supplementary Figs. S6–12, scCube accurately preserved the spatial expression patterns of these marker genes across different datasets. In contrast, although the two other SRT simulators, SRTsim and scDesign3, also achieved this relatively successfully, confirming the superiority of SRT simulators in simulating spatially resolved transcriptomics compared with single-cell simulation methods, scCube was superior to both of them with the highest PCCGEV and PCCGBM values.Fig. 2 Superior performance of scCube over other simulators.
+
+a, b Performance comparison of scCube with other SRT and single-cell simulators across seven benchmark datasets. The simulation results for all genes of scDesign3 are not provided in the Stereo-seq data, 10X Visium data, and ST data due to speed constraints of the training step. Data are presented as boxplots (minima, 25th percentile, median, 75th percentile, and maxima). The number of data points are 7 for scCube, SRTsim, ZINB-WaVE, SymSim, scDesign2, Splat, Splat Simple, and Kersplat, and 3 for scDesign3. c The spatial expression patterns of representative marker genes in the real data and the simulated data generated by scCube across seven benchmark datasets. d Two tissue slices with different spatial distributions of cell types from the mouse hypothalamus dataset, where the “Bregma +0.06” slice is near the anterior position and the “Bregma −0.29” slice is near the posterior position. e The spatial expression patterns of Gad1 (the marker of inhibitory) in the real data (Bregma: −0.29) and the simulated data generated by scCube and SRTsim. Source data are provided as a Source Data file.
+
+We next evaluated the overfitting issues of scCube and other two SRT simulators in three scenarios (Supplementary Data 3). In the first two scenarios, we constructed the training and test data from single datasets using two different data splitting strategies (countsplit48 and random splitting), respectively; while in the third scenario, we considered a more general case where the training and test data come from different tissue slices of the same sample or experiment, rather than just being split from the same datasets. Each simulator was trained on the training data, and the simulated data generated by different simulators was subsequently compared with the test data for overfitting evaluation. Although all three SRT simulators accurately simulated the spatial expression patterns of genes in the test data in the first two scenarios and didn’t have significant overfitting issues (Supplementary Fig. S13–28), scCube exhibited a unique strength in the third scenario, i.e., its scalability to simulate SRT data with a large discrepancy in tissue shape or cell type spatial distribution from the spatial reference (Supplementary Fig. S29). To be specific, we selected two tissue slices with different spatial distributions of cell types from the mouse hypothalamus MERFISH dataset as an example, where the “Bregma +0.06” and “Bregma −0.29” slices are near the anterior and posterior positions, respectively (Fig. 2d). For both scCube and SRTsim, we simulated the gene expression over the coordinates of the “Bregma −0.29” slice using the “Bregma +0.06” data as the spatial reference. As illustrated in Fig. 2e and Supplementary Fig. S30, scCube can still accurately simulate the spatial expression patterns of marker genes on the “Bregma -0.29” slice when using the different tissue slice (the “Bregma +0.06”) as the spatial reference. In contrast, SRTsim suffered from significant overfitting and failed to preserve these spatial expression patterns well. One possible reason is that for each location on the “Bregma -0.29” slice, SRTsim assigned the simulated expression counts based on the expression counts of its k nearest neighboring locations on the “Bregma +0.06” slice. Since the spatial distribution of cell types between these two slices is quite different, this strategy may lead to the spatial expression patterns of marker genes on the simulated data being heavily influenced by the spatial reference. Similar results were reproduced on the human DLPFC 10X Visium dataset. We used the “Slice 151507” from donor 1 as the spatial reference and applied scCube and SRTsim to simulate the gene expression over the coordinates of the “Slice 151676” from donor 3 respectively (Supplementary Fig. S31a), and the results showed that SRTsim still failed to exactly preserve these spatial expression patterns due to the large discrepancy in tissue shape between slices (Supplementary Fig. S31b). All these results further demonstrated the superiority and general applicability of scCube in simulating the SRT data without significant overfitting issues.
+
+In addition, we further evaluated the biologically interpretable of the scCube-simulated data by comparing the benchmark results of three types of SRT computational methods (spot deconvolution, gene imputation, and spatial domain identification) on the real data and scCube-simulated data. As shown in Supplementary Fig. S32, the deconvolution result of each spot deconvolution method was highly consistent when using the real or scCube-simulated data, as were the benchmark results of all methods. Conversely, this consistency was not observed when using random-simulated data (Supplementary Fig. S33). Similar results were reproduced on gene imputation and spatial domain identification computational methods (Supplementary Figs. S34 and 35), indicating that the simulated SRT data generated by scCube preserves the biological characteristics of the real data.
+
+We also surveyed the effect of utilizing different types of cell (or spot) annotations in the gene expression simulation step on the reference-based simulation performance of scCube. As shown in Supplementary Fig. S36, we selected four human breast cancer 10X Visium datasets and performed the reference-based simulation of scCube using the pathological annotation provided by the authors, three unsupervised clustering results with different clustering resolutions (implemented by Seurat29, resolution = 0.3, 0.5, and 0.7), and one spatial domain clustering result (implemented by BayesSpace49) as the spot annotations, respectively. As shown in Supplementary Figs. S37–39, scCube accurately simulated the spatial expression patterns of genes in all four SRT datasets, whether using the pathological labels or the clustering results as the spot annotations, and the average PCC values between the real spatial expression patterns of all genes and the corresponding simulated spatial expression patterns are both greater than 0.9 (Supplementary Fig. S40). What’s more, the cell type composition with each spot of the scCube-simulated data generated with different spot annotations was highly consistent with the real data, with the average PCC values greater than 0.98 (Supplementary Fig. S41). These results suggest that scCube is robust to the choice of cell (or spot) annotations in the gene expression simulation step.
+
+Finally, we systematically provided the execution time of scCube when achieving relatively stable simulation performance across seven benchmark datasets of different sizes (Supplementary Fig. S42). Notably, as shown in Supplementary Fig. S43, the execution time of scCube mainly concentrated in the training step. Therefore, if there are trained models provided by scCube matching the target SRT data, users can directly download the corresponding models to generate the simulated data within a very short period of time without additional training steps.
+
+Simulating multiple variability in SRT data by the reference-free strategy with scCube
+
+In this section, we illustrated the high flexibility of scCube in simulating multiple variability in SRT data with the reference-free strategy. In brief, we further subdivided the variability in SRT data into two types: gene expression variability and spatial pattern variability. For the former, scCube can select a user-specified number or type of genes based on the simulated gene expression profiles to simulate the variability of targeted genes in imaging-based SRT data. For the latter, scCube can generate simulated spatial patterns of cell types varying in number, type, and dimension with the default spatial autocorrelation function, and further simulate the variability of spatial patterns within cell types (such as cell subtypes), as well as the variability of resolution and spot arrangement in spot-based SRT data. We demonstrated it in detail by the following three examples.
+
+Simulation of the variability of spatial patterns of cell types
+
+A basic function of scCube is its ability to generate the spatial distributions of cell types with diverse patterns. In scCube, there are two vital parameters, λ and δ, which control the fuzzy degree and the continuity of generated spatial patterns, respectively. The value of λ ranges from 0 to 1, and larger values will tend to form clearer spatial patterns; the value of δ should be greater than 0, and larger values will tend to form spatial patterns with greater connectivity (Fig. 3a). Users thus can apply scCube to generate specific patterns by setting and combining different λ and δ values for simulating the spatial architecture of cells in different tissues.Fig. 3 scCube generates spatial patterns with diverse types and numbers.
+
+a The spatial patterns with different fuzzy degree and continuity generated by scCube. b Illustration of simulating specified number of spatial patterns with scCube. Three cell types (astrocyte, brain pericyte, and neuron) are set as “with spatial patterns” while other four cell types are set as “without spatial patterns” and follow uniform distributions. c Moran’s I values for the spatial distribution of different cell types. Data are presented as the mean values ± standard deviation. The number of data points are 3 and 4 for cell types with and without spatial patterns, respectively. d The spatial distributions of brain pericyte (with spatial patterns) and oligodendrocyte (without spatial patterns) and the spatial expression patterns for top 50 marker genes of them. e Two simulated SRT datasets generated by scCube, in which astrocytes were manually specified to be present (Dataset 1, top) and absent (Dataset 2, bottom) spatial patterns. f Boxplots of Moran’s I values for spatial expression patterns of marker genes of astrocytes in two simulated datasets. Source data are provided as a Source Data file.
+
+Another function of scCube is its ability to set the number of spatial patterns and simulate spatial patterns for only a specific set of cell types (Fig. 3c). This feature of scCube allows users to better simulate different situations in real tissues, such as spatial domains for specific cell types or the uniform colocalization distribution of several cell types50. In the example, we applied scCube to generate spatial patterns for only three cell types (astrocyte, brain pericyte, and neuron) (Fig. 3b). As expected, the Moran’s I values for the spatial distribution of these three cell types were much higher than those of the remaining cell types (Fig. 3c), supporting the accuracy of scCube in spatial pattern simulation. We further examined the spatial distribution of each cell type as well as the spatial expression pattern of its top 50 marker genes, as illustrated in Fig. 3d and Supplementary Fig. S44a, b, astrocyte, brain pericyte, and neuron showed distinct spatial patterns, while the other four cell types without specific spatial patterns followed similar uniform distributions. Unsurprisingly, the top 50 marker genes of astrocyte, brain pericyte, and neuron also had significantly higher Moran’s I values, which was consistent with the results of the spatial distribution of cell types (Supplementary Fig. S44c). Moreover, users can apply this function to specify whether a specific cell type has the spatial distribution pattern, which in turn achieves the manual specification of the types of spatial expression patterns for the marker genes of this cell type. As shown in Fig. 3e, we used scCube to generate two simulated SRT datasets, in which astrocytes were manually specified to be present and absent spatial patterns, respectively. Compared with Dataset 2, the marker genes of astrocyte in Dataset 1 showed obvious spatial expression patterns and had significantly higher Moran’s I values (Fig. 3f and Supplementary Fig. S45).
+
+The additional function of scCube is its ability to simulate SRT data of three-dimensional tissues (Fig. 4a, b). Recently, computational methods for three-dimensional structures of tissue construction by integrating multi-slices are gradually emerging, such as PASTE51, PRECAST52, and STalign53. However, real three-dimensional SRT datasets for benchmarking these methods are still scarce. A widely used trade-off is to utilize the two-dimensional SRT data from a series of continuous slices, and then compare the alignment results for the same domain between them. Although this strategy is applied in the performance evaluation of most methods, it may introduce too much noise since slices are not exactly adjacent to each other. In contrast, the simulated three-dimensional SRT data generated by scCube is unbiased, and thus suitable enough as the ground truth in benchmarking datasets. Furthermore, scCube provides a “split” function that can split the three-dimensional SRT data into a user-defined number of two-dimensional SRT data along any axis of coordinates of the simulated data (Fig. 4c). With this function, users can investigate the spatial variability along a series of adjacent two-dimensional slices, such as the spatial distribution of specific cell types (endothelial cell in Fig. 4c) and spatial expression pattern of its marker genes. In addition, by jointly utilizing simulated three-dimensional SRT data and a series of derived two-dimensional SRT data, users thus can evaluate the computational methods for three-dimensional tissues reconstruction more accurately.Fig. 4 scCube generates spatial patterns of three-dimensional tissues.
+
+a, b The three-dimensional spatial pattern generated by scCube (a) and the spatial distribution of each cell type (b). c A series of two-dimensional spatial patterns of slices split from the three-dimensional spatial pattern along the z axis of coordinates. The overview of spatial patterns (top), the spatial distribution of endothelial cell (middle), and the spatial expression pattern of Pecam1 (bottom) are showed respectively. Source data are provided as a Source Data file.
+
+Simulation of the variability of spatial patterns within cell types
+
+scCube also provides a separate function to consider the heterogeneity within cell types and generate the spatial patterns of cell subtypes flexibly. As shown in Fig. 5a, b, we first applied scCube to generate the spatial patterns for each cell type from a scRNA-seq dataset, in which macrophages contain two subtypes. Subsequently, for these two macrophage subtypes, we simulated two different types of spatial patterns to disregard or consider the heterogeneity within cell types (Fig. 5c). Compared with the former, where the spatial distribution of each subtype followed a random distribution, the latter further simulated a specific spatial pattern for each subtype to better account for intra-cell-type gene expression variation in space (Fig. 5d).Fig. 5 Using scCube to simulate the variability of spatial patterns within cell types and the variability of resolution and spot arrangement in spot-based SRT data.
+
+a The simulated gene expression data of a scRNA-seq dataset generated by scCube, in which macrophages contain two subtypes. b The simulated spatial pattern of cell types generated by scCube. c The spatial distributions of macrophage subtypes in the settings of “cell subtypes without spatial patterns” (left) and “cell subtypes with spatial patterns” (right). d The spatial expression patterns of marker genes for macrophage subtypes in the settings of “cell subtypes without spatial patterns” (top) and “cell subtypes with spatial patterns” (bottom). e The simulated spatial patterns with diverse resolutions generated by scCube (top) and frequency histograms of the cell number per spot (bottom). Source data are provided as a Source Data file.
+
+Simulation of the variability of resolution and spot arrangement
+
+scCube further provides the optional parameters for setting the number of cells per spot (n) and the arrangement and neighborhood structure of all spots, which makes it possible to simulate spot-based SRT data with different resolutions and even different technology platforms. As shown in Fig. 5e, the resolution of the simulated spatial patterns decreased with the value of the parameter n gradually increased. In contrast, the average number of cells per spot increased and approximated the setting value of n. We next demonstrated the ability of scCube in simulating spot-based SRT data with different spot arrangements corresponding to the three current mainstream technology platforms, including Slide-seq6, 10X Visium, and ST5. As shown in Supplementary Fig. S46a, the simulated Slide-seq data followed a random neighborhood structure of spots, while the simulated 10X Visium and ST data were opposite, having regular hexagonal and square neighborhood structures of spots, respectively. Additionally, the average numbers of cells per spot in simulated Slide-seq, 10X Visium, and ST data was 2.34, 10.5, and 34.01, respectively, which is consistent with the real data. Specifically, we examined the spatial distribution of astrocyte and the spatial expression pattern of its marker gene Slc6a11 and found that they were consistent well with each other in all three types of simulated data, further suggesting the robustness of scCube in simulation (Supplementary Fig. S46b).
+
+Simulating biologically interpretable spatial patterns by the reference-free strategy with scCube
+
+In the reference-free spatial pattern simulation, scCube further considers generating more interpretable spatial patterns in a customized manner. Users can first simulate a series of biologically interpretable spatial basis patterns, including unstructured mixed or clustered cell populations, cell rings encircling tissue structures, and some external structures such as vessels54, and then flexibly generate highly customized complex spatial patterns by combining different types as well as numbers of these basis patterns (Fig. 6a, b).Fig. 6 Using scCube to flexibly simulate the biologically interpretable spatial patterns.
+
+a, b The biologically interpretable spatial basis (a) and complex (b) patterns simulated by scCube. c The real and scCube-simulate tumor-immune microenvironments of mixed, compartmentalized, and cold subtypes of TNBC. d, e The spatial expression patterns of immune (d) and tumor (e) marker genes in the scCube-simulated SRT data.
+
+We applied scCube to the simulation of the tumor-immune microenvironment of 3 triple negative breast cancer (TNBC) patients, which corresponded to three archetypical subtypes of tumor-immune interactions: cold, mixed, and compartmentalized, respectively as a detailed example (Fig. 6c). It has been reported that the cold subtype shows the low immune infiltration, the mixed subtype shows the high mixability between tumor and immune cells, and the compartmentalized subtype shows a series of regions comprised predominantly of either immune or tumor cells55. As shown in Fig. 6c, the spatial patterns simulated by scCube were very similar to the corresponding tumor-immune microenvironments. Furthermore, unlike spaSim54, which can only generate spatial pattern images, scCube also combines this customized reference-free spatial pattern simulation step with the gene expression simulation step to generate the corresponding gene expression profiles that match the simulated spatial patterns, which more comprehensively simulates the real SRT data (Fig. 6d, e).
+
+Using scCube to benchmark spot deconvolution methods
+
+We began by demonstrating the utility of scCube in benchmarking the spot deconvolution methods. To this end, we first generated the simulated SRT data with single-cell resolution from a mouse brain scRNA-seq dataset, and then simulated six spot-based SRT datasets with different resolutions by merging the different numbers of cells into specific spots (Fig. 7a). The cell type composition of each spot in these six simulated datasets was known and can be used as the ground truth when evaluating the deconvolution performances of different methods. A total of nine spot deconvolution methods were benchmarked, including Cell2location19, DestVI21, DSTG22, RCTD25, Seurat29, spatialDWLS24, SPOTlight23, Stereoscope26, and Tangram27. The accuracy of the cell type composition of each spot was evaluated. We first explored the deconvolution performance of each method on the simulated SRT data with the high resolution (n = 5), and as shown in Fig. 7b, Cell2location, DestVI, and spatialDWLS, had the top 1, 2, and 3 rankings average Pearson correlation coefficient (PCC) and Spearman rank-order correlation coefficient (SRCC) values (0.930/0.913, 0.900/0.870, and 0.889/0.869, respectively), followed by RCTD (0.814/0.771), Seurat (0.809/0.778), Tangram (0.750/0.652), SPOTlight (0.734/0.597), Stereoscope (0.574/0.523), and DSTG (0.533/0.431). Consistently, the average root mean squared error (RMSE) and Jensen-Shannon divergence (JS) values of Cell2location, DestVI, and spatialDWLS were 0.063/0.166, 0.095/0.264, and 0.115/0.194, respectively, also lower than those of the other methods.Fig. 7 Using scCube to benchmark spot deconvolution methods.
+
+a Illustration of simulating SRT data with diverse resolutions by scCube. A total of six simulated SRT datasets with different resolutions are generated as the benchmarking datasets. b Boxplots of PCC, SRCC, RMSE, and JS values of the nine spot deconvolution methods for the high-resolution (n = 5) simulated SRT dataset. Data are presented as boxplots (minima, 25th percentile, median, 75th percentile, and maxima). The number of data points are 2013 for each method. c The average PCC, SRCC, RMSE, and JS values of the nine spot deconvolution methods for all six simulated SRT datasets. d Bar plots of the differences between the maximum and minimum of the average PCC (left) and SRCC (right) values of the nine spot deconvolution methods across all six simulated SRT datasets. e Boxplots of average AS values of the nine spot deconvolution methods for all six simulated SRT datasets. Data are presented as boxplots (minima, 25th percentile, median, 75th percentile, and maxima). The number of data points are 6 for each method. Source data are provided as a Source Data file.
+
+We further examined the effect of the resolution on the performance of spot deconvolution, and benchmarked these methods on a series of simulated datasets with decreasing resolutions (n = 10, 20, 30, 50, and 100) (Fig. 7c and Supplementary Fig. S47). Interestingly, we found that RCTD, Tangram, and Cell2location were relatively robust to the resolution of spot-based SRT data, the differences between the maximum and minimum of the average PCC and SRCC values were 0.034/0.025, 0.047/0.039, and 0.070/0.095 (Fig. 7c, d). In contrast, other methods showed a preference for specific resolutions. As the resolution decreased, the performance of DestVI, Seurat, and Spotlight degraded, while spatialDWLS performed the opposite (Fig. 7c, d). Additionally, Stereoscope achieved higher average PCC/SRCC values as well as lower average RMSE/JS values when n = 30 and 50 (Fig. 7c). We also used the accuracy score (AS) proposed by Li et al.56 to evaluate the performance of these methods on the six simulated datasets comprehensively, and found that Cell2location outperformed other methods with the highest average AS value (0.954), followed by spatialDWLS (0.778), RCTD (0.718), DestVI (0.676), Stereoscope (0.565), Tangram (0.472), Seurat (0.440), SPOTlight (0.255), and DSTG (0.144) (Fig. 7e).
+
+Using scCube to benchmark gene imputation methods
+
+We next demonstrated the utility of scCube in benchmarking the gene imputation methods. In this application, we focused on examining the effect of the quality of detected transcriptomes on the performance of gene imputation. Specifically, we first generated the simulated SRT data with whole transcriptomes from a mouse brain scRNA-seq dataset, and then simulated three imaging-based SRT datasets with different types of genes by selecting 200 random genes (Dataset 1), 200 highly variable genes (Dataset 2), and 200 cell type marker genes (Dataset 3), respectively (Fig. 8a). The gene expression value of each gene in these three simulated datasets was known and can be used as the ground truth when evaluating the imputation performances of different methods. We benchmarked eight gene imputation methods, including SpaGE28, Tangram27, stPlus31, gimVI57, Seurat29, SpaOTsc58, novoSpaRc59, and LIGER30 by calculating the PCC, SRCC, RMSE, and JS values between the expression vector of a gene in the ground truth and the expression vector for the same gene in the imputed results predicted by different methods. As illustrated in Fig. 8b, all methods performed well on Dataset 2 and 3 but poorly on Dataset 1. This is expected and reasonable, as a crucial step in all gene imputation methods is the integration of imaging-based SRT data and scRNA-seq reference using the shared genes between these two types of data. Compared with randomly selected genes, highly variable genes and cell type marker genes cover more information and contain less noise, making it possible for these methods to perform better in gene imputation.Fig. 8 Using scCube to benchmark gene imputation methods.
+
+a Illustration of simulating SRT data with diverse types of targeted genes by scCube. A total of three simulated SRT datasets with different types of targeted genes are generated as the benchmarking datasets. b The PCC, SRCC, RMSE, and JS values of the eight gene imputation methods for all three simulated SRT datasets. Data are presented as mean values ± 95% confidence intervals. The number of data points are 200 for each type of targeted genes of each method. c Boxplots of AS values of the eight gene imputation methods for all three simulated SRT datasets. Data are presented as boxplots (minima, 25th percentile, median, 75th percentile, and maxima). The number of data points are 3 for each type of targeted genes of each method. Source data are provided as a Source Data file.
+
+We further compared the performance of all methods on three simulated datasets, and found that SpaGE, stPlus, and Tangram performed better than other methods, with the average PCC and SRCC values ranking in the top 4 on all datasets (Supplementary Fig. S48). The performance of SpaOTsc was influenced by the Datasets, with the top 2 on Dataset 2 but the bottom 3 ranking on Dataset 1 (Supplementary Fig. S48). Moreover, the results of AS values were similar to those of PCC and SRCC values, where Tangram, SpaGE, and stPlus achieved the top 3 rankings on Dataset 1 (1, 0.875, and 0.75, respectively); SpaGE, SpaOTsc, and stPlus achieved the top 3 rankings on Dataset 2 (1, 0.781, and 0.719, respectively); SpaGE, stPlus, and Tangram achieved the top 3 rankings on Dataset 3 (1, 0.844, and 0.781, respectively) (Fig. 8c).
+
+Using scCube to benchmark resolution enhancement methods
+
+In the last application, we demonstrated the utility of scCube in benchmarking two existing resolution enhancement methods, BayesSpace49 and CARD60, both of which constructing the high-resolution spatial maps of gene expression for spot-based SRT data. Specifically, we utilized scCube to simulate two pairs of spot-based SRT data with low (121 spots) and high (1089 spots) resolution, where each spot in the low-resolution data was generated by merging nine nearby spots in the high-resolution data (Fig. 9a). The cell type label of each cell in the simulated single-cell resolution SRT data and the gene expression profile of each spot in the simulated high-resolution spot-based SRT data were known and can be used as the ground truth for spot deconvolution and resolution enhancement, respectively. We first evaluated the spot deconvolution performance of CARD on both low- and high-resolution SRT data. As shown in Fig. 9b, CARD performed better on the low-resolution than on the high-resolution SRT data, the average PCC were 0.996 and 0.735, respectively. We further examined the predicted result of each spot of the high-resolution ST data, and found that CARD failed to accurately deconvolute the cell type compositions of the spots in the region located between two different cell type domains (Fig. 9c). The poor deconvolution performance on spots located at the boundary may be due to the simplistic assumption of CARD. The key idea of CARD to impute and construct high-resolution spatial maps for cell type composition and gene expression is modeling the spatial correlation structure as a multivariate normal distribution. This strategy leads to the cell type composition on the new locations being effectively represented as a weighted summation of the non-negative cell-type proportions on the original locations60, forming a “transition” state at the boundary. However, in some cases, the cell type composition of spots at the boundary of two large cell type domains often differs greatly from the composition of spots within the two domains because of the presence of specific new cell types (such as astrocyte in the simulated data), which is contrary to the assumption of CARD.Fig. 9 Using scCube to benchmark resolution enhancement methods.
+
+a Illustration of simulating two pairs of spot-based SRT data with low (121 spots) and high (1089 spots) resolution by scCube. b The deconvolution performance of CARD on the low- and high-resolution SRT data. Data are presented as boxplots (minima, 25th percentile, median, 75th percentile, and maxima). The number of data points are 121 and 1089 for the low- and high-resolution SRT data, respectively. c The PCC values of CARD on each spot for the high-resolution SRT data. d The high-resolution spatial maps of Pecam1 constructed by CARD and BayesSpace. e Boxplots of PCC values of CARD and BayesSpace for top 50 marker genes of each cell type. Data are presented as boxplots (minima, 25th percentile, median, 75th percentile, and maxima). The number of data points are 50 for each cell type of each method. Source data are provided as a Source Data file.
+
+We also compared the accuracy of the high-resolution spatial maps of gene expression constructed by CARD and BayesSpace. Similar to the predicted results of cell type composition, the high-resolution spatial maps of gene expression constructed by CARD also presented an obvious “diffusion” trend, which were inconsistent with the ground truth. In contrast, the maps constructed by BayesSpace were more accurate (Fig. 9d and Supplementary Fig. S49). Additionally, as one might expect, both CARD and BayesSpace were better at predicting the high-resolution spatial maps of marker gene expression for cell types with large populations than for rare cell types. As shown in Fig. 9e, both CARD and BayesSpace achieved the highest average PCC values in predicting the high-resolution spatial maps of top 50 marker genes of endothelial cell (0.772 and 0.793, respectively), followed by oligodendrocyte (0.694 and 0.736, respectively), neuron (0.670 and 0.651, respectively), astrocyte (0.586 and 0.589, respectively), brain pericyte (0.523 and 0.547, respectively), OPC (0.501 and 0.480, respectively), and Bergmann glial cell (0.473 and 0.438 respectively).
+
+Discussion
+
+In this study, we have presented a spatially resolved transcriptomics simulator, scCube, for simulating multiple spatial variability in spatial resolved transcriptomics and generating unbiased simulated SRT data. We have demonstrated the capability of scCube to preserve the spatial expression patterns of genes in real SRT data, and illustrated the utility of scCube in benchmarking diverse SRT-analysis computational methods, including spot deconvolution, gene imputation, and resolution enhancement.
+
+scCube is designed to consist of two steps for SRT simulation: gene expression simulation and spatial pattern simulation. The former step is mainly based on the VAE model, which has become a popular tool for single-cell omics data modeling20,61–63. We have also demonstrated that the VAE model can accurately simulate various characteristics of the original data, such as the sparsity of scRNA-seq or SRT data (Supplementary Figs. S50–52). Meanwhile, we have provided about 300 trained models of various tissues, which are coupled with the scCube Python package, enabling users to simulate different spatial architectures of cells in real tissues more conveniently and quickly without the additional training steps. One potential limitation of scCube is that the ground truth provided by its simulated spot-based SRT data is restricted to the cell population level since it assigns each spot a cell population first when generating synthetic data. This may not be suitable for direct use in benchmarking studies of some SRT-analysis methods that operate at a finer resolution. However, benefiting from the robustness of scCube in cell population annotations selection (Supplementary Figs. S36–41), users can flexibly choose an appropriate granularity of cell population annotation during simulation. In addition, since the gene expression profiles generated by scCube remain at the spot level, users can also refine the annotation granularity of each spot through relevant downstream analysis (such as spot deconvolution).
+
+In the spatial pattern simulation step, scCube provides two strategies: reference-based and reference-free. The reference-based strategy uses the SRT reference and aims to simulate the spatial expression pattern of genes across positions. The benchmark results across the real SRT data from diverse tissues generated by different sequencing platforms showed the superiority and broad scalability of scCube over other SRT or single-cell simulators. Moreover, we highlight the unique strength of scCube compared with SRTsim36, a current state-of-the-art SRT simulator. Specifically, scCube first constructs a mapping between the cells (or spots) in simulated data and the positions in the spatial reference by solving an optimal transport problem64 based on the gene expression, and then maps the cells (or spots) to positions with the maximum likelihood of spatial origin. This strategy effectively avoids the interference of external noise, such as tissue slice shape, cell type proportion, and distribution, etc., and thus can robustly simulate the spatial expression pattern of genes whether in the same or across different slices. In contrast, SRTsim relies heavily on the coordinate system (i.e., slice shape) of the spatial reference in simulation, which can indeed preserve the spatial expression pattern of genes when the shape of targeted simulation data is the same or sufficiently similar to that of the spatial reference. However, the accuracy of simulation drops dramatically when simulating data with a large discrepancy from the spatial reference (Fig. 2d, e and Supplementary Figs. S29–31).
+
+For the reference-free simulations, scCube aims to generate random or customized spatial patterns for cell populations and combine them with the simulated gene expression profiles to de novo construct complete benchmarking datasets from scRNA-seq data. Compared with simulations starting from real SRT data such as implemented in SRTsim, this strategy can generate simulated SRT data that feeds both single-cell resolution and whole transcriptomes, which is suitable as the ground truth for evaluating the performance of those integration methods, such as spot deconvolution, gene imputation, and spatial reconstruction59,65,66. In this paper, we have demonstrated in detail the flexibility of the reference-free spatial pattern simulation of scCube by setting specified parameter values: including the simulations of multiple variability in SRT data based on a random manner, as well as the customized generations of more biologically interpretable spatial patterns.
+
+Additionally, a desirable feature of scCube is its ability to simulate SRT data in a user-specified manner that meets diverse benchmarking purposes while providing the ground truth that is not present in real data. Specifically, scCube allows varying one specific variable when generating the SRT data, such as the number and type of genes or the number and area of spatial patterns (Supplementary Figs. S53 and 54), which allows users to investigate the impact of certain variables on the performance of different computational methods flexibly. For instance, we have utilized scCube to generate a series of simulated spot-based SRT data with different resolutions but the same other spatial variability (such as the number, proportion and spatial distribution of cell types) and benchmarked nine widely used spot deconvolution methods. Interestingly, we found that except for RCTD, Tangram, and Cell2location, the other six methods exhibited an obvious preference for specific resolutions, which was not discussed in detail in the previous studies19,21–24,56,67,68. Similarly, in the other two applications, we also further discussed the spatial variability that may affect the performance of methods with the simulated data generated by scCube. Moreover, expect for the SRT-analysis methods demonstrated in the three applications, scCube should be applicable to benchmark other computational tools, such as spatial domain identification and spatial cell-cell interaction inference methods. We therefore applied scCube to benchmark the above two methods, and demonstrated that the spatial information can help to improve the accuracy of spatial domain identification and spatially proximal LR pairs inference (Supplementary Figs. S35 and S55). In summary, these results suggested that scCube can provide scalable, reproducible, and realistic simulations, which helps users to evaluate diverse methods more lightly and accurately, and better facilitates the development of spatial transcriptomic data analysis methods.
+
+Methods
+
+Data collection and processing
+
+Human dorsolateral prefrontal cortex (DLPFC) SRT dataset
+
+The human DLPFC 10X Visium dataset38 was downloaded from http://spatial.libd.org/spatialLIBD/, containing 12 tissue slices from 3 donors.
+
+Mouse hypothalamus SRT dataset
+
+The mouse hypothalamus MERFISH dataset69 was downloaded from 10.5061/dryad.8t8s248. We filtered 5 “blank” barcodes as well as the Fos gene, whose expression value in all cells was ‘NA’. A total of 12 tissue slices from the naive female animal (Animal_ID: 1) were utilized.
+
+Mouse neocortex V1 SRT dataset
+
+The mouse neocortex V1 STARmap dataset3 was downloaded from https://zenodo.org/record/7830764#.ZDpObi-1HUI, containing 2 tissue slices from one donor.
+
+Human HER2 breast cancer SRT dataset
+
+The human HER2 breast cancer ST dataset70 was downloaded from https://zenodo.org/record/5511763#.Y6kMduxBzUI, containing 36 tissue slices from 8 patients.
+
+Human skin squamous cell carcinoma (SCC) SRT dataset
+
+The human SCC ST dataset71 was downloaded from GEO (GSE144240), containing 8 tissue slices from 4 patients.
+
+Human breast cancer SRT dataset
+
+The human breast cancer 10X Xenium dataset72 was downloaded from https://www.10xgenomics.com/products/xenium-in-situ/preview-dataset-human-breast, containing 1 tissue slice from one patient.
+
+Zebrafish embryo SRT dataset
+
+The zebrafish embryo Stereo-seq dataset73 was downloaded from Spatial Omics DataBase (SODB)74 (https://gene.ai.tencent.com/SpatialOmics/dataset?datasetID=83). The tissue slice from the 24 h post-fertilization (hpf) embryo was utilized.
+
+Human breast cancer SRT and scRNA-seq datasets
+
+The human breast cancer 10X Visium dataset and paired scRNA-seq dataset75 were downloaded from 10.5281/zenodo.4739739. A total of 4 tissue slices from 4 patients (CID44971, CID4535, CID4465, and CID4290) were utilized.
+
+Tabula muris dataset
+
+The Tabula Muris scRNA-seq dataset40 was downloaded from https://figshare.com/projects/Tabula_Muris_Transcriptomic_characterization_of_20_organs_and_tissues_from_Mus_musculus_at_single_cell_resolution/27733, containing 96,953 cells from 31 tissues.
+
+Tabula sapiens dataset
+
+The Tabula Sapiens scRNA-seq dataset41 was downloaded from https://figshare.com/projects/Tabula_Sapiens/100973, containing 952,796 cells from 27 tissues.
+
+Mouse cell atlas (MCA) dataset
+
+The MCA scRNA-seq dataset42 was downloaded from https://figshare.com/articles/MCA_DGE_Data/5435866, containing 333,778 cells from 83 tissues.
+
+Human cell landscape (HCL) dataset
+
+The HCL scRNA-seq dataset43 was downloaded from https://figshare.com/articles/HCL_DGE_Data/7235471, containing 575,745 cells from 102 tissues.
+
+Human triple negative breast cancer (TNBC) image sets
+
+The human TNBC Multiplexed Imaging (MIBI) channel images55 were downloaded from https://mibi-share.ionpath.com. A total of 3 images from 3 patients (Patient 1, Patient 5, and Patient 24) were utilized.
+
+All the above data except the MIBI images were pre-normalized (implemented in the Python package SCANPY76) prior to being input into scCube.
+
+Design of scCube
+
+The scCube model consists of two components, 1) gene expression simulation, and 2) spatial pattern simulation. scCube first simulates the gene expression profiles of different cell (or spot) populations (for example, the cell types, spatial domains, pathological regions, etc.) in gene expression simulation step. Notably, for each population, scCube can generate gene expression profiles with a customized number of cells (or spots) based on user settings. Subsequently, scCube performs either reference-based or reference-free strategies to generate spatial patterns for cell (or spot) populations in spatial pattern simulation step, which will be described in detail later.
+
+Gene expression simulation
+
+scCube applies a variational autoencoder (VAE) model39 consisting of an encoder and a decoder, to simulate the gene expression profiles of single cells of specific populations. Given the input scRNA-seq (or SRT) data X=x(i)i=1N, where x={x1,x2…,xn} represents a single cell (or spot) and its component xn represents the gene expression value of gene n, the encoder utilizes the conditional distribution qϕz∣x to generate the latent representation z from the input data x, while the decoder leverages pθx∣z to restore x from the latent variable z. Here, ϕ and θ symbolize the parameters symbolize the encoder and decoder, respectively.
+
+In practice, directly computing the posterior probability pθz∣x might be challenging. To address this, we utilize the concept of variational inference, introducing an approximate distribution qϕz∣x as an approximation to the true posterior probability. Specifically, we aim to maximize the Evidence Lower Bound (ELBO), which can be seen as minimizing the KL divergence between the variational approximate posterior qϕz∣x and the true posterior pθz∣x:1 DKL(qϕ(z∣x)∣∣pθz∣x)=∑zqϕz∣xlogqϕz∣xpθz∣x=∑zqϕz∣xlogqϕz∣xpθxpθx,z=∑zqϕz∣xlogpθx+logqϕz∣xpθx,z=logpθx+∑zqϕz∣xlogqϕz∣xpθx∣zpθz=logpθx+Eqϕz∣xlogqϕz∣xpθz−logpθx∣z=logpθx+DKLqϕz∣x∣∣pθz−Eqϕz∣xlogpθx∣z
+
+By rearranging some terms, we obtain:2 logpθx−DKLqϕz∣x∣∣pθz∣x=Eqϕz∣xlogpθx∣z−DKLqϕz∣x∣∣pθz
+
+On the left-hand side of Eq. (2), we have the log-likelihood of the data logpθx and the KL divergence DKLqϕz∣x∣∣pθz∣x between the approximate and the true posterior. For VAE model, we want to maximize logpθx and minimize DKLqϕz∣x∣∣pθz∣x, which is equivalent to maximizing the right-hand side of the equation, i.e.:3 Eqϕz∣xlogpθx∣z−DKLqϕz∣x∣∣pθz
+
+Equation (3) is also known as the ELBO. To maximize the Eq. (3), we assume pθz takes on a multivariate Gaussian pθz=Nz;0,I and the true (but computationally intractable) posterior pθz∣x is approximated by a Gaussian form with a diagonal covariance. This assumption is reasonable as single cells from distinct cell types or domains have unique gene expression profiles that can be characterized by independent latent clustering spaces20. And in this case, we can let the variational approximate posterior qϕz∣x be a multivariate Gaussian with a diagonal covariance structure:4 logqϕz∣xi=logNz;μi,σ2iI
+
+Where the mean and s.d. of the approximate posterior, μi and σ(i), can be implemented with the encoding MLP network. The KL term in Eq. (3) can be integrated analytically since both pθz and qϕz∣x are multivariate Gaussian distributions, while the first term in Eq. (3), also termed as expected reconstruction error, requires estimation by sampling. To make sure the gradient descent algorithm can be used to train the model, we employ the reparameterization trick proposed by Kingma and Welling39 to make the optimization function differentiable. Specifically, we don’t directly sample z from the posterior but first sample ϵ from the standard normal distribution and then compute z=μ+σ⊙ϵ. Thus, the gradient can be backward propagated for updating the model parameters.
+
+Both the encoder and decoder apply a four-layer perceptron in our model, where each layer is followed by a RELU activation except the last layer of the encoder. For the encoder, the number of neurons in each layer is 2048, 1024, 512 and 256 respectively. While for the decoder, the number of neutrons in each layer is 512, 1024, 2048 and k, respectively, where k represents the number of genes in the dataset. The dimensionality of the latent space learned by the VAE is 128.
+
+Spatial pattern simulation
+
+Reference-based spatial pattern simulation
+
+In the reference-based simulation, scCube focuses on simulating the spatial expression patterns of genes over the spatial coordinates of the spatial reference data. Specifically, scCube first utilizes the VAE model trained in the gene expression simulation step to generate new cells (or spots) of different populations, whose numbers are determined by the groups in the spatial reference data. Significantly, the groups can be defined as the annotation information such as spatial domain or pathological annotation (if provided), or just as cluster labels obtained by the unsupervised or spatial domain clustering steps. Compared to the spatial reference, these generated cells (or spots) have sufficiently similar but not identical gene expression profiles. Then, scCube constructs a mapping between the cells (or spots) in generated data and the positions in the spatial reference by solving an optimal transport problem64:5 γ=argminγγ,MFsubjecttoγ1=aγT1=bγ≥0
+
+Where M is the metric cost matrix and a, b are the sample weights. We assume a and b take uniform distributions a=1n1n and b=1n1n by default, and the metric cost matrix M is constructed by computing the sqeuclidean distance between the gene expression vectors of the generated cells (or spots) and the gene expression vectors of the positions in the spatial reference data.
+
+Once we have the optimal transport plan γ, we can map the generated cells to positions with the maximum likelihood of spatial origin, and thus the spatial patterns of cell (or spot) populations and the spatial expression patterns of genes are also simulated.
+
+Reference-free spatial pattern simulation
+
+In the reference-free simulation, scCube focuses on simulating specific spatial distribution patterns for different cell (or spots) populations based on the generated data and further provides two strategies. After randomly generating spatial positions with the same number as the cells (or spots) in the generated data, users can either choose to generate the random or customized spatial patterns.
+
+1) Random spatial pattern generation
+
+To be specific, scCube applies the default spatial autocorrelation function to generate random spatial patterns of populations. The spatial range containing all positions is first uniformly divided into n×n grids. To encourage neighborhood similarity in the composition of cell type in grids, we assume that the overall distribution V of grids follows a multivariate normal distribution:6 V~MVN0,Σ
+
+Where the n×n covariance matrix Σ models the spatial correlation among the grids based on the Euclidean distance between their spatial coordinates:7 Σ=e−Dδ2
+
+Where D is the Euclidean distance matrix and δ is the autocorrelation parameter. A larger δ will generate spatial patterns with greater connectivity. Subsequently, for a target population, scCube randomly samples the same proportion of grids based on the proportion of this population in the generated data, and assigns all cells (or spots) which belongs to this population to the spatial positions in the sampled grids. This step repeats c times (c is set by users and does not exceed the total number of populations in the generated data), and cells (or spots) in the remaining population are randomly assigned to spatial positions in the remaining grids. Based on the above strategy, users can flexibly choose to simulate a unique spatial distribution pattern for each population, or simulate the same spatial co-localization distribution patterns for multiple populations simultaneously. Furthermore, scCube also provides an additional parameter, λ, to generate spatial patterns with varying degrees of fuzziness by randomly swapping the spatial coordinates of 1−λ percent of the cells.
+
+2) Customized spatial pattern generation
+
+Inspired by spaSim54, a recently published simulator of tissue spatial data, scCube provides four functions to optionally generate a series of biologically interpretable spatial basis patterns for each population, including unstructured mixed cell populations, clustered cell populations, cell rings encircling tissue structures, and some external structures such as vessels. Furthermore, scCube also provides an additional function to combine the different types and numbers of basis patterns mentioned above to generate more complex structures.
+
+Unstructured mixed cell populations simulation
+
+For unstructured mixed cell populations simulation, scCube randomly samples positions with a specific proportion and assigns designated cell populations to these positions. The number and proportion of cell populations can be set by users.
+
+Clustered cell populations simulation
+
+For clustered cell populations simulation, scCube applies geometric shapes (including circles, ovals, and other irregular shapes formed by combining circles or ovals) to delineate regions of clustered cell populations. Positions inside the margin of geometric shapes are defined as clustered structures and assigned designated cell populations, while positions outside the margin are defined as the background. Specifically, the number and parameters (such as center location, size, and direction) of geometric shapes can be customized. Given the center location (x0,y0) and the direction θ of the region for simulation, scCube first converts the coordinate (x,y) of each position as below:8 xrotated=x−x0cos(θ)+y−y0sin(θ)yrotated=−x−x0sinθ+y−y0cos(θ)
+
+Subsequently, scCube will apply circular or elliptical coordinate equations:9 x2a2+y2b2=1
+
+Where a and b are the major axis and minor axis, respectively, and a=b when the regions are circles. For each position, if xrotated2a2+yrotated2b2<1, the position is inside the region, otherwise it’s outside the region. In addition, scCube further considers the presence of other infiltrating cells in the clustered cell populations, and the cell type and proportion of infiltrating cells can be specified by users.
+
+Cell rings simulation
+
+scCube applies concentric circles to simulate the cell single or double rings. Similar to clustered cell populations simulation, the number and parameter of concentric circles as well as the cell type and proportion of infiltrating cells can also be specified by users. Moreover, scCube provides an additional parameter d to control the widths of cell rings. Taking the cell single rings simulation as an example, for each position, if xrotated2a2+yrotated2b2<1, the position is inside the inner cluster; if xrotated2a2+yrotated2b2>1 and xrotated2(a+d)2+yrotated2(b+d)2<1, the position is inside the outer ring; otherwise it’s outside the outer ring and is defined as the background.
+
+Vessels simulation
+
+scCube applies stripes to simulate the blood or lymphatic vessels. The number and parameter (including length, width, and direction) of stripes as well as the cell type and proportion of infiltrating cells can be specified by users. Given two center endpoints (x1,y1) and x2,y2 and the width d of the stripe for simulation, scCube first calculates the normalized perpendicular vector p:10 p=−(y2−y1)l,(x2−x1)l
+
+Where l=(x2−x1)2+(y2−y1)2 is the length of the stripe, and the endpoints on the margin of stripe thus can be defined as (x1+dp2,y1+dp2) or (x1−dp2,y1−dp2). For each position (x,y), scCube further calculates its projection lengths u and v on the direction vector and the perpendicular vector of the stripe, respectively:11 u=x−x1+dp2x2−x1l+y−y1+dp2y2−y1lv=−x−x1+dp2y2−y1l+y−y1+dp2x2−x1l
+
+If 0≤u≤l and v≤d2, the position is inside the stripe, otherwise it’s outside the stripe and is defined as the background.
+
+Comparison with other simulation methods
+
+We compared the simulation performance of scCube with other existing simulators using the real SRT datasets. In detail, we considered the following eight simulators, two of which are SRT simulators and six are single-cell simulators:SRTsim36: SRT simulator, implemented in the R package SRTsim, with the count matrix as inputs.
+
+scDesign337: SRT simulator, implemented in the R package scDesign3, with the count matrix as inputs.
+
+scDesign244: single-cell simulator, implemented in the R package scDesign2, with the count matrix as inputs.
+
+SymSim45: single-cell simulator, implemented in the R package SymSim, with the count matrix as inputs.
+
+ZINB-WaVE46: single-cell simulator, implemented in the R package Splatter, with the count matrix as inputs.
+
+Splat47: single-cell simulator, implemented in the R package Splatter, with the count matrix as inputs.
+
+Splat Simple47: single-cell simulator, implemented in the R package Splatter, with the count matrix as inputs.
+
+Kersplat47: single-cell simulator, implemented in the R package Splatter, with the count matrix as inputs.
+
+All compared simulation methods were set with default parameters and we did not perform any pre-normalized step on the raw count matrices.
+
+Evaluation metrics
+
+PCCGEV
+
+The Pearson correlation coefficient (PCC) values between the normalized expression vector for each gene across spatial positions in real and simulated data. The PCCGEV value was calculated using the following equation:12 PCCGEV=∑j=1nxij−x¯yij−ȳ∑j=1nxij−x¯2∑j=1nyij−ȳ2
+
+Where n is the number of spots/cells, xij and yij are the expression value of gene i in spot/cell j in the real data and the simulated data, respectively; x¯ and ȳ are the average expression value of gene i across all spots/cells in the real data and the simulated data, respectively.
+
+MAEGEV
+
+The mean absolute error (MAE) values between the normalized expression vector for each gene across spatial positions in real and simulated data. The MAEGEV value was calculated using the following equation:13 MAEGEV=1n∑j=1nxij−yij
+
+Where n is the number of spots/cells, xij and yij are the expression value of gene i in spot/cell j in the real data and the simulated data, respectively.
+
+PCCGBM
+
+Considering that direct comparison between the real and simulated gene expression vectors is overly stringent and leads to insufficient comparison results when the training data and the test data are different, according to Song et al.37, we further calculated the Pearson correlation coefficient (PCC) values between the expression value for each gene from the simulated data’s spatial locations predicted by the two generalized boosted regression models (GBMs) trained on the real data and simulated data separately. The GBMs were implemented in the R package caret. Compared with PCCGEV, this alternative evaluation metric is more robust and informative (Supplementary Fig. S56). The PCCGBM value was calculated using the Eq. 12 above, where n is the number of spots/cells, xij and yij are the expression value of gene i in spot/cell j predicted by the GBMs trained on the real data and the simulated data, respectively; x¯ and ȳ are the average expression value of gene i across all spots/cells predicted by the GBMs trained on the real data and the simulated data, respectively.
+
+Benchmarking spot deconvolution methods
+
+For the spot deconvolution methods benchmarking, we first used scCube to generate the simulated SRT data with single-cell resolution from a mouse brain scRNA-seq dataset, each cell type has a specific spatial distribution pattern. For this single-cell SRT data, all cells were split according to the fixed spatial distance which was determined by the setting average number of cells per spot n and then merged into simulated spots as the benchmarking datasets. We simulated six spot-based SRT datasets (n = 5, 10, 20, 30, 50, and 100) in total and benchmarked the following nine spot deconvolution methods with the default parameters: (1) Cell2location19 implemented in the Python package cell2location; (2) DestVI21 implemented in the Python package scvi-tools; (3) DSTG22 implemented in the Python package DSTG; (4) RCTD25 implemented in the R package spacexr; (5) Seurat29 implemented in the R package Seurat; (6) spatialDWLS24 implemented in the R package Giotto; (7) SPOTlight23 implemented in the R package SPOTlight; (8) Stereoscope26 implemented in the Python package Stereoscope; (9) Tangram27 implemented in the Python package Tangram.
+
+Evaluation metrics
+
+PCC
+
+The Pearson correlation coefficient (PCC) was calculated using the Eq. 12 above, where n is the number of cell types, xij and yij are the proportion value of cell type j in spot i in the ground truth and the predicted result, respectively; x¯ and ȳ are the average proportion value across all cell types in spot i in the ground truth and the predicted result, respectively.
+
+SRCC
+
+The Spearman rank-order correlation coefficient (SRCC) was calculated using the following equation:14 SRCC=1−6∑j=1ndij2nn2−1
+
+Where n is the number of cell types, dij is the rank value of the proportion value of cell type i in spot i in the ground truth and the predicted result, respectively.
+
+RMSE
+
+The root mean squared error (RMSE) was calculated using the following equation:15 RMSE=1n∑j=1nxij−yij2
+
+Where n is the number of cell types, xij and yij are the proportion value of cell type j in spot i in the ground truth and the predicted result, respectively.
+
+JS
+
+The Jensen-Shannon divergence (JS) was calculated using the following equation:16 JS=12KLPiPi+Qi2+12KLQiPi+Qi2
+
+17 KL(xi∣∣yi)=∑j=1nxijlogxijyij
+
+Where n is the number of cell types, xij and yij are the proportion value of cell type j in spot i in the ground truth and the predicted result, respectively; Pi and Qi are the distribution probability vectors of cell type proportion in spot i in the ground truth and the predicted result, respectively.
+
+AS
+
+The accuracy score (AS) proposed by Li et al.56 was calculated using the following equation:18 AS=14RANKPCC+RANKSRCC+RANKRMSE+RANKJS
+
+Benchmarking gene imputation methods
+
+For the gene imputation methods benchmarking, we also used scCube to generate the new scRNA-seq data with whole transcriptomes from the mouse brain scRNA-seq dataset. Since none of the existing gene imputation methods make use of the spatial information of single cells, we thus did not simulate the spatial coordinates for each generate cells. On the contrary, we focused on the effect of the quality of detected transcriptomes in image-based SRT data on the gene imputation methods. To do so, we utilized scCube to generate three image-based SRT data with 200 randomly selected genes, 200 highly variable genes, and 200 cell type marker genes, respectively, and benchmarked the following eight gene imputation methods with the default parameters: (1) SpaGE28 implemented in the Python package SpaGE; (2) Tangram27 implemented in the Python package Tangram; (3) stPlus31 implemented in the Python package stPlus; (4) gimVI57 implemented in the Python package scvi-tools; (5) Seurat29 implemented in the R package Seurat; (6) SpaOTsc58 implemented in the Python package SpaOTsc; (7) novoSpaRc59 implemented in the Python package novoSpaRc; (8) LIGER30 implemented in the R package liger.
+
+Evaluation metrics
+
+The PCC, SRCC, RMSE, JS, and AS mentioned above were employed to evaluate the gene imputation performance, and the input n is the number of spots/cells, xij and yij are the expression value of gene i in spot/cell j in the in the ground truth and the predicted result, respectively.
+
+Benchmarking resolution enhancement methods
+
+For the resolution enhancement methods benchmarking, we simulated two pairs of spot-based SRT data with low (121 spots) and high (1089 spots) cellular resolution using scCube and benchmarked the following two existing methods with the default parameters: (1) BayesSpace49 implemented in the R package BayesSpace; (2) CARD60 implemented in the R package CARD.
+
+Evaluation metrics
+
+The PCC mentioned above were employed to evaluate the accuracy of high-cellular resolution spatial maps of gene expression predicted by BayesSpace and CARD, and the input n is the number of spots, xij and yij are the expression value of gene i in spot j in the in the ground truth and the predicted result, respectively. Besides, since CARD also predicted the cell type composition of spots for the both low- and high-cellular resolution SRT data, we thus also evaluated the deconvolution result using the PCC mentioned above, and the input n is the number of cell types, xij and yij are the proportion value of cell type j in spot i in the ground truth and the predicted result, respectively.
+
+Benchmarking spatial domain identification methods
+
+For the spatial domain identification methods benchmarking, we selected a 10X Visium SRT dataset from the human dorsolateral prefrontal cortex (DLPFC) containing 12 tissue slices38 and generated the corresponding simulated SRT data for each slice using the reference-based strategy of scCube as the benchmarking datasets. The cortex layer label of each spot in these 12 simulated datasets was known and can be used as the ground truth. Five spatial domain identification methods (including (1) BayesSpace49 implemented in the R package BayesSpace; (2) SpaGCN18 implemented in the Python package SpaGCN; (3) STAGATE33 implemented in the Python package STAGATE; (4) DR-SC32 implemented in the R package DR.SC; (5) stLearn77 implemented in the Python package stLearn), as well as one non-spatial unsupervised clustering method (Seurat29 implemented in the R package Seurat) were benchmarked with the default parameters.
+
+Evaluation metrics
+
+ARI
+
+The adjusted rand index (ARI) was calculated using the following equation:19 ARI=∑ijnij2−∑iai2∑jbj2/n212∑iai2+∑jbj2−∑iai2+∑jbj2n2
+
+Where n is number of spots, ai and bj are the number of spots belonging to class i in the ground truth and cluster j in the predicted result, respectively, and nij is number of spots belonging to class i and cluster j simultaneously.
+
+NMI
+
+The normalized mutual information (NMI) was calculated using the following equation:20 NMI=∑ijnijnlog(n×nijai×bj)12[−∑iainlogain−∑jbjnlog(bjn)]
+
+Where the notation is the same as that in ARI.
+
+HS
+
+The homogeneity score (HS) was calculated using the following equation:21 HS=1−HC∣KHC
+
+Where H(C∣K) is the conditional entropy of the classes given the cluster assignments and is given by:22 HC∣K=−∑c=1C∑k=1Knc,kn⋅lognc,knk
+
+and H(C) is the entropy of the classes and is given by:23 HC=−∑c=1Cncn⋅logncn
+
+Where n is number of spots, nc and nk are the number of spots belonging to class c in the ground truth and cluster k in the predicted result, respectively, nc,k is the number of spots from class c assigned to cluster k.
+
+FMI
+
+The Fowlkes-Mallows score (FMI) was calculated using the following equation:24 FMI=Precision×Recall
+
+Where Precision=TPTP+FP is proportion of spots that are correctly classified in the predicted result, and Recall=TPTP+FP is proportion of spots that are correctly classified in the ground truth.
+
+Benchmarking spatial cell-cell interaction inference methods
+
+For the spatial cell-cell interaction inference benchmarking, we selected a STARmap SRT data from the mouse V1 neocortex3 and generated the corresponding simulated SRT data using the reference-based strategy of scCube as the benchmarking datasets. One recently published spatially resolved cell-cell communication inference method (SpaTalk34 implemented in the R package SpaTalk) as well as other seven scRNA-seq cell-cell communication inference methods (including (1) CellCall78 implemented in the R package CellCall; (2) CellChat79 implemented in the R package CellChat; (3) CellPhoneDB80 implemented in the Python package cellphonedb; (4) CytoTalk81 implemented in the R package CytoTalk; (5) Giotto82 implemented in the R package Giotto; (6) NicheNet83 implemented in the R package nichenetr; (7) SpaOTsc58 implemented in the Python package SpaOTsc) were benchmarked with the default parameters.
+
+Evaluation metrics
+
+The spatial proximity significance and the co-expression level on the cell-cell spatial graph network of the inferred ligand-receptor interactions (LRIs) proposed by Shao et al.34 were employed to evaluate the accuracy of all methods in spatial cell-cell interaction inference.
+
+Statistics & reproducibility
+
+No statistical method was used to predetermine the sample size. There were no data exclusions except for the filtering of 5 “blank” barcodes and the Fos gene in the MERFISH data. The experiments were not randomized. The investigators were not blinded to allocation during experiments and outcome assessment. Python (version 3.8.5) and R (version 4.1.0) are used for the statistical analysis.
+
+Reporting summary
+
+Further information on research design is available in the Nature Portfolio Reporting Summary linked to this article.
+
+Supplementary information
+
+Supplementary Information
+
+Peer Review File
+
+Description of Additional Supplementary Files
+
+Supplementary Dataset 1
+
+Supplementary Dataset 2
+
+Supplementary Dataset 3
+
+Reporting Summary
+
+Source data
+
+Source Data
+
+Supplementary information
+
+The online version contains supplementary material available at 10.1038/s41467-024-49445-0.
+
+Acknowledgements
+
+This work is supported by the National Natural Science Foundation of China (U23A20513, X.F.), Ningbo Top Medical and Health Research Program (No. 2022030309, X.F.), the Fundamental Research Funds for the Central Universities (226-2024-00001, X.F.). The authors thank the High-Performance Computing Cluster of Zhejiang University Innovation Center of Yangtze River Delta for their technical support and thank spaSim for its inspiration in the development of reference-free spatial pattern simulation for this project.
+
+Author contributions
+
+X.F. and Y.C. conceived the study. J.Q., Y.F., Z.C., and C.L. implemented the scCube model. J.Q., H.B., X.S., J.L., W.G., Y.H., A.L., and Y.Y. collected datasets involved in this article and performed benchmarking experiments. J.Q. and H.B. wrote the manuscript, and all authors edited and revised the manuscript.
+
+Peer review
+
+Peer review information
+
+Nature Communications thanks Yawei Li, Xun Xu and the other, anonymous, reviewer(s) for their contribution to the peer review of this work. A peer review file is available.
+
+Data availability
+
+No new data was generated for this study. All data used in this study is publicly available and can be accessed through the following links: (1) the human dorsolateral prefrontal cortex (DLPFC) 10X Visium dataset [http://spatial.libd.org/spatialLIBD/]38; (2) the mouse hypothalamus MERFISH dataset [10.5061/dryad.8t8s248]69; (3) the mouse neocortex V1 STARmap dataset [https://zenodo.org/record/7830764#.ZDpObi-1HUI]3; (4) the human HER2 breast cancer “Spatial Transcriptomics (ST)” dataset [https://zenodo.org/record/5511763#.Y6kMduxBzUI]70; (5) the human skin squamous cell carcinoma (SCC) “Spatial Transcriptomics (ST)” dataset [GSE144240]71; (6) the human breast cancer 10X Xenium dataset [https://www.10xgenomics.com/products/xenium-in-situ/preview-dataset-human-breast]72; (7) the zebrafish embryo Stereo-seq dataset [https://gene.ai.tencent.com/SpatialOmics/dataset?datasetID=83]73; (8) the human breast cancer 10X Visium and paired scRNA-seq dataset [10.5281/zenodo.4739739]75; (9) the he Tabula Muris scRNA-seq dataset [https://figshare.com/projects/Tabula_Muris_Transcriptomic_characterization_of_20_organs_and_tissues_from_Mus_musculus_at_single_cell_resolution/27733]40; (10) the Tabula Sapiens scRNA-seq dataset [https://figshare.com/projects/Tabula_Sapiens/100973]41; (11) the MCA scRNA-seq dataset [https://figshare.com/articles/MCA_DGE_Data/5435866]42; (12) the HCL scRNA-seq dataset [https://figshare.com/articles/HCL_DGE_Data/7235471]43; (13) the human TNBC Multiplexed Imaging (MIBI) channel images [https://mibi-share.ionpath.com]55. Source data are provided with this paper.
+
+Code availability
+
+scCube is an open-access python package available in the GitHub repository (https://github.com/ZJUFanLab/scCube)84.
+
+Competing interests
+
+The authors declare no competing interests.
+
+Publisher’s note Springer Nature remains neutral with regard to jurisdictional claims in published maps and institutional affiliations.
+
+These authors contributed equally: Jingyang Qian, Hudong Bao.
+==== Refs
+References
+
+1. Liao J Lu X Shao X Zhu L Fan X Uncovering an organ’s molecular architecture at single-cell resolution by spatially resolved transcriptomics Trends Biotechnol. 2021 39 43 58 10.1016/j.tibtech.2020.05.006 32505359
+2. Lubeck E Coskun AF Zhiyentayev T Ahmad M Cai L Single-cell in situ RNA profiling by sequential hybridization Nat. Methods 2014 11 360 361 10.1038/nmeth.2892 24681720
+3. Wang X Three-dimensional intact-tissue sequencing of single-cell transcriptional states Science 2018 361 eaat5691 10.1126/science.aat5691 29930089
+4. Eng C-HL Transcriptome-scale super-resolved imaging in tissues by RNA seqFISH Nature 2019 568 235 239 10.1038/s41586-019-1049-y 30911168
+5. Ståhl PL Visualization and analysis of gene expression in tissue sections by spatial transcriptomics Science 2016 353 78 82 10.1126/science.aaf2403 27365449
+6. Rodriques SG Slide-seq: A scalable technology for measuring genome-wide expression at high spatial resolution Science 2019 363 1463 1467 10.1126/science.aaw1219 30923225
+7. Stickels RR Highly sensitive spatial transcriptomics at near-cellular resolution with Slide-seqV2 Nat. Biotechnol. 2021 39 313 319 10.1038/s41587-020-0739-1 33288904
+8. Nichterwitz S Laser capture microscopy coupled with Smart-seq2 for precise spatial transcriptomic profiling Nat. Commun. 2016 7 12139 10.1038/ncomms12139 27387371
+9. Chen J Spatial transcriptomic analysis of cryosectioned tissue samples with Geo-seq Nat. Protoc. 2017 12 566 580 10.1038/nprot.2017.003 28207000
+10. Asp M A spatiotemporal organ-wide gene expression and cell atlas of the developing human heart Cell 2019 179 1647 1660.e19 10.1016/j.cell.2019.11.025 31835037
+11. Thrane K Eriksson H Maaskola J Hansson J Lundeberg J Spatially resolved transcriptomics enables dissection of genetic heterogeneity in stage iii cutaneous malignant melanoma Cancer Res 2018 78 5970 5979 10.1158/0008-5472.CAN-18-0747 30154148
+12. Maniatis S Spatiotemporal dynamics of molecular pathology in amyotrophic lateral sclerosis Science 2019 364 89 93 10.1126/science.aav9776 30948552
+13. Navarro JF Spatial transcriptomics reveals genes associated with dysregulated mitochondrial functions and stress signaling in Alzheimer Disease iScience 2020 23 101556 10.1016/j.isci.2020.101556 33083725
+14. Moses L Pachter L Museum of spatial transcriptomics Nat. Methods 2022 19 534 546 10.1038/s41592-022-01409-2 35273392
+15. Svensson V Teichmann SA Stegle O SpatialDE: identification of spatially variable genes Nat. Methods 2018 15 343 346 10.1038/nmeth.4636 29553579
+16. Edsgärd D Johnsson P Sandberg R Identification of spatial expression trends in single-cell gene expression data Nat. Methods 2018 15 339 342 10.1038/nmeth.4634 29553578
+17. Sun S Zhu J Zhou X Statistical analysis of spatial expression patterns for spatially resolved transcriptomic studies Nat. Methods 2020 17 193 200 10.1038/s41592-019-0701-7 31988518
+18. Hu J SpaGCN: Integrating gene expression, spatial location and histology to identify spatial domains and spatially variable genes by graph convolutional network Nat. Methods 2021 18 1342 1351 10.1038/s41592-021-01255-8 34711970
+19. Kleshchevnikov V Cell2location maps fine-grained cell types in spatial transcriptomics Nat. Biotechnol. 2022 40 661 671 10.1038/s41587-021-01139-4 35027729
+20. Liao J De novo analysis of bulk RNA-seq data at spatially resolved single-cell resolution Nat. Commun. 2022 13 6498 10.1038/s41467-022-34271-z 36310179
+21. Lopez R DestVI identifies continuums of cell types in spatial transcriptomics data Nat. Biotechnol. 2022 40 1360 1369 10.1038/s41587-022-01272-8 35449415
+22. Song Q Su J DSTG: deconvoluting spatial transcriptomics data through graph-based artificial intelligence Brief. Bioinform 2021 22 bbaa414 10.1093/bib/bbaa414 33480403
+23. Elosua-Bayes M Nieto P Mereu E Gut I Heyn H SPOTlight: seeded NMF regression to deconvolute spatial transcriptomics spots with single-cell transcriptomes Nucleic Acids Res 2021 49 e50 10.1093/nar/gkab043 33544846
+24. Dong R Yuan G-C SpatialDWLS: accurate deconvolution of spatial transcriptomic data Genome Biol. 2021 22 145 10.1186/s13059-021-02362-7 33971932
+25. Cable DM Robust decomposition of cell type mixtures in spatial transcriptomics Nat. Biotechnol. 2022 40 517 526 10.1038/s41587-021-00830-w 33603203
+26. Andersson A Single-cell and spatial transcriptomics enables probabilistic inference of cell type topography Commun. Biol. 2020 3 565 10.1038/s42003-020-01247-y 33037292
+27. Biancalani T Deep learning and alignment of spatially resolved single-cell transcriptomes with Tangram Nat. Methods 2021 18 1352 1362 10.1038/s41592-021-01264-7 34711971
+28. Abdelaal T Mourragui S Mahfouz A Reinders MJT SpaGE: spatial gene enhancement using scRNA-seq Nucleic Acids Res 2020 48 e107 10.1093/nar/gkaa740 32955565
+29. Stuart T Comprehensive Integration of Single-Cell Data Cell 2019 177 1888 1902.e21 10.1016/j.cell.2019.05.031 31178118
+30. Welch JD Single-cell multi-omic integration compares and contrasts features of brain cell identity Cell 2019 177 1873 1887.e17 10.1016/j.cell.2019.05.006 31178122
+31. Shengquan C Boheng Z Xiaoyang C Xuegong Z Rui J stPlus: a reference-based method for the accurate enhancement of spatial transcriptomics Bioinformatics 2021 37 i299 i307 10.1093/bioinformatics/btab298 34252941
+32. Liu W Joint dimension reduction and clustering analysis of single-cell RNA-seq and spatial transcriptomics data Nucleic Acids Res 2022 50 e72 10.1093/nar/gkac219 35349708
+33. Dong K Zhang S Deciphering spatial domains from spatially resolved transcriptomics with an adaptive graph attention auto-encoder Nat. Commun. 2022 13 1739 10.1038/s41467-022-29439-6 35365632
+34. Shao X Knowledge-graph-based cell-cell communication inference for spatially resolved transcriptomic data with SpaTalk Nat. Commun. 2022 13 4429 10.1038/s41467-022-32111-8 35908020
+35. Li R Yang X De novo reconstruction of cell interaction landscapes from single-cell spatial transcriptome data with DeepLinc Genome Biol. 2022 23 124 10.1186/s13059-022-02692-0 35659722
+36. Zhu J Shang L Zhou X SRTsim: spatial pattern preserving simulations for spatially resolved transcriptomics Genome Biol. 2023 24 39 10.1186/s13059-023-02879-z 36869394
+37. Song, D. et al. scDesign3 generates realistic in silico data for multimodal single-cell and spatial omics. Nat. Biotechnol. 42, 247–252 (2023).
+38. Maynard KR Transcriptome-scale spatial gene expression in the human dorsolateral prefrontal cortex Nat. Neurosci. 2021 24 425 436 10.1038/s41593-020-00787-0 33558695
+39. Kingma, D. P. & Welling, M. Auto-Encoding Variational Bayes. In: 2nd International Conference on Learning Representations (ICLR), https://iclr.cc/archive/2014/conference-proceedings/ (2014).
+40. Tabula Muris Consortium Single-cell transcriptomics of 20 mouse organs creates a Tabula Muris Nature 2018 562 367 372 10.1038/s41586-018-0590-4 30283141
+41. Tabula Sapiens Consortium* et al. The Tabula Sapiens: A multiple-organ, single-cell transcriptomic atlas of humans. Science 376, eabl4896 (2022).
+42. Han X Mapping the mouse cell atlas by microwell-seq Cell 2018 172 1091 1107.e17 10.1016/j.cell.2018.02.001 29474909
+43. Han X Construction of a human cell landscape at single-cell level Nature 2020 581 303 309 10.1038/s41586-020-2157-4 32214235
+44. Sun T Song D Li WV Li JJ scDesign2: a transparent simulator that generates high-fidelity single-cell gene expression count data with gene correlations captured Genome Biol. 2021 22 163 10.1186/s13059-021-02367-2 34034771
+45. Zhang X Xu C Yosef N Simulating multiple faceted variability in single cell RNA sequencing Nat. Commun. 2019 10 2611 10.1038/s41467-019-10500-w 31197158
+46. Risso D Perraudeau F Gribkova S Dudoit S Vert J-P A general and flexible method for signal extraction from single-cell RNA-seq data Nat. Commun. 2018 9 284 10.1038/s41467-017-02554-5 29348443
+47. Zappia L Phipson B Oshlack A Splatter: simulation of single-cell RNA sequencing data Genome Biol. 2017 18 174 10.1186/s13059-017-1305-0 28899397
+48. Neufeld A Gao LL Popp J Battle A Witten D Inference after latent variable estimation for single-cell RNA sequencing data Biostatistics 2023 25 270 287 10.1093/biostatistics/kxac047 36511385
+49. Zhao E Spatial transcriptomics at subspot resolution with BayesSpace Nat. Biotechnol. 2021 39 1375 1384 10.1038/s41587-021-00935-2 34083791
+50. Fang R Conservation and divergence of cortical cell organization in human and mouse revealed by MERFISH Science 2022 377 56 62 10.1126/science.abm1741 35771910
+51. Zeira R Land M Strzalkowski A Raphael BJ Alignment and integration of spatial transcriptomics data Nat. Methods 2022 19 567 575 10.1038/s41592-022-01459-6 35577957
+52. Liu W Probabilistic embedding, clustering, and alignment for integrating spatial transcriptomics data with PRECAST Nat. Commun. 2023 14 296 10.1038/s41467-023-35947-w 36653349
+53. Clifton, K. et al. STalign: Alignment of spatial transcriptomics data using diffeomorphic metric mapping. Nat Commun. 14, 8123 (2023).
+54. Feng Y Spatial analysis with SPIAT and spaSim to characterize and simulate tissue microenvironments Nat. Commun. 2023 14 2697 10.1038/s41467-023-37822-0 37188662
+55. Keren L A structured tumor-immune microenvironment in triple negative breast cancer revealed by multiplexed ion beam imaging Cell 2018 174 1373 1387.e19 10.1016/j.cell.2018.08.039 30193111
+56. Li B Benchmarking spatial and single-cell transcriptomics integration methods for transcript distribution prediction and cell type deconvolution Nat. Methods 2022 19 662 670 10.1038/s41592-022-01480-9 35577954
+57. Lopez, R. et al. A joint model of unpaired data from scRNA-seq and spatial transcriptomics for imputing missing gene expression measurements. Preprint at http://arxiv.org/abs/1905.02269v1 (2019).
+58. Cang Z Nie Q Inferring spatial and signaling relationships between cells from single cell transcriptomic data Nat. Commun. 2020 11 2084 10.1038/s41467-020-15968-5 32350282
+59. Nitzan M Karaiskos N Friedman N Rajewsky N Gene expression cartography Nature 2019 576 132 137 10.1038/s41586-019-1773-3 31748748
+60. Ma Y Zhou X Spatially informed cell-type deconvolution for spatial transcriptomics Nat. Biotechnol. 2022 40 1349 1359 10.1038/s41587-022-01273-7 35501392
+61. Lopez R Regier J Cole MB Jordan MI Yosef N Deep generative modeling for single-cell transcriptomics Nat. Methods 2018 15 1053 1058 10.1038/s41592-018-0229-2 30504886
+62. Lotfollahi M Wolf FA Theis FJ scGen predicts single-cell perturbation responses Nat. Methods 2019 16 715 721 10.1038/s41592-019-0494-8 31363220
+63. Grønbech CH scVAE: variational auto-encoders for single-cell gene expression data Bioinformatics 2020 36 4415 4422 10.1093/bioinformatics/btaa293 32415966
+64. Bonneel, N., Van De Panne, M., Paris, S. & Heidrich, W. Displacement interpolation using Lagrangian mass transport. ACM Trans. Graph. 30, 1–12 (2011).
+65. Qian J Reconstruction of the cell pseudo-space from single-cell RNA sequencing data with scSpace Nat. Commun. 2023 14 2484 10.1038/s41467-023-38121-4 37120608
+66. Ren X Reconstruction of cell spatial organization from single-cell RNA sequencing data based on ligand-receptor mediated self-assembly Cell Res 2020 30 763 778 10.1038/s41422-020-0353-2 32541867
+67. Li H A comprehensive benchmarking with practical guidelines for cellular deconvolution of spatial transcriptomics Nat. Commun. 2023 14 1548 10.1038/s41467-023-37168-7 36941264
+68. Chen J A comprehensive comparison on cell-type composition inference for spatial transcriptomics data Brief. Bioinform 2022 23 bbac245 10.1093/bib/bbac245 35753702
+69. Moffitt JR Molecular, spatial, and functional single-cell profiling of the hypothalamic preoptic region Science 2018 362 eaau5324 10.1126/science.aau5324 30385464
+70. Andersson A Spatial deconvolution of HER2-positive breast cancer delineates tumor-associated cell type interactions Nat. Commun. 2021 12 6012 10.1038/s41467-021-26271-2 34650042
+71. Ji AL Multimodal analysis of composition and spatial architecture in human squamous cell carcinoma Cell 2020 182 1661 1662 10.1016/j.cell.2020.08.043 32946785
+72. Janesick A High resolution mapping of the tumor microenvironment using integrated single-cell, spatial and in situ analysis Nat. Commun. 2023 14 8353 10.1038/s41467-023-43458-x 38114474
+73. Liu C Spatiotemporal mapping of gene expression landscapes and developmental trajectories during zebrafish embryogenesis Dev. Cell 2022 57 1284 1298.e5 10.1016/j.devcel.2022.04.009 35512701
+74. Yuan Z SODB facilitates comprehensive exploration of spatial omics data Nat. Methods 2023 20 387 399 10.1038/s41592-023-01773-7 36797409
+75. Wu SZ A single-cell and spatially resolved atlas of human breast cancers Nat. Genet 2021 53 1334 1347 10.1038/s41588-021-00911-1 34493872
+76. Wolf FA Angerer P Theis FJ SCANPY: large-scale single-cell gene expression data analysis Genome Biol. 2018 19 15 10.1186/s13059-017-1382-0 29409532
+77. Pham D Robust mapping of spatiotemporal trajectories and cell-cell interactions in healthy and diseased tissues Nat. Commun. 2023 14 7739 10.1038/s41467-023-43120-6 38007580
+78. Zhang Y CellCall: integrating paired ligand-receptor and transcription factor activities for cell-cell communication Nucleic Acids Res 2021 49 8520 8534 10.1093/nar/gkab638 34331449
+79. Jin S Inference and analysis of cell-cell communication using CellChat Nat. Commun. 2021 12 1088 10.1038/s41467-021-21246-9 33597522
+80. Vento-Tormo R Single-cell reconstruction of the early maternal-fetal interface in humans Nature 2018 563 347 353 10.1038/s41586-018-0698-6 30429548
+81. Hu Y Peng T Gao L Tan K CytoTalk: De novo construction of signal transduction networks using single-cell transcriptomic data Sci. Adv. 2021 7 eabf1356 10.1126/sciadv.abf1356 33853780
+82. Dries R Giotto: a toolbox for integrative analysis and visualization of spatial expression data Genome Biol. 2021 22 78 10.1186/s13059-021-02286-2 33685491
+83. Browaeys R Saelens W Saeys Y NicheNet: modeling intercellular communication by linking ligands to target genes Nat. Methods 2020 17 159 162 10.1038/s41592-019-0667-5 31819264
+84. Jingyang, Q., ProDong0512 & Dr. FAN, X. ZJUFanLab/scCube: scCube v2.0.1. 10.5281/zenodo.10686284 (2024).

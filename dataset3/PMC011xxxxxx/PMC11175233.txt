@@ -1,0 +1,421 @@
+
+==== Front
+Sensors (Basel)
+Sensors (Basel)
+sensors
+Sensors (Basel, Switzerland)
+1424-8220
+MDPI
+
+10.3390/s24113536
+sensors-24-03536
+Article
+Multivariable Iterative Learning Control Design for Precision Control of Flexible Feed Drives
+https://orcid.org/0000-0001-7767-3623
+Wang Yulin Methodology Software Validation Writing – original draft 12
+https://orcid.org/0000-0003-0296-6805
+Hsiao Tesheng Methodology Formal analysis Writing – review & editing Supervision 1*
+Mercorelli Paolo Academic Editor
+1 Institute of Electrical and Control Engineering, National Yang Ming Chiao Tung University, Hsinchu 30010, Taiwan; yu.linwang106@gmail.com
+2 School of Mechanical Engineering, Guangdong Ocean University, Zhanjiang 524088, China
+* Correspondence: tshsiao@cn.nctu.edu.tw
+30 5 2024
+6 2024
+24 11 353626 4 2024
+26 5 2024
+29 5 2024
+© 2024 by the authors.
+2024
+https://creativecommons.org/licenses/by/4.0/ Licensee MDPI, Basel, Switzerland. This article is an open access article distributed under the terms and conditions of the Creative Commons Attribution (CC BY) license (https://creativecommons.org/licenses/by/4.0/).
+Advancements in machining technology demand higher speeds and precision, necessitating improved control systems in equipment like CNC machine tools. Due to lead errors, structural vibrations, and thermal deformation, commercial CNC controllers commonly use rotary encoders in the motor side to close the position loop, aiming to prevent insufficient stability and premature wear and damage of components. This paper introduces a multivariable iterative learning control (MILC) method tailored for flexible feed drive systems, focusing on enhancing dynamic positioning accuracy. The MILC employs error data from both the motor and table sides, enhancing precision by injecting compensation commands into both the reference trajectory and control command through a norm-optimization process. This method effectively mitigates conflicts between feedback control (FBC) and traditional iterative learning control (ILC) in flexible structures, achieving smaller tracking errors in the table side. The performance and efficacy of the MILC system are experimentally validated on an industrial biaxial CNC machine tool, demonstrating its potential for precision control in modern machining equipment.
+
+iterative learning control
+flexible feed drives
+multivariable control
+norm-optimal
+National Science and Technology Council, TaiwanThis study was supported by: National Science and Technology Council, Taiwan.
+==== Body
+pmc1. Introduction
+
+In advanced manufacturing equipment such as manipulators [1], CNC machine tools [2], 3D printers [3], and lithography machines [4], the throughput and accuracy of workpieces are significantly affected by the dynamic positioning accuracy of their feed drive systems. In industrial applications, electromechanical systems are inevitably affected by the structural dynamics of the feed drives and uncertain disturbance, significantly limiting the achievable accuracy of motion control systems. For precision motion systems, the ultimate goal is to use high-performance control algorithms to suppress various disturbances in diverse operational environments. Disturbances affecting control accuracy are typically divided into two main categories: internal and external disturbances.
+
+For CNC machine tool motion systems, cutting forces between the workpiece and the tool are common forms of external disturbances. High-gain feedback controllers are typically utilized to mitigate these disturbances induced by the process. To further enhance performance, more advanced motion controllers have been considered. These include pole placement [5], loop shaping [6], and H∞ synthesis strategies [7]. Additionally, feedback control (FBC), using nonlinear control techniques like sliding mode control [8] and model predictive control [9], was adopted to enhance the dynamic positioning accuracy of motion systems.
+
+On the other hand, the presence of internal disturbances, such as lead errors, thermal errors, and weight deformation errors in ball screws, also limits commercial CNC machines to closing the position loop using rotary encoder feedback. These disturbances can lead to premature wear and damage to mechanical components when a linear encoder is used to close the position loop [10]. Recent studies have illustrated that finite element modeling (FEM) methods can adeptly mitigate these inaccuracies [11]. However, the pre-calibration process is notably time-consuming and requires substantial prior knowledge, obstructing its widespread adoption in engineering applications. Additionally, due to the inherent flexibility of the feed drive system, the accuracy at the motor side does not directly correspond to the required precision at the table side, which is of primary interest. In light of this, the present study proposes a strategy that iteratively refines the reference trajectory commands based on the observed results from the linear encoder on the table side.
+
+Residual vibrations pose another significant challenge to the dynamic accuracy of precision motion stages, primarily stemming from the structural dynamics like resonance damping in flexible feed drive components. These vibrations are induced by inertial forces generated during high-speed and high-acceleration trajectories. However, FBC systems, despite incorporating advanced algorithms, inherently experience delays and transient responses to changes in reference inputs and disturbances. Conversely, a feedforward control signal can be designed to preemptively target future reference commands and disturbances, utilizing an understanding of the system’s dynamics and the information at hand. Techniques like notch filtering [12] and input shaping [13] are employed to modify the spectral energy around the resonance frequency in trajectory commands, aiming to reduce vibrations induced by the trajectory. Yet, these approaches may introduce additional delays and can distort trajectory commands, which can compromise the accuracy of contour tracking in multi-axis motion. Furthermore, plant inversion methods such as Zero Phase Error Tracking Control (ZPETC) [14], Zero Magnitude Error Tracking Control (ZMETC), or Nonminimum-Phase Zero Ignore (NPZ-Ignore) [15] can also be used for pre-filtering trajectory commands to prevent vibrations and improve trajectory tracking accuracy. Nonetheless, the effectiveness of these feedforward filtering techniques is dependent on the precise inversion of the model, necessitating an accurate identification of the system’s dynamic model.
+
+Iterative Learning Control (ILC) is a feedforward control strategy designed to enhance the performance of systems carrying out repetitive tasks [9,16,17]. This method utilizes error information collected from previous tasks to enhance the performance of current tasks, effectively suppressing the repetitive disturbances mentioned above. The underlying assumptions of ILC is that the reference signal is repetitive. Each repetition is referred to as an iteration, and the initial conditions (ICs) for each iteration are identical.
+
+Notice that these assumptions are not restrictive, because repetitive machining is very common in batch manufacturing. ILC can be effectively used to synthesize error compensation strategies for such scenarios. It is usually integrated into an existing FBC system since ILC itself is incapable of stabilizing an unstable system or compensating for non-repetitive disturbances.
+
+In the literature, there are several mainstream frameworks for designing ILC systems, including model-based ILC, data-driven ILC, and adaptive ILC. Model-based ILC generates control compensation using a known system model and previous error data. This strategy is recognized for its simplicity and ease of implementation, featuring methods like frequency-domain inversion-based and time-domain norm-optimal methods [17]. This technique is widely used in manufacturing systems with linear models, such as CNC machines and wafer stages. However, there is still room for improvement, including the study of flexible structures in this paper. Data-driven ILC [18,19,20,21] parameterizes the learning feedforward by introducing basis functions and iteratively obtaining optimal parameters related to the model. This ensures performance under varying reference, but it has limited ability to counter disturbances. Adaptive ILC [22,23,24] employs Lyapunov-like methods to design learning rules and a parametric updating law to estimate system uncertainties. This addresses uncertainties and disturbances in nonlinear systems. Over the past few years, the ILC field has witnessed significant advancement. For instance, Zhang et al. [25] proposed a data-driven ILC combined with predictive control to address the multivariable tracking problem with actuator constraints. This approach transforms the problem into an iteration-varying quadratic programming problem using only the system’s I/O data. Chi et al. [26] developed a data-driven indirect ILC method for repetitive nonlinear systems. They introduced an adaptive iterative learning rule to update the gains of the indirect iterative learning law for set-points. Li et al. [27] presented an iterative learning-based predictive control method for asynchronous switching of multiphase batch processes with complex characteristics. This method was implemented within the framework of a two-dimensional system.
+
+However, these ILCs are designed for minimizing a single variable, and thus, the majority of existing ILC structures are only suitable for rigid body systems, where the motor position and the table position are identical. A straightforward approach to mitigate table-side errors while minimizing changes to the current rotary encoder feedback control structure is to integrate an additional ILC based on linear encoder measurements. However, conflicts between FBC and ILC might arise due to inconsistency between the motor side and table side errors. Therefore, appropriate modifications to traditional ILC architectures become necessary. Despite this, to the best of the authors’ knowledge, only a handful of studies concentrated on ILC design for flexible structures.
+
+Chen et al. [28] proposed a dual-stage ILC for robots with joint elasticity to address model mismatch, but tuning the dual gains could be tedious, and the learning process must be reset whenever the gains are adjusted. Wang et al. [29] introduced a robust H∞ synthesis ILC, which integrated torque and motor reference learning to improve error convergence and overcome the limitations of [28]. However, these approaches require more intricate models, making the design process more complex. J. Wallen et al. [30] designed an observer-based ILC, where table side displacements were inferred from real-time measurements of the motor side displacements, and the standard ILC directly updated the compensation command. Nonetheless, J. Bolder et al. [31] pointed out that this method could result in internal instability if the ILC acted directly on performance variables (i.e., the table side error) while the feedback controller acted on measurement variables (i.e., the motor side error). Dumanli et al. [32] developed multiple prefilters based on flexible dynamic systems to iteratively correct reference inputs and control compensation signals, ultimately reducing errors at both the motor and table side. This approach involves designing each filter separately, leading to a substantial design workload. Overall, these works highlight the importance of well-coordinated learning in feedforward and FBC to achieve high-precision motion.
+
+It has been observed that prefiltering trajectory commands for FBC could overcome the contradictions between FBC and ILC [31]. However, this requires an accurate model, and robustness to disturbances is compromised. Motivated by the concept of prefiltering trajectory commands, this paper introduces a multivariable ILC (MILC) method. This aims to reconcile the conflicts between FBC and ILC, achieving precise table side trajectory tracking in flexible drive systems. MILC constructs an error matrix to correct the trajectory command and the control inputs, allowing for simultaneous suppression of errors in both FBC and ILC. Then we carry out experiments to verify the effectiveness of MILC in a biaxial motion stage.
+
+The primary contribution of this paper is the development of a multivariable ILC (MILC) framework that combines a two-degrees-of-freedom (DOF) architecture with reference shaping and feedforward compensation. This framework aims to enable simultaneous suppression of errors in both the motor side and the table side for systems with flexible feed drives. The specific contributions of this paper are outlined as follows:
+
+C1: A thorough analysis of prevalent ILCs in controlling flexible structures, highlighting the importance of reference shaping for enhancing ILC performance.
+
+C2: The development of a two-DOF-based MILC framework that effectively reduces feedback errors while boosting ILC performance.
+
+C3: Experimental validation of the MILC approach on a motion system, demonstrating its effectiveness.
+
+This research underlines the need for careful consideration of the balance between ILC and FBC objectives when applying ILC to motion systems with flexible feed drives. The remainder of this paper is organized as follows. Section 2 introduces the notation and foundational concepts of model-based ILC. The problem under consideration is formulated in Section 3. Section 4 details a combined reference shaping and control feedforward MILC architecture designed for flexible structure control, including stability analysis and considerations for implementation. Section 5 validates the effectiveness of the proposed method by experiments. Lastly, conclusions are drawn in Section 6.
+
+The following conventions of notations are adopted in this paper. A discrete-time single-input, single-output (SISO) linear time-invariant (LTI) system P is expressed as (1) P=C(zI−A)−1B+Dz¯¯ABCD
+
+where z denotes the complex variable of the z-transform for a discrete-time system, and A, B, C, and D are matrices of the state space.
+
+Let xM∶=xTMx, where x∈Rn and M∈Rn×n is positive definite (M≻0), i.e., xTMx>0,∀x≠0. It is positive semi-definite (M≽0) if and only if xTMx≥0,∀x.
+
+In this paper, the design of ILC is approached through the lifted form, which depicts the input and output of a SISO and LTI system P in the following manner:(2) y[0]y[1]⋮y[N−1]⏟y_=D0⋯0h[1]D⋯0⋮⋮⋱⋮h[N−1]h[N−2]⋯D⏟P_u[0]u[1]⋮u[N−1]⏟u_
+
+where h is the impulse response of P, hk=CAk−1B, k=1,2,…, and N is the length of each iteration. The underline denotes the respective lifted matrix form.
+
+2. ILC Preliminaries
+
+The MILC is a method that evolves from the model-based ILC. This section analyzes the principles of the model-based ILC and the implementation methods of norm-optimal calculations.
+
+The standard ILC setup can be depicted in Figure 1. In this configuration, rd represents the desired reference input; yjm denotes the system trajectory output of the j-th iteration, with the subscript j indicating the iteration number and the superscript m indicating the motor side; ej represents the motion error of the j-th iteration; and uj signifies the ILC compensation signal for the same iteration. PM stands for the motor side control plant, which includes actuators, mechanics, and sensors, while CP is a feedback controller. Additionally, a subscript of 0 indicates that the signal originates from the initial iteration prior to the execution of ILC.
+
+The feedback error for the j-th iteration can be expressed as follows:(3) ej=rd−yjm=Srd−Huj
+
+where S=1+CPPM−1 represents the sensitivity function, and H=SPM is the learning model that maps uj (the learning input) to yjm (the desired output). When ILC feedforward is not applied, as in the initial trial, where j=0 and u0=0, the feedback error is expressed as e0=Srd. This error can be minimized by reducing the sensitivity function S at frequencies where the power spectrum of rd and disturbances is significant, while also maintaining the stability of the closed-loop system. To achieve this, the paper utilizes a traditional proportional-integral-derivative (PID) type feedback controller.
+
+The ILC compensation signal is calculated as follows:(4) u_j+1=Lu_u_j+Le_e_j
+
+where Lu_ and Le_ denote the learning functions [17,33], which are determined by minimizing the criterion J presented in Definition 1.
+
+Definition 1. (Performance criterion). A commonly used performance criterion for norm-optimal ILC (NOILC) is defined as follows [14]:(5) Ju_j+1,e_j+1=e_j+1Wq2+u_j+1−u_jWr2+u_j+1Ws2
+
+with (Wq, Wr, Ws) semi-positive definite weighting matrices, which are employed to impose penalties on  ej+1,  uj+1−uj , and uj+1 , respectively. A smaller  Wr results in a larger  uj+1−uj , indicating increased sensitivity of the ILC output to the error information from the previous iteration. As a result, the ILC becomes more vulnerable to non-repetitive disturbances. Conversely, to enhance robust monotonic convergence, a common strategy is to increase  Ws , which, however, slows down the error convergence [34,35]. Thus, the selection of these weighting matrices involves balancing robustness with performance.
+
+Since  e_j+1 is affine with respect to  u_j+1 , and  Ju_j+1,e_j+1  is a convex quadratic function of   u_j+1 , the optimal feedforward control compensation  u_j+1 can be analytically derived by setting the derivative of the cost function to zero: (6) dJu_j+1,e_j+1du_j+1=0
+
+thereby identifying the optimal compensation  u_j+1*  for the next iteration, as described in [17] and specified by Theorem 1.
+
+Theorem 1. (Minimizer of the Performance Criterion in Definition 1) With the model  H  and data from the previous iteration, including  u_j ,  e_j , and  rd_ , the optimal  u_j+1 that minimizes the NOILC performance criterion in Definition 1 is: (7) Lu_=H_TWqH_+Ws+Wr−1H_TWqH_+Wr
+
+(8) Le_=H_TWqH_+Ws+Wr−1H_TWq
+
+Proof of Theorem 1. By rearranging e_j and e_j+1 in (3), and subsequently eliminating rd_, we can derive the error dynamics in the iteration domain as follows:(9) e_j+1=e_j+H_(u_j−u_j+1)
+
+Substitute (9) into (5) and solve (6) to obtain (7) and (8). □
+
+From Theorem 1, it is evident that NOILC is capable of handling both multivariable scenarios and noncausal computation, the latter of which enables it to effectively deal with non-minimum phase systems. However, calculation of the N×N matrix inversion in Equations (7) and (8) is computationally demanding. Consequently, J. van Zundert introduced a more efficient NOILC algorithm [36] that solves Riccati equations to decrease the computational load. For details on this algorithm, please see Appendix A.
+
+3. Flexible Feed Drive and Problem Formulation
+
+This section begins by introducing the fundamental two-mass model for flexible ball screw feed drives, which aids in understanding our control objectives. It then proceeds to outline the limitations associated with the direct application of standard ILC to motion systems with flexible drives and feedback from the table side position, which is referred to as Direct ILC (DILC) in this paper.
+
+3.1. Dynamics of Flexible Ball Screw Drive
+
+Presently, ball screw (BS) feed drives are the predominant choice in most industrial feed drive systems. A typical ball screw feed drive in CNC machine tools and its corresponding two-mass model are illustrated in Figure 2a,b [25]. Due to the flexible coupling and the long shaft between the motor and the table, this mechanism can be modeled as a flexible two-mass system [37]. The achievable motion accuracy of this system is constrained by structural vibrations. In the diagram, mM and mT represent the mass on the motor side and the table side, respectively. The control input is denoted as u, while cs and ks represent the viscous damping and the finite stiffness coefficients between the two masses. cM and cT signify the viscous friction arising from the guideway and bearing system.
+
+The differential equations governing the behavior of this flexible BS drive are formulated as follows:(10) mMy¨t=−cMy˙m−ksym−yt−csy˙m−y˙t+umTy¨m=−cTy˙t+ksym−yt+csy˙m−y˙t
+
+The aforementioned equations can be translated into the Laplace(s) domain as follows:(11) PMs=mTs2+cs+cTs+ksq1s4+q2s3+q3s2+q4s
+
+(12) PZs=PT(s)PM(s)=css+ksmTs2+cT+cMs+ks
+
+where PMs and PTs represent the transfer functions (TF) from the control input u to the motor side and table side position, ym and yt, respectively. Then Pz(s) defined in (12) is the TF from the motor side position to the table side position. In addition, q1=mMmT, q2=mT+mMcs+mMcT+mTcM, q3=mT+mMks+cMcT+cM+cTcs, and q4=cM+cTks.
+
+In the case of collocated control, where the sensor and the actuator are located in close proximity, FBC is designed based on PM(s). This setup leads to an antiresonance vibration mode at ωAR=ks/mT, as shown in Figure 2d. On the other hand, in the non-collocated control strategy, where the feedback signal is taken from the table side (PT(s)), the system exhibits the natural resonance vibration mode at ωR=ks(mT+mM)/mMmT, as illustrated in Figure 2e.
+
+Both the resonance and anti-resonance vibration modes can cause relative motion between the motor and the table side, and adversely affect the positioning accuracy of the table. This fact highlights that it is necessary to control both the motor side and the table side simultaneously. A majority of industrial servo closed-loop control systems primarily employ the collocated control approach to guarantee larger stability margins [38]. Additionally, mechanical manufacturing errors such as lead errors, and thermal deformation of the BS, can cause premature wear and damage if a non-collocated control strategy is directly utilized.
+
+Therefore, building upon the arguments presented in Section 1, we propose an MILC method based on collocated control in Section 4. This approach involves iterative tuning to both the control compensation and the reference input, aiming to simultaneously suppress position errors on both the motor side and the table side. To demonstrate the effectiveness of MILC, the following subsection presents the theoretical analysis and proof of traditional ILC directly applied to flexible structures.
+
+3.2. Applying Standard ILC to the Flexible Structure
+
+As illustrated in Figure 3 [30], the traditional ILC, when directly applied to flexible structures, is referred to as DILC in this paper. Within the DILC framework, the feedback controller regulates the motor side error, i.e., ejc1=rd−yjm, while the ILC is designed to control the table side error, i.e., ejz1=rd−yjt.
+
+Instead of analyzing the performance of DILC in the time domain, this paper leverages the frequency domain. Frequency domain analysis, a well-established tool for infinite-time horizon, is also widely utilized in ILC systems [17], where the repetitive signals have finite lengths. Employing a frequency domain approach sheds light on the system’s performance across different frequencies, making the interaction between FBC and DILC more comprehensible.
+
+Define the total control input to the plant as vj=uj+ujc=uj+CP(rd−PMvj); then (13) vj=Suj+SCPrd
+
+The error on the table side is expressed as:(14) ejz1=rd−yjt=rd−PZPMvj=1−PZPMSCPrd−PZPMSuj=1−PZ1−Srd−PZPMSuj
+
+By comparing (3) and (14), it is observed that the learning model for DILC is represented by HD=SPMPZ. On the assumption that the ILC stability condition, as detailed in [17], is satisfied, we proceed in our analysis to the steady-state behavior (i.e., j→∞) of DILC. The steady state signals of uj, ujc, ejz1, and ejc1 are henceforth denoted as u∞, u∞c, e∞z1, and e∞c1, respectively. Employing Equation (4) as a basis, we derive the following equation:(15) u∞=1−Lu−1Lee∞z1
+
+By substituting (15) into (14), we obtain (16) e∞z1=1−PZ1−Srd−PZPMSu∞=1−Lu1−Lu+PZPMSLe−11−PZ1−Srd
+
+Consequently, the steady-state output of DILC is given by (17) u∞=Le1−Lu+PZPMSLe−11−PZ1−Srd
+
+On the other hand, as derived from (13), the error at the motor side is formulated as (18) ejc1=rd−yjm=rd−PMvj=Srd−PMSuj
+
+Based on these expressions for the steady-state errors, we put forward the following proposition. This proposition underscores the equilibrium between errors and control inputs, not only on the table side but also on the motor side.
+
+Proposition 1. Assume that the DILC system in Figure 3 is stable. Then 1−PZrd2≤ ejz12+Pz2ejc12, where  P2  denotes the 2 -norm of  P ;
+
+u∞c=1−Lu+PZPMSLe−1CP1−Lu+LeSrd−u∞.
+
+Proof of Proposition 1. (a) According to (14), (19) ejz1=1−PZ1−Srd−PZPMSuj=PzSrd−PMSuj+1−Pzrd=PZejc1+1−PZrd
+
+Then the result follows from the triangular inequality.
+
+(b) From Figure 4 and (17), the steady-state control input from the feedback controller is (20) u∞c=CPSrd−CPPMSu∞=CPSrd−1−Su∞=CPS−1−SLe1−Lu+PZPMSLe−1(1−PZ1−S)rd=1−Lu+PZPMSLe−1CPS1−Lu+1−SPZSLe−1−SLe(1−PZ1−S)rd=1−Lu+PZPMSLe−1CP1−Lu+LuSrd−u∞
+
+□
+
+Proposition 1a posits that both ejz1 and ejc1 are restricted by a lower bound, which is 1−PZrd2. This suggests that for a specified rd, they cannot simultaneously diminish to zero. Proposition 1b, on the other hand, illustrates inherent conflict between the feedback controller and DILC. To be specific, u∞c cancels out u∞, signifying that they counteract each other in the steady state.
+
+This observation can be understood by examining the resonance modes illustrated in Figure 2. Structural vibrations, induced by large accelerations within the trajectory reference, cause relative motion between the motor and table sides. Concentrating solely on mitigating errors on one side inevitably leads to an amplification of errors on the opposite side, given the interconnected nature of these components. Consequently, the positioning accuracy attained is suboptimal.
+
+In addition, we explore an extreme scenario where ws=0 in (5). According to (7), Lu=1, and based on (16), e∞z1=0. By employing Equations (17) and (20), it is determined that (21) u∞=PZPMS−11−PZ1−Srd
+
+and (22) u∞c=PZPM−1rd−u∞
+
+For systems with rigid connections, that is, PZ=1, Equation (22) indicates that u∞c=0, implying that only DILC contributes to the control input in the steady state. However, when PZ≠1, there occurs a cancellation effect between u∞c and u∞. Moreover, in a well-designed FBC system, S(ω)≪1 for the frequencies within the control bandwidth. Consequently, according to (22), both u∞ and u∞c could become exceedingly large, potentially leading to the saturation of the hardware devices or introducing numerical complexities in the implementation of the control algorithm.
+
+4. Proposed Approach and Analysis
+
+As previously mentioned, direct application of DILC to flexible feed drive systems results in a conflict between the objectives of FBC and ILC. To mitigate this issue, this section aims to suppress both motor side errors and table side errors. This objective is achieved by refining the control compensation and reference inputs, leading to the development of a multivariable ILC (MILC) architecture. This strategy forms contribution C2 of this study. In addition, comprehensive insights into the stability analysis and the specific implementation of this architecture are thoroughly discussed.
+
+4.1. Multivariable ILC Design
+
+The structure of the MILC is depicted in Figure 4, where rj and uj represent the reference update and the control compensation update, respectively. It is important to note that during the initial trial, r0=Cyrd with the prefilter Cy=PZ−1, and u0=0. Within this MILC framework, the calculations of yjm and yjt are as follows:(23) yjm=CPPMSrj+PMSuj
+
+(24) yjt=CPPMPZSrj+PMPzSuj
+
+In this context, ejc2 signifies the motor side error utilized for the feedback controller within the MILC framework. This is expressed as (25) ejc2=rj−yjm
+
+Furthermore, ejz2 representing the table side error, is the ultimate interest for control, and expressed as follows: (26) ejz2=rd−yjt
+
+The Equations (23)–(26) can be reorganized into matrix form as follows:(27) ejc2ejz2=0rd−yjm−rjyjt=0rd−PMS−SPMPZSCPPMPZSujrj
+
+Define the learning model of MILC as HM=PMS−SPMPZSCPPMPZS; then (28) ejc2ejz2=0rd−HMujrj
+
+The MILC update rule in lifted system format is as follows:(29) u_j+1r_j+1=Lu_u_jr_j+Le_e_jc2e_jz2
+
+The purpose of this design is to effectively suppress both motor side FBC error ejc2 and table side performance error ejz2, while avoiding the issues associated with DILC, as highlighted in Proposition 1. Equation (29) implies that the MILC strategy is a two-DOF approach.
+
+This paper uses the following algorithm steps to demonstrate the algorithm process: Step 1: Set rj=1Pzrd, uj=0. Perform the tracking control task in real time with FBC only.
+
+Step 2: For j≥0, collect errors ejc2 and ejz2, and use Formula (9) to offline calculate the compensation for the next iteration, rj+1 and uj+1.
+
+Step 3: Perform the tracking control task in real time with reference rj+1, and ILC compensation uj+1.
+
+Step 4: Return to Step 2 and repeat until the desired number of iterations is achieved.
+
+4.2. Implementation Aspects
+
+Fundamentally, MILC functions as a multiple-input, multiple-output (MIMO) system, whose learning rule can be realized through the model-based NOILC detailed in Section 2 and Appendix A. Furthermore, the stability of MILC is guaranteed if the weighting matrices in (5) are chosen appropriately, as shown in Section 4.3. The precondition for efficient implementation of the NOILC method is to possess a state-space model that maps ILC learning inputs to the desired output, as outlined in Appendix A. To obtain this model, the blocks in Figure 4 are expressed in state-space representation, as follows:(30) Cp=AcBcCcDc
+
+(31) Pm=AmBmCm0
+
+(32) Pz=AzBzCz0
+
+and they are assumed to be minimal realizations.
+
+Lemma 1. The state space representation of HM as depicted in Equation (28), specifically the transfer matrix from uj, rj to −ejc2, yjt, is given by:(33) HM=ABCD
+
+with A=AcBmCc0−BcCmAm−BmDcCmBzCm00Az, B=0Bm0BcBmDc0, C=0Cm000Cz, and D=0−100.
+
+where boldface 0 denotes the zero matrix with appropriate dimension.
+
+Proof of Lemma 1. By systematically substituting the state updates and the output interconnection as outlined in (27), (30), (31), and (32), we arrive at the aforementioned representation. □
+
+4.3. Stability and Convergence Analysis of MILC
+
+In this subsection, monotonic convergence conditions of MILC are explored for the nominal plant model.
+
+Theorem 2. (Monotonic convergence condition of MILC) In the NOLILC algorithm, where Wq≽0,Ws≽0, and Wr≽0  as defined in Definition 1, monotonic convergence for MILC is guaranteed for MILC learning laws (29) if Wq  and  Ws  are symmetric,  Ws≻0 , and  Wr=wrIN , where  wr>0  and  IN  denotes an  N×N  identity matrix.
+
+Proof of Theorem 2. According to (28) and (29), the trial dynamics of MILC can be expressed as (34) u_j+1r_j+1=L_u−L_eHM_u_jr_j+L_e0r_d
+
+Monotonic convergence [33] of the MILC output requires that (35) L_u−L_eHM_i2<1
+
+where (•)i2 denotes the induced 2-norm a of matrix (•). For the NOILC design learning in (7) and (8), we can derive (36) L_u−L_eHM_i2=HM_TWqHM_+Ws+Wr−1Wri2<1
+
+Given the conditions that Wq≽0, Ws≻0 and they are symmetric, we have X=HM_TWqHM_+Ws is symmetric and positive definite. In addition, (37) HM_TWqHM_+Ws+Wr−1Wr=wr−1X+IN−1
+
+Let λi(•) denote the i-th eigenvalue of (•). Since wr−1X≻0 and is symmetric, we have λiwr−1X+IN=λiwr−1X+1>1 for i=1,⋯,N. Therefore, the following result is obtained:(38) maxi⁡λiwr−1X+IN−1<1
+
+Moreover, wr−1X+IN is symmetric. Thus (39) wr−1X+IN−1i2=maxi⁡λiwr−1X+IN−1<1
+
+Therefore, inequality (36) holds and monotonic convergence of MILC is guaranteed. □
+
+Remark 1. Typically, the weighting matrices are chosen as (Wq, Wr, Ws)≜(wqIN, wrIN, wsIN), and the parameters wq, ws, and wr are commonly set as wq>0, ws>0, and wr>0.
+
+Remark 2. The sufficient condition for MC outlined in Theorem 2 is a general condition that is also applicable to the NOILC design of DILC.
+
+As stated in Proposition 1a, in DILC, ejc1 and ejz1 cannot be zero simultaneously. In contrast, MILC operates differently. Assuming that Theorem 2 holds, the conditions under which ejc2 and ejz2 can simultaneously be zero are outlined in the following remark. This demonstrates that MILC can effectively resolve the conflict between FBC and ILC.
+
+Remark 3. Given that ejz2 = 0, it follows that yjt=rd. Consequently, yjm=1Pzrd, and, since ejm2=0, we deduce rj*=1Pzrd. Therefore, uj*=1PzPmrd.
+
+5. Experimental Results
+
+5.1. Experimental Setup
+
+As shown in Figure 5, a biaxial motion stage, manufactured by Tongtai Machine & Tool Co., Ltd., Kaohsiung, Taiwan, is employed to assess the tracking performance of MILC. This stage is driven by two servo motors from Shihlin Electric & Engineering Co., Taipei, Taiwan. Each motor is equipped with a rotary encoder for a semi-closed position loop, providing a resolution of 52 μrad per pulse. The ball screw pitch lengths are 10 mm and 12 mm for the X and Z axes, respectively. Additionally, every axis is equipped with a linear encoder to measure the table position, offering a resolution of 0.25 μm per pulse. The actuators of both motors are controlled by a National Instruments cRIO 9035 embedded system with 4 kHz sampling frequency, and it offers a 16-bit resolution of analog output. The National Instruments cRIO 9035, made in Austin, TX, USA, ensures precise control and measurement. Since the two axes are independent, we apply the control laws to the X axis for experimental verification.
+
+The servo motor for each axis employs the commonly used three-loop control architecture, as depicted in Figure 6. This control structure comprises an outer position loop, an intermediate velocity loop, and an innermost current loop.
+
+In this study, the closed current control loop, as delineated by the dashed box in Figure 6, is regarded as the plant. Within this setup, the torque command serves as the input and the velocity as the output. Enveloping the plant is the velocity control loop and subsequently the position control loop, both operating at a sampling rate of f = 4 kHz.
+
+The discrete-time TF from the torque command to the velocity of the X-axis is represented by Px(z), while the TF from the motor position to the table side position is denoted as Pz(z). Both TFs have been identified through the analysis of experimental data. The magnitude responses of the TFs Pxz and Pz(z) are depicted in Figure 7.
+
+In this framework, CP(z) denotes the position loop feedback controller, Cv(z) denotes the velocity feedback controller, and Ci(z) encapsulates the combination of the current loop controller and its corresponding filter [2]. The position loop controller is configured as a proportional (P) controller, and the velocity controller is designed as a proportional-integral (PI) controller. These controllers are tuned by using the PID tuning toolbox in MATLAB and digitally executed within the CRIO 9035 embedded system. The expressions for Cp(z), Cv(z), and a backward type integrator Gi(z) are as follows:(40) CPz=Kpp
+
+(41) Cvz=Kvp+KviTszz−1, Giz=Tszz−1
+
+where Kvp=0.216, Kvi=8.18, Kpp=180, Ts=1/f. (42) PMz=CvzPx(z)1+CvzPx(z)Gi(z)
+
+By applying the controllers (38) and (39), the position closed loop possesses a bandwidth (−3 dB) of 50 Hz.
+
+To demonstrate the significant performance improvement of MILC, DILC is also implemented by the norm-optimal approach for comparison purposes. The state-space representation for DILC implementations is provided in Appendix B.
+
+5.2. Experimental Results
+
+The effectiveness of the proposed MILC is evaluated in comparison with DILC through experiments on the motion stage. The desired trajectory rd (illustrated in Figure 8) consists of a sequence of smoothed step references, and every step reference is designed using an S-curve velocity profile. This trajectory, encompassing a wide range of accelerations, is apt for evaluating the characteristics of a dynamic system in high-throughput manufacturing scenarios. Due to practical considerations of model mismatch [34], the performance weights in (5) are set as wq=2×106, wr=10−4, and ws=0.2×102 for both MILC and DILC schemes. Furthermore, feedforward friction compensation is effectively implemented by a look-up table, which is based on the result gathered from preliminary friction identified experiments. To prevent instantaneous fluctuations in friction compensation due to measurement noise in low-speed regions, the reference velocity is utilized as the input for the look-up table.
+
+The experimental results are depicted in Figure 9 and Figure 10. The performance is evaluated using the root mean squared (RMS) and maximum (MAX) errors in every iteration. After repeated iterations, the relationship between iteration index and RMS of the tracking error is shown in Figure 9. With DILC, once the motor side error decreases to a certain level, further reductions are not observed despite an increase in iterations. In contrast, the proposed MILC successfully reduces errors at both the motor and table sides to a much smaller range. It should be noted that the proposed scheme is different from DILC because it iteratively corrects the reference input and control compensation, aligning the objectives of FBC and ILC for more rapid and effective convergence of table side errors.
+
+Additionally, a comparison of the two approaches is made using the table side tracking error (ejzi,i=1,2) in the 10-th iteration, as shown in Figure 10 and summarized in Table 1. In sections with high acceleration, such as near 0.57 s, 0.59 s, and 0.61 s as highlighted in the magnified view, the tracking performance of DILC significantly worsens, but MILC demonstrates a notable performance improvement. For the proposed MILC scheme, errors at both the motor side and table side can be simultaneously suppressed, and outstanding compensation performance can be achieved., i.e., MILC achieves a MAX error of 2.06 µm, which is approximately a 42% improvement compared to DILC. As inferred from Figure 2 and Figure 7, due to the presence of large accelerations, resonance modes of Px and PZ, are triggered, resulting in relative motion between the motor side and the table side. Controlling both sides is necessary to achieve high-speed and high-precision motion control.
+
+Figure 11 displays the control input from the feedback controller in the 10th trial for DILC and MILC. Due to the cancellation between ujc and uj, DILC exhibits a substantial control input from the feedback controller. Conversely, MILC, by simultaneously tunning the reference input and the control compensation, maintains a small control input from the feedback controller in the steady state. This result is attributed to the consistent objectives between FBC and MILC to jointly suppress errors at both the motor and table sides, while there are conflicts in control objectives between FBC and DILC as illustrated in Proposition 1b.
+
+6. Conclusions
+
+This paper presents a novel multivariable ILC strategy designed to improve the dynamic positioning accuracy of flexible feed drive motion systems by simultaneously reducing errors at both the motor and table sides. The approach utilizes a two-DOF control framework, combining iterative reference shaping with control compensation updates, effectively balancing the objectives of FBC and ILC. This development is driven by the need to address relative movements caused by the flexible couplings between the motor and table sides. These movements are prompted by various disturbances, including closed-loop dynamics, lead error, structural vibrations, and thermal error. The proposed method has been validated on an industrial CNC machine tool, demonstrating improvements in dynamic tracking errors of up to 42% (as seen in Figure 10 and Table 1). Overall, this MILC can be implemented without the need for altering the servo controller. It provides a convenient approach by modifying the reference trajectory and control compensation. However, injecting the control compensation into the internal controller may encounter some difficulties in certain closed commercial controllers. The study in this paper shows that MILC has appreciable application prospects for precision/ultra-precision systems with flexible feed drives to meet extreme motion accuracy requirements. Future research could further explore the real-time implementation of these advanced control schemes on standard industrial controllers.
+
+Author Contributions
+
+Conceptualization, Y.W. and T.H.; data curation, Y.W.; formal analysis, Y.W. and T.H.; funding acquisition, T.H.; investigation, Y.W.; methodology, Y.W. and T.H.; project administration, T.H.; resources, T.H.; software, Y.W.; supervision, T.H.; validation, Y.W. and T.H.; visualization, Y.W.; writing—original draft preparation, Y.W.; writing—review and editing, T.H. All authors have read and agreed to the published version of the manuscript.
+
+Data Availability Statement
+
+Data are contained within the article.
+
+Conflicts of Interest
+
+The authors declare no conflicts of interest.
+
+Appendix A
+
+Theorem A1. (Efficient norm-optimal ILC) In the context of the performance criterion outlined in Definition 1 and the linear time-invariant (LTI) model presented in Section 1 (from ujk to yj[k]), consider the model in state-space form as follows: (A1) H=ABCD
+
+The optimal uj+1[k] in (5) can be determined through the following steps [36]: Step 1.
+
+Solve the discrete Riccati equation backward:(A2) Pk=(AT−CTwqDφ−1BT)Pk+1×(I−Bφ+BTPk+1B−1BTPk+1)×A−Bφ−1DTwqC−CTwqDφ−1DTwqC+CTwqC
+
+with PN=0, and (A3) Lk=φ+BTPk+1B−1(DTwqC+BTPk+1A)
+
+(A4) Luk=φ+BTPk+1B−1wr
+
+(A5) Lek=φ+BTPk+1B−1DTwq
+
+(A6) Lgk=φ+BTPk+1B−1BT
+
+(A7) φ=DTwqD+wr+ws
+
+Step 2.
+
+Solve the vector difference backward:(A8) gj+1k=AT−KgkBTgj+1k+1+Cwqejk+Kgkwsuj[k]
+
+with gj+1N=0, and (A9) Kgk=(AT−CTwqDφ−1BT)Pk+1I+Bφ−1BTPk+1−1Bφ−1
+
+Step 3.
+
+Solve the optimal state as follows:(A10) ∆x*k+1=Bφ−1BTPk+1+I−1(A∆x*k+BBTgk+1−Bφ−1wrujk)
+
+Step 4.
+
+Obtain the optimal ILC updates: (A11) uj+1*k=∆uj+1*k+ujk=−Lk∆x*k+Lgkg[k+1]+I−Lfkujk
+
+Proof of Theorem A1. Omitted here, see [36]. □
+
+Appendix B
+
+Lemma A1. The state space equation from uj to yjt in Figure 3 is given as follows:(A12) HD=ABC0
+
+  with A=AcBmCc0−BcCmAm−BmDcCmBzCm00Az, B=0Bm0, C=00Cz
+
+Proof of Lemma A1. By systematically substituting the state updates and the output interconnection as outlined in (14), (30), (31), and (32) yields the representation. □
+
+Figure 1 Standard ILC setup.
+
+Figure 2 Dynamics of flexible ball screw feed drives. (Redrawn based on Figure 2 of [32]).
+
+Figure 3 ILC directly applied to flexible structure (DILC).
+
+Figure 4 Two-DOF based MILC configuration.
+
+Figure 5 CNC machine tool motion system.
+
+Figure 6 Servo motor cascaded three-loop structure.
+
+Figure 7 Open loop frequency response functions of nominal Px and Pz.
+
+Figure 8 Desired trajectory is a forward and backward movement.
+
+Figure 9 RMS of tracking error by DILC and MILC.
+
+Figure 10 Comparison of ejzi in 10-th trial (j = 10) for different ILCs.
+
+Figure 11 FBC effort uc in 10-th trial for different ILCs.
+
+sensors-24-03536-t001_Table 1 Table 1 Performance in different approaches (μm, [The symbol “*” indicates the best result under the current metrics]).
+
+Method	RMS(e_0zi)
+
+	RMS(e_0ci)
+
+	RMS(e_10zi)
+
+	RMS(e_10ci)
+
+	MAX(e_10zi)
+
+	
+DILCi=1	201.00	204.21	0.55	5.39	3.57	
+MILCi=2	196.46 *	199.81 *	0.46 *	0.40 *	2.06 *	
+
+Disclaimer/Publisher’s Note: The statements, opinions and data contained in all publications are solely those of the individual author(s) and contributor(s) and not of MDPI and/or the editor(s). MDPI and/or the editor(s) disclaim responsibility for any injury to people or property resulting from any ideas, methods, instructions or products referred to in the content.
+==== Refs
+References
+
+1. Hsiao T. Huang P.-H. Iterative learning control for trajectory tracking of robot manipulators Int. J. Autom. Smart Technol. 2017 7 133 139 10.5875/ausmt.v7i3.1410
+2. Wang Y. Hsiao T. Fast-Update Iterative Learning Control for Performance Enhancement with Application to Motion Systems IEEE Access 2022 10 79458 79468 10.1109/ACCESS.2022.3194532
+3. Ertay D.S. Yuen A. Altintas Y. Synchronized material deposition rate control with path velocity on fused filament fabrication machines Addit. Manuf. 2018 19 205 213 10.1016/j.addma.2017.05.011
+4. Song F. Liu Y. Xu J. Yang X. Zhu Q. Data-Driven Iterative Feedforward Tuning for a Wafer Stage: A High-Order Approach Based on Instrumental Variables IEEE Trans. Ind. Electron. 2019 66 3106 3116 10.1109/TIE.2018.2842756
+5. Gordon D.J. Erkorkmaz K. Accurate control of ball screw drives using pole-placement vibration damping and a novel trajectory prefilter Precis Eng. 2013 37 308 322 10.1016/j.precisioneng.2012.09.009
+6. Hsiao T. Jhu J.-H. Design of Precision Motion Controllers Based on Frequency Constraints and Time-Domain Optimization IEEE/ASME Trans. Mechatron. 2023 28 933 944 10.1109/TMECH.2022.3214245
+7. Mizrachi E. Basovich S. Arogeti S. Robust time-delayed H∞ synthesis for active control of chatter in internal turning Int. J. Mach. Tools Manuf. 2020 158 103612 10.1016/j.ijmachtools.2020.103612
+8. Zhang T. Li X. Gai H. Zhu Y. Integrated Controller Design and Application for CNC Machine Tool Servo Systems Based on Model Reference Adaptive Control and Adaptive Sliding Mode Control Sensors 2023 23 9755 10.3390/s23249755 38139600
+9. Zhang H.-T. Wu Y. He D. Zhao H. Model predictive control to mitigate chatters in milling processes with input constraints Int. J. Mach. Tools Manuf. 2015 91 54 61 10.1016/j.ijmachtools.2015.01.002
+10. Zhu M. Yang Y. Feng X. Du Z. Yang J. Robust modeling method for thermal error of CNC machine tools based on random forest algorithm J. Intell. Manuf. 2023 34 2013 2026 10.1007/s10845-021-01894-w
+11. Li Z. Zhao C. Lu Z. Thermal error modeling method for ball screw feed system of CNC machine tools in x-axis Int. J. Adv. Manuf. Technol. 2020 106 5383 5392 10.1007/s00170-020-05047-w
+12. Huang W.-W. Zhang X. Zhu L.-M. Band-stop-filter-based repetitive control of fast tool servos for diamond turning of micro-structured functional surfaces Precis Eng. 2023 83 124 133 10.1016/j.precisioneng.2023.05.008
+13. Altintas Y. Khoshdarregi M.R. Contour error control of CNC machine tools with vibration avoidance CIRP Ann. 2012 61 335 338 10.1016/j.cirp.2012.03.132
+14. Tomizuka M. Zero phase error tracking algorithm for digital control J. Dyn. Syst. Meas. Control 1987 109 65 68 10.1115/1.3143822
+15. Butterworth J.A. Pao L.Y. Abramovitch D.Y. Analysis and comparison of three discrete-time feedforward model-inverse control techniques for nonminimum-phase systems Mechatronics 2012 22 577 587 10.1016/j.mechatronics.2011.12.006
+16. Ahn H.-S. Chen Y. Moore K.L. Iterative Learning Control: Brief Survey and Categorization IEEE Trans. Syst. Man Cybern. Part C Appl. Rev. 2007 37 1099 1121 10.1109/TSMCC.2007.905759
+17. Bristow D.A. Tharayil M. Alleyne A.G. A survey of iterative learning control IEEE Control Syst. Mag. 2006 26 96 114
+18. Blanken L. Isil G. Koekebakker S. Oomen T. Flexible ILC: Towards a Convex Approach for Non-Causal Rational Basis Functions IFAC-Pap. 2017 50 12107 12112 10.1016/j.ifacol.2017.08.2140
+19. van Zundert J. Bolder J. Oomen T. Iterative Learning Control for varying tasks: Achieving optimality for rational basis functions Proceedings of the 2015 American Control Conference (ACC) Chicago, IL, USA 1–3 July 2015
+20. Bolder J. Kleinendorst S. Oomen T. Data-driven multivariable ILC: Enhanced performance by eliminating L and Q filters Int. J. Robust Nonlinear Control 2018 28 3728 3751 10.1002/rnc.3611
+21. Yang L. Zhang H. Data-Driven Feedforward Parameter Tuning Optimization Method Under Actuator Constraints IEEE/ASME Trans. Mechatron. 2022 27 3429 3439 10.1109/TMECH.2022.3141738
+22. Li X. Huang D. Adaptive Iterative Learning Control for Non-Square Nonlinear Systems with Various Nonrepetitive Uncertainties: A Unified Approach IEEE Trans. Autom. Control 2023 69 1736 1743 10.1109/TAC.2023.3326707
+23. Sang S. Zhang R. Lin X. Model-Free Adaptive Iterative Learning Bipartite Containment Control for Multi-Agent Systems Sensors 2022 22 7115 10.3390/s22197115 36236210
+24. Tayebi A. Chien C.-J. A Unified Adaptive Iterative Learning Control Framework for Uncertain Nonlinear Systems IEEE Trans. Autom. Control 2007 52 1907 1913 10.1109/TAC.2007.906215
+25. Zhang C. Hu Y. Xiao L. Gong X. Chen H. Data-Driven Robust Iterative Learning Predictive Control for MIMO Nonaffine Nonlinear Systems with Actuator Constraints IEEE Trans. Ind. Inform. 2024 1 11 10.1109/TII.2024.3390444
+26. Chi R. Li H. Lin N. Huang B. Data-Driven Indirect Iterative Learning Control IEEE Trans. Cybern. 2024 54 1650 1660 10.1109/TCYB.2022.3232136 37018709
+27. Li H. Wang S. Shi H. Su C. Li P. Two-Dimensional Iterative Learning Robust Asynchronous Switching Predictive Control for Multiphase Batch Processes with Time-Varying Delays IEEE Trans. Syst. Man Cybern. Syst. 2023 53 6488 6502 10.1109/TSMC.2023.3284078
+28. Chen W. Tomizuka M. Dual-Stage Iterative Learning Control for MIMO Mismatched System with Application to Robots With Joint Elasticity IEEE Trans. Control Syst. Technol. 2014 22 1350 1361
+29. Wang C. Zheng M. Wang Z. Peng C. Tomizuka M. Robust Iterative Learning Control for Vibration Suppression of Industrial Robot Manipulators J. Dyn. Syst. Meas. Control 2017 140 011003 10.1115/1.4037265
+30. Wallen J. Norrlof M. Gunnarsson S. A framework for analysis of observer-based ILC Asian J. Control 2011 13 3 14 10.1002/asjc.261
+31. Bolder J. Oomen T. Inferential Iterative Learning Control: A 2D-system approach Automatica 2016 71 247 253 10.1016/j.automatica.2016.04.029
+32. Dumanli A. Sencer B. Data-Driven Iterative Trajectory Shaping for Precision Control of Flexible Feed Drives IEEE/ASME Trans. Mechatron. 2021 26 2735 2746
+33. Barton K.L. Alleyne A.G. A Norm Optimal Approach to Time-Varying ILC With Application to a Multi-Axis Robotic Testbed IEEE Trans. Control Syst. Technol. 2011 19 166 180 10.1109/TCST.2010.2040476
+34. van Zundert J. Oomen T. On inversion-based approaches for feedforward and ILC Mechatronics 2018 50 282 291 10.1016/j.mechatronics.2017.09.010
+35. Ge X. Stein J.L. Ersal T. A frequency domain approach for designing filters for Norm-Optimal Iterative Learning Control and its fundamental tradeoff between robustness, convergence speed and steady state error Proceedings of the 2016 American Control Conference (ACC) Boston, MA, USA 6–8 July 2016 IEEE New York, NY, USA 2016 384 391
+36. van Zundert J. Bolder J. Koekebakker S. Oomen T. Resource-efficient ILC for LTI/LTV systems through LQ, tracking and stable inversion: Enabling large feedforward tasks on a position-dependent printer Mechatronics 2016 38 76 90 10.1016/j.mechatronics.2016.07.001
+37. Zhang J.-X. Yeh S.-S. Modelization and Identification of Feed Drive Axis in CNC Machine Tools Using Two-Mass Model and Particle Swarm Optimization Proceedings of the 2023 IEEE International Conference on Industrial Technology (ICIT) Orlando, FL, USA 4–6 April 2023
+38. Erkorkmaz K. Hosseinkhani Y. Control of ball screw drives based on disturbance response optimization CIRP Ann. 2013 62 387 390 10.1016/j.cirp.2013.03.138

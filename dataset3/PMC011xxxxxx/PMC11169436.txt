@@ -1,0 +1,304 @@
+
+==== Front
+J Imaging Inform Med
+J Imaging Inform Med
+Journal of Imaging Informatics in Medicine
+2948-2925
+2948-2933
+Springer International Publishing Cham
+
+38366292
+1017
+10.1007/s10278-024-01017-w
+Article
+Patient Re-Identification Based on Deep Metric Learning in Trunk Computed Tomography Images Acquired from Devices from Different Vendors
+http://orcid.org/0000-0003-0975-2164
+Ueda Yasuyuki ueda.yasuyuki.sahs.med@osaka-u.ac.jp
+
+1
+Ogawa Daiki 2
+Ishida Takayuki 1
+1 https://ror.org/035t8zc32 grid.136593.b 0000 0004 0373 3971 Division of Health Sciences, Graduate School of Medicine, Osaka University, 1-7 Yamadaoka, Suita, Osaka 565-0871 Japan
+2 https://ror.org/035t8zc32 grid.136593.b 0000 0004 0373 3971 School of Allied Health Sciences, Faculty of Medicine, Osaka University, 1-7 Yamadaoka, Suita, Osaka 565-0871 Japan
+16 2 2024
+16 2 2024
+6 2024
+37 3 11241136
+27 10 2023
+5 12 2023
+27 12 2023
+© The Author(s) 2024
+https://creativecommons.org/licenses/by/4.0/ Open Access This article is licensed under a Creative Commons Attribution 4.0 International License, which permits use, sharing, adaptation, distribution and reproduction in any medium or format, as long as you give appropriate credit to the original author(s) and the source, provide a link to the Creative Commons licence, and indicate if changes were made. The images or other third party material in this article are included in the article's Creative Commons licence, unless indicated otherwise in a credit line to the material. If material is not included in the article's Creative Commons licence and your intended use is not permitted by statutory regulation or exceeds the permitted use, you will need to obtain permission directly from the copyright holder. To view a copy of this licence, visit http://creativecommons.org/licenses/by/4.0/.
+During radiologic interpretation, radiologists read patient identifiers from the metadata of medical images to recognize the patient being examined. However, it is challenging for radiologists to identify “incorrect” metadata and patient identification errors. We propose a method that uses a patient re-identification technique to link correct metadata to an image set of computed tomography images of a trunk with lost or wrongly assigned metadata. This method is based on a feature vector matching technique that uses a deep feature extractor to adapt to the cross-vendor domain contained in the scout computed tomography image dataset. To identify “incorrect” metadata, we calculated the highest similarity score between a follow-up image and a stored baseline image linked to the correct metadata. The re-identification performance tests whether the image with the highest similarity score belongs to the same patient, i.e., whether the metadata attached to the image are correct. The similarity scores between the follow-up and baseline images for the same “correct” patients were generally greater than those for “incorrect” patients. The proposed feature extractor was sufficiently robust to extract individual distinguishable features without additional training, even for unknown scout computed tomography images. Furthermore, the proposed augmentation technique further improved the re-identification performance of the subset for different vendors by incorporating changes in width magnification due to changes in patient table height during each examination. We believe that metadata checking using the proposed method would help detect the metadata with an “incorrect” patient identifier assigned due to unavoidable errors such as human error.
+
+Keywords
+
+Deep metric learning
+Medical imaging
+Patient re-identification
+Augmentation technique
+Convolutional neural network
+http://dx.doi.org/10.13039/501100001691 Japan Society for the Promotion of Science JP18K15590 JP21K15827 Ueda Yasuyuki Osaka UniversityOpen Access funding provided by Osaka University.
+
+issue-copyright-statement© Society for Imaging Informatics in Medicine 2024
+==== Body
+pmcIntroduction
+
+A standard medical image formatted Digital Imaging and Communication in Medicine consists of the medical image and the header. The metadata in the header contain relevant patient-specific information such as name, age, sex, and date of birth, along with technical data and parameters, such as the device used to generate images. Patient identification errors can be attributed to manual processes by healthcare providers, such as verbal verification of the patient, and images with incorrect metadata stored in picture archiving and communication systems (PACS) may remain unnoticed until they impact patient care. In radiologic interpretation, radiologists generally confirm details in the metadata and identify the patient in the image. Therefore, if the image metadata are from a different patient, the image will be acquired for a different patient, resulting in patient misidentification [1–6]. In the 2021–2022 annual report on the statutory notifications of significant accidental and unintended exposures for the “Ionising Radiation (Medical Exposure) Regulations 2017” by the Care Quality Commission in the United Kingdom, the most common type of error was a patient receiving an examination intended for another patient [7]. According to Morishita et al. [3], the average rate of misfiled radiography cases at a hospital is 0.075%. In another study [8], the estimated near-miss wrong-patient event rate for misfiling radiologic examination cases was 0.002%. The main risk associated with patient misidentification in clinical radiography is the unnecessary exposure of the wrong patient to radiation, which can result in serious incidents or accidents, such as performing surgery on the wrong patient [5].
+
+Image retrieval is a computer vision task that aims to find images similar to an image query from a large-scale image database such as PACS [9–11]. Recently, as an applied technology of content-based image retrieval to solve patient misidentification, image analysis techniques that link the correct patient information with an image, called patient re-identification, have shown promising results for X-ray images [2, 4, 12, 13–20], two-dimensional scout computed tomography (CT) [21, 22], three-dimensional (3D) scout magnetic resonance images [23], and 3D CT [24] images. The main challenge in patient re-identification is the extraction of valid feature vectors (representations) from medical images in a manner that increases interpatient differences while decreasing intra-patient variations.
+
+Even in the deep learning era, various deep convolutional neural network (DCNN) methods trained on medical imaging datasets experience domain shifts owing to clinical variations [25–28]. This raises a concern regarding the generalization capacity of deep learning models. Hence, decreasing the domain shift is important in effectively applying deep learning-based methods to patient re-identification.
+
+Many current methods using medical imaging datasets are based on the assumption that the training and test distributions consist of identical or few domains [25–28]. On chest X-ray images, a patient re-identification method using deep metric learning considering two domains, the view position between the anteroposterior and posteroanterior, has shown promising results [12].
+
+Additionally, in the annual report mentioned above, the highest proportion of notifications from diagnostic imaging was from CT in 2021–2022. In previous studies, the patient re-identification techniques using scout images revealed significant potential for verifying a patient’s identity [21–23]. In clinical scout CT, the scout scan is usually acquired before the main scan, and the trunk is typically scanned in the frontal view position. Every CT device acquires a scout CT image with slightly different geometries of the source-to-image-receptor distance (SID) and image processing. Most clinical CT devices have an SID of approximately 100 cm, implying the absence of any major changes in the magnification of each CT device at the object. In addition, each CT examination acquires a scout CT image with a slightly different geometry of the object (here, the patient) from that of the image-receptor distance depending on the table height. Although healthcare workers usually position the scanner table such that the patient is at the center of rotation, the table height is not necessarily the same as in the previous CT scan [29–31]. Therefore, the magnification at the transverse end of the scout CT image in each CT scan varies slightly [29, 30]. Moreover, differences in processed images may be noticeable in each scout CT image between devices from different vendors as shown in Fig. 1 because of how each vendor applies distinctive image processing techniques, such as image contrast correction and dynamic range compression [25, 26]. Therefore, scout CT images may have domain shifts due to different image acquisition conditions and image processing depending on the scanner vendor and patient positioning reproducibility [25–28].Fig. 1 Examples of images acquired using devices from different vendors. Three scout images in a patient were acquired using a SOMATOM Definition, b SOMATOM Sensation64 (SIEMENS Medical Solutions), and c Optima CT660 (GE Medical Systems)
+
+This study aimed to (a) develop a feature extractor trained on clinical trunk scout CT images using deep metric learning and (b) quantitatively evaluate the outcomes in patient re-identification accuracy using the proposed method on trunk scout CT image datasets acquired using scanners from multiple vendors.
+
+Materials and Methods
+
+Outline of the Proposed Method
+
+The proposed patient re-identification scheme using a deep feature extractor is illustrated in Fig. 2. The workflow comprises three steps: (i) image acquisition and preprocessing, (ii) feature extraction, and (iii) similarity score matching. The first step involves acquiring a scout CT image from the patient’s examination using a routine trunk CT scan. Next, the feature extractor trained by the proposed DCNN model extracts feature vectors using a universal patient representation from the scout CT image without metadata. In the final step, the most similar scout CT image from the stored dataset is determined as a similarity index based on the cosine similarity of the feature vector extracted between the scout CT image and each stored clinical dataset. The patient’s information on the most similar image is assigned to all images from that CT scan, including the main scan.Fig. 2 Proposed system for patient re-identification
+
+Datasets
+
+This retrospective, observational study was approved by the Institutional Review Board of our institution (approval number 21064–4). Written informed consent was not required owing to the study’s retrospective design. All procedures conducted in this study conformed to the tenets of the Declaration of Helsinki.
+
+This study used scan data from 5540 patients who underwent chest–abdomen–pelvis CT between March 2015 and May 2016 at Yamaguchi University Hospital in Yamaguchi, Japan. Patients aged < 20 years were excluded. All scout scans were performed using the following three CT devices: SOMATOM Sensation64, SOMATOM Definition (SIEMENS Medical Solutions, Forchheim, Germany), and Optima CT660 (GE Medical Systems, Waukesha, WI, USA). Several radiologists have interpreted the series of CT images to which the scout image used in this study belongs. Here, interpretation includes comparing the current examination with the patient’s previous examination and other examinations using different modalities. Furthermore, all patient IDs before anonymization have been confirmed to match those on file in the hospital information systems. Table 1 presents the patient demographics in the dataset used for the training, validation, and testing of the DCNN used by the proposed method. Table 2 shows the scan conditions for trunk scout CT imaging in the dataset. Table 1 Patient characteristics
+
+	All	Training	Validation	Test	
+Number of images	8828	1997	732	6099	
+Number of patients	5540	732	4808	
+Age (years)	
+Mean ± SD	67 ± 13				
+Range	20–100				
+Sex	
+Male	3077				
+Female	2463				
+SD standard deviation
+
+Table 2 Scan characteristics
+
+	SOMATOM Definition	SOMATOM Sensation64	Optima CT660	
+Vendor	SIEMENS	SIEMENS	GE	
+Number of images	3057	3997	1774	
+Tube voltage (kV)	120	120	120	
+Tube current (mA)	20–36	20–35	20	
+Pixel spacing (mm2) (columns × rows)	2.0 × 2.0	2.0 × 2.0	0.55 × 0.60	
+Table height (mm)	
+Mean ± SD (mm)	141 ± 14	147 ± 14	135 ± 13	
+Range (mm)	100–198	95–223	88–188	
+Physical width of the image measured at the rotation center	
+Detector size (mm)	0.6	0.6	0.625	
+Field of view (mm)	560	560	530	
+SD standard deviation
+
+The dataset used for training and validation included 2729 images from 732 patients acquired from at least three trunk scout CT scans using one of the three CT devices; they were used either for training or validation, but not both. Out of the 2729 images, 1997 were used for training and 732 for validation of the trained model. The test dataset included 6099 images of 4808 patients acquired from less than three trunk scout CT scans in either of the three CT devices and were not included in the training or validation datasets. The images used in the test were those from the earliest examination date or a single examination (4808 images) of 4808 patients as the baseline images and the second examination date (1291 images) as the follow-up images. Pixel spacing of all images was resampled to 2.0 × 2.0 mm2 using bicubic interpolation and cropping the central 256 × 384 (columns and rows) pixels, and the bit depth was rescaled linearly down to 8 bits.
+
+DCNN Learning
+
+EfficientNet [32] is a model of convolutional neural networks that was proposed in 2019. EfficientNet adopts mobile inverted bottleneck convolution (MBConv) [32–34], which is similar to MobileNetV2 [33] and MnasNet [34]. EfficientNet incorporates a compound scaling system that uniformly scales each dimension with a fixed set of scaling coefficients. EfficientNetV2 [35] was launched in 2021, featuring a smaller model and faster training method than its predecessor, EfficientNet. To address the issue of large image size and its impact on memory usage, EfficientNetV2 uses FixRes [36] to reduce image size for training without any post-training layer fine-tuning. EfficientNetV2 replaces MBConv with Fused-MBConv [37] to better use mobile or server accelerators and uses a single 3 × 3 convolution instead of depth-wise 3 × 3 convolution and expansion 1 × 1 convolution. To find the optimal combination of MBConv and Fused-MBConv, a training-aware Neural Architecture Search [34, 38] is proposed. EfficientNetV2 also uses modified progressive learning and training with different image sizes that adjust regularization intensity as needed and solve the issue of reduced accuracy resulting from changing image sizes during training [39].
+
+In this study, the feature extractor was trained using the original EfficientNetV2-L [35] backbone, which outputs 1280-d of feature vectors. The classifier used for training consists of a nonlinear fully connected (FC) layer and a metric learning layer. The nonlinear FC layers comprise four sequential layers: a linear layer, rectified linear unit activation function, batch normalization layer, and linear layer. Additionally, we introduced AdaCos [40], a deep metric learning technique [41], to control the dimensionality reduction complexity while preserving each patient’s characteristics. AdaCos can automatically determine hyperparameters and perform deep metric learning without additional tuning steps. Feature vectors were extracted from the trained feature extractor to re-identify the examined patients from the scout CT images of the trunk.
+
+Deep learning was performed using a computer with a Tesla P40 (NVIDIA, Santa Clara, CA, USA) graphics processing unit, EPYC 7302P 3.0 GHz (Advanced Micro Devices, Inc., Santa Clara, CA, USA) central processing unit, and 32 GB of random-access memory. Python 3.11.4 and PyTorch 2.0.1 + cu117 were used to perform the DCNN training, validation, and testing using the element-wise adaptive sharpness-aware minimization optimizer [42] (base optimizer SGD with a momentum of 0.8 and a weight decay of 0.002) with a neighborhood size (rho) of 2.0, batch size of 20, loss function of smooth cross entropy with a label smoothing of 0.05, and a learning rate scheduler of cosine decay (initial-last, 0.005–0.0005) without warmup.
+
+Data Augmentation
+
+In this study, data augmentation for training images consisted of four sequential layers: random perspective, random rotation, random scaling for the transversal direction, and cropping on the center (see Appendix).
+
+The height of the patient’s table is not always the same for baseline and follow-up CT scans. As the table height changes, the magnification changes at the transverse of the scout CT images owing to geometric effects [29–31]. In this study, to make the neural network more robust to image changes with patient table height variability, we proposed an augmentation technique, RandomTransversalScaling, which provides the effect of randomly varying the height of the patient table. The image width was randomly rescaled, and the magnification toward the image height remained fixed during the proposed data augmentation.
+
+Re-Identification Performances of the Proposed Method
+
+The cosine similarity between the local 1280-d features in the baseline and follow-up scout CT images was used as the similarity index. The cosine similarity ranged from − 1 to 1 and was used to determine whether the patient pair corresponded to the same patient. The re-identification performance of the proposed method was evaluated using the test dataset (baseline, 4808 images of 4808 patients and follow-up, 1291 images of 1291 patients who underwent baseline examination). This study evaluated the top-1 and top-10 accuracies (ACC1 and ACC10) in the entire test dataset and two of its subsets, as shown in Table 3, under the combinations of the two vendors of each CT device used at baseline and in each follow-up examination. The top-K accuracy computes the proportions where the number of correct patient’s image is among the number of the top-K patient’s image, ranked by similarity index. The ACC1 is the ratio obtained between the pairs with the highest cosine similarity, whereas the ACC10 is the ratio obtained between the pairs within the top-10 higher cosine similarities. Both ACC1 and ACC10 ratios were calculated in all comparisons among the 4808 patients and related pairs. The calculation time of the test process using the proposed method was approximately 10 min for comparing 4808 × 1291 patients. However, the GPU memory required approximately 7 min to read the images of 4808 patients, and the calculation cost for clinical application could be shortened by calculating the feature vectors in advance. Table 3 Two subsets (same vendor and different vendors) in the test dataset
+
+Name of subset	CT device	Number of patients	
+Baseline	Follow-up	
+Same vendor	S1	S1	169	887	
+S1	S2	166	
+S2	S1	220	
+S2	S2	263	
+G1	G1	69	
+Different vendors	S1	G1	57	404	
+S2	G1	93	
+G1	S1	114	
+G1	S2	140	
+Total				1291	
+CT computed tomography, S1 SOMATOM Definition (SIEMENS Medical Solutions), S2 SOMATOM Sensation64 (SIEMENS Medical Solutions), G1 Optima CT660 (GE Medical Systems)
+
+Statistical Analysis
+
+The ACC1s calculated for two subsets (same vendor and different vendors) from the test dataset were statistically compared using a Z-test to compare two unpaired proportions. Subsequently, the ACC1s calculated with and without the proposed data augmentation technique on different vendor subsets were statistically compared using McNemar’s chi-squared test to compare the two paired proportions [43].
+
+Results
+
+Figure 3 shows the ACC1 performance and similarity score transitions for the number of epochs in the proposed method. ACC1 increased significantly as the number of epochs increased for the entire dataset and different vendors (p < 0.01). For the same vendor, ACC1 increased significantly when comparing 100 and 200 epochs; however, ACC1 showed no increase from 200 to 300 epochs. Figure 3a shows the transition of ACC1 for the number of epochs using the proposed method on the test dataset: the entire dataset and two subsets. The ACC1 performance on a subset comprising image pairs from the same vendor (blue line) was 0.9 or higher for all ranges of epochs and achieved a value of 0.929 at 300 epochs. The ACC1 performance in a subset comprising image pairs from different vendors (orange line) also improved as the number of epochs increased, achieving a value of 0.859 at 300 epochs. Figure 3b shows the transition of the similarity score for the number of epochs using the proposed method in the test dataset. At 300 epochs, the distributions of the similarity scores calculated for the same patient (blue bars) and those for different patients (orange bars) did not overlap. However, at 400 epochs, distributions for the same and different patients were concentrated around 1.0 with similarity scores.Fig. 3 Top-1 accuracy performance and similarity score transition for the number of epochs in the proposed method. a Relationship between the number of epochs and top-1 accuracy for the entire dataset, same vendor, and different vendors. The black, blue, and orange solid lines represent the entire dataset, the same vendor, and different vendors, respectively. b Relationship between the number of epochs and the average similarity score for the same patient and different patients in the entire dataset. The blue and orange bars represent the same patient and different patients, respectively. Error bars represent standard deviations. Same vendor, a subset that consists of image pairs from scanners from the same vendor; Different vendors, a subset that consists of image pairs from scanners from different vendors; Same patient pair, similarity scores calculated from the same patient; Different patient pair, similarity scores calculated from different patients
+
+Figure 4 shows the ACC1 transition in the proposed method for RandomTransversalScaling for the entire dataset and two subsets by varying (a) the transversal scaling factor and (b) the probability of the image being transformed. Applying the proposed data augmentation method slightly improved the performance of ACC1 from 0.899 (without applying this augmentation) to 0.907 (applying this augmentation with the best performance) in the entire dataset; however, the improvements were not significant (p = 0.138). Furthermore, the performance of ACC1 improved from 0.809 (without applying this augmentation) to 0.859 (applying this augmentation with the best performance) in a subset of image pairs from different vendors (p < 0.01). However, for the transversal scaling factor of 1.04, where maximum performance was observed, a significant difference (p < 0.01) was observed between the two subsets from the same vendor (ACC1 0.929) and different vendors (ACC1 0.859).Fig. 4 Top-1 accuracy performance using the proposed data augmentation method in the entire dataset and two subsets. a The relationship between the transversal scaling factor and top-1 accuracy. b The relationship between the probability of the image being transformed and top-1 accuracy
+
+Figure 5 shows the cumulative match characteristic (CMC) curves after 300 epochs, with a transversal scaling factor of 1.04 and a probability of 0.25 for image transformation. The ACC10s for the entire dataset, same vendor, and different vendors increased from each corresponding ACC1 value to 0.969, 0.967, and 0.973, respectively.Fig. 5 Comparison of CMC curve performances for the test dataset (entire, same vendor, and different vendors). Top-K accuracy shows the proportions where the correct patient’s image is among the top-K patient’s images ranked by the similarity index. CMC, cumulative match characteristic; Same vendor, a subset that consists of image pairs from scanners from the same vendor; Different vendors, a subset that consists of image pairs from scanners from different vendors
+
+Figure 6 shows an important area visualization that identifies the patient using a model trained based on the proposed method using Grad-CAM [44]. Grad-CAM generates heat maps of local features with patient specificity and superimposes them on the original scout CT image to allow visualization of important regions for patient re-identification.Fig. 6 Visualization of an important region that identifies the patient using the trained model of the proposed method using Grad-CAM. Images of three patients (a–c) with three images each in the order of scan time, two images (first and second) from the training dataset, and one image (third) from the validation dataset overlaid on the Grad-CAM heatmap. a Image of a patient whose training (SIEMENS Medical Solutions) and verification images (GE Medical Systems) are obtained from scanners from different vendors. b Image of a patient with an implantation device (the second and third images show stent placement and coil in the abdominal-pelvic region). c Image of a patient with an implanted device (total hip arthroplasty implant and central venous port)
+
+The top-K error is the ratio of times the classifier failed to include the proper class among its top-K guesses; for the proposed method, this occurred 40 times out of 1291 guesses. Table 4 shows the top five reasons for each image pair resulting in a top-10 error. The most common reason was that the scan range differed between the two scout CT images. Next, lung condition, intestinal gas, scanner vendor, and arm position exhibited decreasingly high frequencies in that order. Figure 7 shows examples of same patient image pairs that resulted in a top-10 error. Table 4 Top five reasons for each image pair resulting in a top-10 error
+
+Reasons	Proportion	
+Scan range	0.500	
+Lung condition	0.400	
+Intestinal gas	0.325	
+Scanner vendor	0.275	
+Arm position	0.225	
+
+Fig. 7 Examples of top-10 error patient-pairs. Example demonstrating top-10 error evaluation in the test dataset due to a arm position, both arms raised or not; intestinal gas, have fullness or not; b scan range, neck region included or not, intestinal gas, have fullness or not; and c lung condition, deep inspiration or not. Follow-up (right) and baseline (left) scans of single patients. The achieved similarity indexes were (a) 0.594 and (b) 0.685
+
+Discussion
+
+This study proposed an image-matching method using a DCNN feature extractor to re-identify examined patients using clinical scout CT images. A novel DCNN feature extractor, trained using a real clinical dataset of scout CT images, performed a dimensional reduction to 1280-d while retaining each patient’s characteristics. The re-identification performance using the proposed data augmentation scheme, adding a transformation of random scaling in the transversal direction, was significantly better for the subset of devices from different vendors in 300 epochs (ACC1 + 0.0495, p < 0.01).
+
+Although a slight degradation was observed during the evaluation of subsets from the same vendor (ACC1 − 0.0101), the proposed model already achieved high performance (ACC1 of 0.9 or more) with or without RandomTransversalScaling. The ACC1 performance for the entire dataset was increased slightly (ACC1 + 0.00852); however, there were no significant differences.
+
+Scout CT images have differences in geometry due to variations in magnification along the transverse direction, depending on the table height set during patient positioning. Furthermore, such geometric differences are more noticeable in devices from different vendors. We believe the ACC1 performance using our proposed data augmentation method with RandomTransversalScaling was improved.
+
+The optimized hyperparameters that yielded the highest ACC1 value were 300 epochs, a transversal scaling factor of 1.04, and a probability of 0.25 that an image was transformed. When the number of epochs was optimized, the ACC1 performance improved, even when the number of epochs increased from 300 to 400. However, the distributions of performance for the same patient and different patients were concentrated around a similarity score of 1.0 as shown in Fig. 3b, suggesting that the proposed method at 400 epochs or more had an overfitting problem. Therefore, 300 was set as the optimal number of epochs in this study.
+
+The proposed method had high ACC1 performance at 0.90 or higher and improved the ACC1 on the subset of images acquired using devices from different vendors by incorporating changes in the magnification of width owing to changes in the patient’s table height in each examination as data augmentation. As shown in a previous study on the left–right flipping mistakes in chest X-ray images [45], data augmentation techniques that would result in undesirable transformations of clinical images, such as random flips (left/right or top/bottom), were not used in this study because there were concerns about an increased risk of human error.
+
+For standard patients without implanted devices, as shown in Fig. 6a, regions of the mediastinum were extracted as patient characteristics. The training dataset contained images without implanted devices (the first image) and these (the second image), and the implanted devices in the validation image were not properly recognized as important areas for feature extraction (Fig. 6b). However, the patient shown in Fig. 6c had recognized implanted devices as important areas, and these were used as the patient characteristic features, because all training datasets contained implanting devices. Even if some patients were implanted with the same device, the implantation position and X-ray projection angle during scout imaging differed in each patient. Therefore, we believe that there is no issue of extracting the regions of the implanted devices in scout CT images as patient characteristics.
+
+Our findings have important practical implications. First, a key feature of the proposed method is that re-identification can be performed with high accuracy, even for patient data that are not used in training. Similar to the re-identification models demonstrated for other medical images [2, 4, 12–24], our results demonstrate the power and potential of the proposed method for scout CT images of the trunk. Another study [2] used ACC10 as the threshold for alert occurrence with a value of 0.96. Using ACC10 as a threshold in this study, an alert could be triggered on 4% of top-10 error rate, even if the patient is correctly identified. A 4% erroneous alarm rate may seem high, given that the misfiling rate is 0.075% [3] or 0.002% [8]; however, we believe it is possible to re-assess whether the patient in the image is the correct patient with high accuracy by considering disturbing factors such as intra-patient variations in clinical application as shown in Table 4. When our framework is adopted for other scout CT image datasets in future research, the proposed feature extractor may be substituted with retraining (or transfer learning) for optimal usage. Second, our clinical dataset, split into training, validation, and test sets, reflected a real clinical scenario in a single center, where developers train models using retrospective images and test (clinical application) their performance on prospective images. Hence, we believe that the approach in this study will provide reliable assistance for preventing human error in clinical applications related to the re-identification of examined patients who underwent CT scans.
+
+This study has certain limitations. First, the dataset was obtained using three CT devices: two scanners by SIEMENS and one scanner by GE. The number of images acquired with the GE scanner (1774) was fewer than that acquired with the SIEMENS scanners (7054), and there was a potential risk that learning was biased toward SIEMENS images. In addition, different CT devices, particularly those from other vendors, might have different imaging protocols and magnifications for scout CT images. An unknown domain, such as images acquired using the devices from other vendors, may affect patient re-identification performance, and the performance achieved in this study may not be reproducible. The re-identification performance of follow-up scans using devices from different vendors in this study was improved using the proposed augmentation, RandomTransversalScaling; however, the performance remained significantly lower than that of devices from the same vendor (p < 0.01). Therefore, in this study, a domain-shift problem is thought to exist for other CT vendors. Furthermore, previous studies have shown that it is possible to detect patient race, age, and view position using chest X-ray images [46–48]. Therefore, theoretically, scout CT images of the trunk might have domain-shift problems for identifying patient race, age, and view position or other domains. Second, the dataset of this study was based on a retrospective analysis, and patients younger than 20 years were excluded. Such patients may experience changes in their physical characteristics owing to growth between the two CT examination periods, which may affect the performance of patient re-identification. Third, this method only works for patients who underwent at least two scout scans; therefore, it cannot be applied to patients being examined for the first time.
+
+Further research is required to evaluate how domain-shift problems, caused by intra-patient variations such as scan range, lung condition, intestinal gas, and arm position, as well as between scanners from different vendors, degrade biometric performance. Therefore, future research in this domain should use training datasets consisting of scout CT images obtained from scanners from all vendors or consider domain-adaptation techniques [25–28, 49–52].
+
+Conclusion
+
+In this study, we proposed a patient re-identification method using a deep feature extractor that is robust even when applied to medical images obtained from devices from different vendors. The proposed method showed the possibility of linking correct metadata to a set of CT images of a trunk with lost or wrongly assigned metadata. Clinical CT examinations utilizing cutting-edge technologies (such as the technique presented in this study) provide a key solution to the inherent potential risks that can lead to medical malpractice.
+
+Appendix
+
+Data Augmentation
+
+For each image I(x,y) in the training dataset, an augmentation strategy was utilized to obtain the transformed image I(x′,y′).
+
+Random Perspective
+
+A random perspective augmentation in this study performed the perspective transformation of the image with a probability of 0.1 and a distortion scale of 0.1 with bicubic resampling.
+
+Random Rotation
+
+A random rotation augmentation in this study performed the rotation transformation with bicubic resampling by an angle selected from the range of − 5° to 5° randomly. Pixels outside the rotated region were assigned zeros.
+
+Random Transversal Scaling
+
+Random transversal scaling is an image data augmentation method that randomly changes the scale of an image in the transverse direction within a specified range. The formulas used for transversal scaling are presented in Eqs. (1) and (2).1 x′y′1=Sx00010001×xy1
+
+2 x′=Sx×x,y′=y
+
+where Sx represents the scaling coefficient calculated using Eq. (3) for the original image width W, and the scaling term S is selected randomly from a specified range3 Sx=W+SW
+
+Pixels outside the post-scaling region were filled with zero.
+
+Center Crop
+
+A center crop augmentation in this study performed cropping around the center of the image to a specified size, with columns and rows of 224 and 384, respectively.
+
+Acknowledgements
+
+The authors thank Junji Morishita at Kyushu University, Fukuoka, Japan, for his valuable insights on improving our manuscript; Drs. Shohei Kudomi, Masatoshi Yamane, Takuya Uehara at Yamaguchi University Hospital, Yamaguchi, Japan, and Yuki Fujimoto at Omi Medical Center, Shiga, Japan, for organizing the dataset of this study; and Editage (http://www.editage.com) for providing English language editing (funding source for editing: Osaka University).
+
+Author Contribution
+
+All authors contributed to the study conception and design. Material preparation and data collection were performed by Yasuyuki Ueda, and analysis by Yasuyuki Ueda and Daiki Ogawa. The first draft of the manuscript was written by Yasuyuki Ueda, and all authors commented on previous versions of the manuscript. All authors read and approved the final manuscript.
+
+Funding
+
+Open Access funding provided by Osaka University. This study was supported by JSPS KAKENHI (grant numbers JP18K15590 and JP21K15827). Open access funding provided by Osaka University.
+
+Data Availability
+
+All scout CT images in this study are owned by Yamaguchi University Hospital, Yamaguchi, Japan, and cannot be made publicly available owing to patient privacy, its proprietary nature, and ethical concerns.
+
+Code Availability
+
+The code for the proposed method associated with the current submission is available at https://github.com/d83yk/dml-scout-ct-patient-re-id.
+
+Declarations
+
+Ethics Approval
+
+All procedures in this study were in conformance with the ethical standards of the Institutional Review Board at each author’s affiliated institutions and with the 1964 Helsinki Declaration and its later amendments or comparable ethical standards.
+
+Consent to Participate
+
+Written informed consent was not required for this study because of the retrospective nature of the study.
+
+Consent for Publication
+
+Written consent of the study participants or their legal guardians was not required for publishing the data of the individuals in the manuscript because of the retrospective nature of this study.
+
+Competing Interests
+
+The authors declare no competing interests.
+
+Publisher's Note
+
+Springer Nature remains neutral with regard to jurisdictional claims in published maps and institutional affiliations.
+==== Refs
+References
+
+1. Morishita J, Ueda Y: New solutions for automated image recognition and identification: challenges to radiologic technology and forensic pathology. Radiol Phys Technol 14:123-133, 2021
+2. Toge R, Morishita J, Sasaki Y, Doi K: Computerized image-searching method for finding correct patients for misfiled chest radiographs in a PACS server by use of biological fingerprints. Radiol Phys Technol 6:437–443, 2013
+3. Morishita J, Watanabe H, Katsuragawa S, Oda N, Sukenobu Y, Okazaki H, Nakata, H, Doi K: Investigation of misfiled cases in the PACS environment and a solution to prevent filing errors for chest radiographs. Acad Radiol 12:97–103, 2005
+4. Morishita J, Katsuragawa S, Kondo K, Doi K: An automated patient recognition method based on an image-matching technique using previous chest radiographs in the picture archiving and communication system environment. Med Phys 28:1093–1097, 2001
+5. Seiden SC Barach P Wrong-side/wrong-site, wrong-procedure, and wrong-patient adverse events: Are they preventable? Arch Surg 2006 141 931 939 10.1001/archsurg.141.9.931 16983037
+6. Pennsylvania Patient Safety Authority ECRI Institute, Institute for Safe Medication Practices: Pennsylvania patient safety advisory, applying the universal protocol to improve patient safety in radiology Pa Pateint Saf Advis 2011 8 63 69
+7. Care Quality Commission IR(ME)R annual report 2021/22. 2022. Available at https://www.cqc.org.uk/sites/default/files/2022-12/20221117%20IRMER%20Annual%20Report%2021%2022%20FINAL%20.pdf. Accessed 6 October 2023.
+8. Sadigh G Loehfelm T Applegate KE Tridandapani S JOURNAL CLUB: Evaluation of Near-Miss Wrong-Patient Events in Radiology Reports AJR Am J Roentgenol 2015 205 337 343 10.2214/AJR.14.13339 26204284
+9. Tommasino C Merolla F Russo C Staibano S Rinaldi AM Histopathological image deep feature representation for CBIR in smart PACS J Digit Imaging 2023 36 2194 2209 10.1007/s10278-023-00832-x 37296349
+10. Jeyakumar, V, Kanagaraj, B: A medical image retrieval system in pacs environment for clinical decision making. In ‘Intelligent Data Analysis for Biomedical Applications,’ Academic Press, 2019
+11. Valente F Costa C Silva A Dicoogle, a PACS featuring profiled content based image retrieval PLoS One 2013 8 e61888 10.1371/journal.pone.0061888 23671578
+12. Ueda Y, Morishita J: Patient identification based on deep metric learning for preventing human errors in follow-up X-ray examinations. J Digit Imaging 36:1941-1953, 2023
+13. Packhäuser K Gündel S Münster N Syben C Christlein V Maier A Deep learning-based patient re-identification is able to exploit the biometric nature of medical chest X-ray data Sci Rep 2022 12 14851 10.1038/s41598-022-19045-3 36050406
+14. Nguyen K, Nguyen HH, Tiulpin A: AdaTriplet: Adaptive gradient triplet loss with automatic margin learning for forensic medical image matching. In: Wang L, Dou Q, Fletcher PT, Speidel S, Li S (eds) Medical Image Computing and Computer Assisted Intervention – MICCAI 2022. MICCAI 2022. Lecture Notes in Computer Science, vol 13438, 725–735, 2022
+15. Shimizu Y Morishita J Development of a method of automated extraction of biological fingerprints from chest radiographs as preprocessing of patient recognition and identification Radiol Phys Technol 2017 10 376 381 10.1007/s12194-017-0400-y 28452001
+16. Shimizu Y Matsunobu Y Morishita J Evaluation of the usefulness of modified biological fingerprints in chest radiographs for patient recognition and identification Radiol Phys Technol 2016 9 240 244 10.1007/s12194-016-0355-4 27132238
+17. Kao EF Lin WC Jaw TS Liu GC Wu JS Lee CN Automated patient identity recognition by analysis of chest radiograph features Acad Radiol 2013 20 1024 1031 10.1016/j.acra.2013.04.006 23830608
+18. Morishita J, Katsuragawa S, Sasaki Y, Doi K: Potential usefulness of biological fingerprints in chest radiographs for automated patient recognition and identification. Acad Radiol 11:309–315, 2004
+19. Shamir L Ling S Rahimi S Ferrucci L Goldberg IG Biometric identification using knee X-rays Int J Biom 2009 1 365 370 20046910
+20. Lamb JM Agazaryan N Low DA Automated patient identification and localization error detection using 2-dimensional to 3-dimensional registration of kilovoltage x-ray setup images Int J Radiat Oncol Biol Phys 2013 87 390 393 10.1016/j.ijrobp.2013.05.021 23849694
+21. Ueda Y, Morishita J, Kudomi S: Biological fingerprint for patient verification using trunk scout views at various scan ranges in computed tomography. Radiol Phys Technol 15: 398-408, 2022
+22. Ueda Y, Morishita J, Hongyo T: Biological fingerprint using scout computed tomographic images for positive patient identification. Med Phys 46:4600-4609, 2019
+23. Ueda Y, Morishita J, Kudomi S, Ueda K: Usefulness of biological fingerprint in magnetic resonance imaging for patient verification. Med Biol Eng Comput 54:1341-1351, 2016
+24. Matsunobu Y Morishita J Usumoto Y Okumura M Ikeda N Bone comparison identification method based on chest computed tomography imaging Leg Med (Tokyo) 2017 29 1 5 10.1016/j.legalmed.2017.08.002 28869907
+25. Guan H Liu M Domain adaptation for medical image analysis: a survey IEEE Trans Biomed Eng 2022 69 1173 1185 10.1109/TBME.2021.3117407 34606445
+26. Li C Lin X Mao Y Lin W Qi Q Ding X Huang Y Liang D Yu Y Domain generalization on medical imaging classification using episodic training with task augmentation Comput Biol Med 2022 141 105144 10.1016/j.compbiomed.2021.105144 34971982
+27. Zhou C, Zhang W, Chen H, Chen L: Domain adaptation for Medical image classification without source data. IEEE Int Conf Bioinform Biomed 2224–2230, 2022
+28. Agrawal T Choudhary P Segmentation and classification on chest radiography: a systematic survey Vis Comput 2023 39 875 913 10.1007/s00371-021-02352-7 35035008
+29. Li B Behrman RH Norbash AM Comparison of topogram-based body size indices for CT dose consideration and scan protocol optimization Med Phys 2012 39 3456 3465 10.1118/1.4718569 22755725
+30. Li J Udayasankar UK Toth TL Seamans J Small WC Kalra MK Automatic patient centering for MDCT: effect on radiation dose AJR Am J Roentgenol 2007 188 547 552 10.2214/AJR.06.0370 17242267
+31. Toth T Ge Z Daly MP The influence of patient centering on CT dose and image noise Med Phys 2007 34 3093 3101 10.1118/1.2748113 17822016
+32. Tan M, Le Q: EfficientNet: Rethinking model scaling for convolutional neural networks. Proceedings of the 36th International Conference on Machine Learning, ICML 2019. arXiv 6105–6114, 2019
+33. Sandler M, Howard A, Zhu M, Zhmoginov A, Chen LC.: Mobilenetv2: Inverted residuals and linear bottlenecks. In ‘Proceedings of the IEEE conference on computer vision and pattern recognition.’ 4510–4520, 2018
+34. Tan M, Chen B, Pang R, Vasudevan V, Sandler M, Howard A, Le QV: MnasNet: Platform-aware neural architecture search for mobile. In ‘Proceedings of the IEEE/CVF conference on computer vision and pattern recognition.’ 2815–2823, 2019
+35. Tan M, Le Q: EfficientNetV2: Smaller models and faster training. In ‘Proceedings of the 38th International Conference on Machine Learning.’ 139:10096–10106, 2021
+36. Touvron H, Vedaldi A, Douze M, Jégou H.: Fixing the train-test resolution discrepancy. Adv Neural Inf Process Syst 32, 2019
+37. Gupta S, Tan M.: Efficientnet-Edgetpu: Creating Accelerator-Optimized Neural Networks with Automl. 2019. Available at https://ai.googleblog.com/2019/08/efficientnet-edgetpu-creating.html. Accessed 1 December 2023.
+38. Yang TJ, Howard A, Chen B, Zhang X, Go A, Sandler M, Sze V, Adam H: NetAdapt: Platform-Aware Neural Network Adaptation for Mobile Applications. In ‘Computer Vision – ECCV 2018.’ ECCV 2018. Lecture Notes in Computer Science, Cham, Springer, 2018
+39. Hoffer E, Weinstein B, Hubara I, Ben-Nun T, Hoefler T, Soudry D.: Mix & match: training convents with mixed image sizes for improved accuracy, speed and scale resiliency. arXiv preprint 1908.08986, 2019
+40. Zhang X, Zhao R, Qiao Y, Wang X, Li H: AdaCos: Adaptively scaling cosine logits for effectively learning deep face representations. 2019 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR). 10815–10824, 2019
+41. Musgrave K, Belongie S, Lim SN: A metric learning reality check. In: Computer Vision – ECCV 2020. ECCV 2020. Lecture Notes in Computer Science, Cham, Springer, 2020
+42. Kwon J, Kim J, Park H, Choi IK: ASAM: Adaptive sharpness-aware minimization for scale-invariant learning of deep neural networks. In ‘Proceedings of the 38th International Conference on Machine Learning.’ PMLR. 2021. https://proceedings.mlr.press/v139/kwon21b.html.
+43. McNemar Q Note on the sampling error of the difference between correlated proportions or percentages Psychometrika 1947 12 153 157 10.1007/BF02295996 20254758
+44. Selvaraju RR Cogswell M Das A Vedantam R Parikh D Batra D Grad-CAM: visual explanations from deep networks via gradient-based localization Int J Comput Vis 2020 128 336 359 10.1007/s11263-019-01228-7
+45. Sakai Y Takahashi K Shimizu Y Ishibashi E Kato T Morishita J Clinical application of biological fingerprints extracted from averaged chest radiographs and template-matching technique for preventing left-right flipping mistakes in chest radiography Radiol Phys Technol 2019 12 216 223 10.1007/s12194-019-00504-y 30784015
+46. Gichoya JW Banerjee I Bhimireddy AR Burns JL Celi LA Chen LC Correa R Dullerud N Ghassemi M Huang SC Kuo PC Lungren MP Palmer LJ Price BJ Purkayastha S Pyrros AT Oakden-Rayner L Okechukwu C Seyyed-Kalantari L Trivedi H Wang R Zaiman Z Zhang H AI recognition of patient race in medical imaging: a modelling study Lancet Digit Health 2022 4 e406 e414 10.1016/S2589-7500(22)00063-2 35568690
+47. Ieki H Ito K Saji M Kawakami R Nagatomo Y Takada K Kariyasu T Machida H Koyama S Yoshida H Kurosawa R Matsunaga H Miyazawa K Ozaki K Onouchi Y Katsushika S Matsuoka R Shinohara H Yamaguchi T Kodera S Higashikuni Y Fujiu K Akazawa H Iguchi N Isobe M Koshikawa T Komuro I Deep learning-based age estimation from chest X-rays indicates cardiovascular prognosis Commun Med 2022 2 159 10.1038/s43856-022-00220-6 36494479
+48. Kim TK Yi PH Wei J Shin JW Hager G Hui FK Sair HI Lin CT Deep learning method for automated classification of anteroposterior and posteroanterior chest radiographs J Digit Imaging 2019 32 925 930 10.1007/s10278-019-00208-0 30972585
+49. Ganin, Y, Utsinova, E, Ajakan, H, Germain, P, Larochelle, H, Laviolette, F, Marchand, M, Lampitsky, V: Domain-Adversarial Training of Neural Networks. In: Domain Adaptation in Computer Vision Applications. Advances in Computer Vision and Pattern Recognition, Cham, Springer, 2017
+50. Eric T, Judy H, Kate S, Trevor D: Adversarial discriminative Domain Adaptation. IEEE Conference on Computer Vision and Pattern Recognition 2962–2971, 2017
+51. Judy H, Eric T, Taesung P, Jun-Yan Z, Phillip I, Kate S, Alexei E, Trevor D: Proceedings of the 35th International Conference on Machine Learning, PMLR 80:1989–1998, 2018
+52. Saito K, Watanabe K, Ushiku Y, Harada T: Maximum Classifier Discrepancy for Unsupervised Domain Adaptation. IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) 3723–3732, 2018

@@ -1,0 +1,348 @@
+
+==== Front
+Stat Comput
+Stat Comput
+Statistics and Computing
+0960-3174
+1573-1375
+Springer US New York
+
+38911222
+10446
+10.1007/s11222-024-10446-0
+Original Paper
+A Bayesian multilevel model for populations of networks using exponential-family random graphs
+Lehmann Brieuc b.lehmann@ucl.ac.uk
+
+1
+White Simon simon.white@mrc-bsu.cam.ac.uk
+
+23
+1 https://ror.org/02jx3x895 grid.83440.3b 0000 0001 2190 1201 Department of Statistical Science, University College London, 1-19 Torrington Place, London, WC1e 7HB UK
+2 https://ror.org/013meh722 grid.5335.0 0000 0001 2188 5934 Department of Psychiatry, University of Cambridge, Cambridge, CB2 0AH UK
+3 grid.5335.0 0000000121885934 MRC Biostatistics Unit, University of Cambridge, Cambridge, CB2 0SR UK
+19 6 2024
+19 6 2024
+2024
+34 4 1363 7 2023
+3 6 2024
+© The Author(s) 2024
+https://creativecommons.org/licenses/by/4.0/ Open Access This article is licensed under a Creative Commons Attribution 4.0 International License, which permits use, sharing, adaptation, distribution and reproduction in any medium or format, as long as you give appropriate credit to the original author(s) and the source, provide a link to the Creative Commons licence, and indicate if changes were made. The images or other third party material in this article are included in the article's Creative Commons licence, unless indicated otherwise in a credit line to the material. If material is not included in the article's Creative Commons licence and your intended use is not permitted by statutory regulation or exceeds the permitted use, you will need to obtain permission directly from the copyright holder. To view a copy of this licence, visit http://creativecommons.org/licenses/by/4.0/.
+The collection of data on populations of networks is becoming increasingly common, where each data point can be seen as a realisation of a network-valued random variable. Moreover, each data point may be accompanied by some additional covariate information and one may be interested in assessing the effect of these covariates on network structure within the population. A canonical example is that of brain networks: a typical neuroimaging study collects one or more brain scans across multiple individuals, each of which can be modelled as a network with nodes corresponding to distinct brain regions and edges corresponding to structural or functional connections between these regions. Most statistical network models, however, were originally proposed to describe a single underlying relational structure, although recent years have seen a drive to extend these models to populations of networks. Here, we describe a model for when the outcome of interest is a network-valued random variable whose distribution is given by an exponential random graph model. To perform inference, we implement an exchange-within-Gibbs MCMC algorithm that generates samples from the doubly-intractable posterior. To illustrate this approach, we use it to assess population-level variations in networks derived from fMRI scans, enabling the inference of age- and intelligence-related differences in the topological structure of the brain’s functional connectivity.
+
+Supplementary Information
+
+The online version contains supplementary material available at 10.1007/s11222-024-10446-0.
+
+Keywords
+
+Exponential random graph model (ERGM)
+Bayesian linear regression
+Markov chain Monte Carlo (MCMC)
+Brain networks
+http://dx.doi.org/10.13039/501100000265 Medical Research Council U105292687 U105292687 http://dx.doi.org/10.13039/501100000266 Engineering and Physical Sciences Research Council EP/R018561/1 issue-copyright-statement© Springer Science+Business Media, LLC, part of Springer Nature 2024
+==== Body
+pmcIntroduction
+
+The statistical analysis of network data is becoming increasingly commonplace, with applications across various disciplines, such as epidemiology, social science, neuroscience and finance (Kolaczyk 2009). Over the last four decades, a number of statistical models for networks have been developed, including stochastic blockmodels (Holland et al. 1983), latent space models (Hoff et al. 2002) and—the focus of this article—exponential random graph models (ERGMs) (Frank and Strauss 1986).
+
+An exponential random graph model is a set of parametric statistical distributions on network data (see Schweinberger et al. (2020) for a recent review). The aim of the model is to characterise the distribution of a network in terms of a set of summary statistics. These summary statistics are typically comprised of topological features of the network, such as the number of edges and subgraph counts. The summary statistics enter the likelihood via a weighted sum; the weights are (unknown) model parameters that quantify the relative influence of the corresponding summary statistic on the overall network structure and must be inferred from the data. ERGMs are thus a flexible way in which to describe the global network structure as a function of network summary statistics.
+
+To date, statistical network models, including ERGMs, have largely focused on the analysis of a single network. Formally, a network consists of a set of nodes and a set of edges between these nodes. Let N={1,⋯,N} be a finite set of nodes, each of which may be associated with covariates xi∈X⊆Rq. An edge from node i to node j is denoted by Yij, so that the network is encoded by the adjacency matrix Y=(Yij)i,j∈N. For our purposes, the set of nodes N and their covariates x={x1,⋯,xN} are considered fixed, while the edges are considered to be random variables. Denote y to be an instantiation, or outcome, of the random adjacency matrix Y and write P(Y=y):=π(y) for the probability that Y takes the value y. A statistical network model specifies a parametrised probability distribution on the adjacency matrix π(y|x,θ) where θ is a vector of model parameters.
+
+A population of networks consists of n>1 adjacency matrices Y(1),⋯,Y(n) defined on a common set of nodes N. We will assume for simplicity that the nodal covariates are the same across networks, though in principle this not need be the case. A common example of a population of networks arises in neuroimaging, where a typical study consists of brain data across a number of participants, each constituting an individual network. Network analyses of the brain can provide insight into cognitive function by revealing how distinct brain areas work in conjunction (Fuster 2006). These analyses aim to identify salient topological features of the brain’s connectivity structure that are common across individuals or that vary with a given covariate.
+
+While one could fit a single model to each individual network separately, it is not straightforward to combine these individual results into a single coherent result that is representative of the whole population. An alternative approach is to construct a group-representative network by, for example, taking the mean of the edges across the individual networks and applying a threshold to the resulting weighted network (Achard et al. 2006). These approaches ignore the individual variability present in the networks and, moreover, typically do not accurately summarise the topological information across the individual networks (Ginestet et al. 2011).
+
+A more statistical approach is to treat each individual networks as distinct statistical units arising from a joint probability distribution π(y(1),⋯,y(n)|x,θ) (Ginestet et al. 2017). Here, we describe how to perform Bayesian linear regression where the outcome of interest is a network-valued random variable whose distribution is described by an exponential random graph models. By modelling the networks jointly, this framework provides a principled approach to characterise the relational structure for an entire population, and allows one to assess how network structure varies with a given set of network-level covariates. In the case of binary covariates, our method can be used to infer group-level differences in the network structure between sets of networks. We demonstrate on both simulated networks and real networks derived from resting-state functional magnetic resonance imaging (fMRI) scans from an ageing study.
+
+Inference for Bayesian ERGMs is challenging due to the double-intractability of the ERGM posterior distribution; standard Markov chain Monte Carlo (MCMC) schemes such as the Metropolis algorithm are not feasible as it is not possible to evaluate the acceptance ratio. A common workaround is to apply the exchange algorithm (Murray et al. 2006), which was first employed in the context of Bayesian ERGMs by Caimo and Friel (2011). To perform inference for our framework for populations of networks, we implemented an exchange-within-Gibbs algorithm that combines the exchange algorithm with the Gibbs sampler (Geman and Geman 1984) to produce samples from the target posterior distribution. The parameterization of general multilevel models can play an important role in the overall efficiency of a MCMC scheme (Gelfand et al. 1995; Papaspiliopoulos et al. 2003, 2007). To improve the mixing properties of the algorithm, we use an ancillarity-sufficiency interweaving strategy (ASIS) that interweaves between the centered and non-centered parameterizations (Yu and Meng 2011). To further boost efficiency, we also employ adaptation of the random-walk proposal parameters in the algorithm (see e.g. Roberts et al. (1997)).
+
+Related work
+
+Our work builds on that of Slaughter and Koehly (2016) who studied multiple approaches to building Bayesian hierarchical models for populations of networks based on ERGMs, including an example of Bayesian linear regression with a single covariate per network. We extend the approach of Slaughter and Koehly (2016) to explicitly handle multiple network-level covariates, employing a matrix Normal prior on the regression coefficients which admits (partial) conjugacy. As noted by Slaughter and Koehly (2016), multilevel models frequently exhibit poor mixing for some of the parameters. Our use of the ASIS algorithm greatly improves the efficiency of the sampler, allowing us to perform linear regression on larger populations of networks, and with a larger number of nodes in each network. We now describe some alternative approaches to modelling populations of networks.
+
+Hierarchical ERGMs
+
+Multilevel networks are networks with a nested hierarchical structure such that nodes may be grouped into subsets of nodes which may further be grouped into subset of subsets of nodes, and so on. It is worth emphasising that the hierarchical nature of a multilevel network corresponds to the grouping of nodes, as opposed to model parameters as might be typical in a Bayesian hierarchical model. A population of networks represents a two-level network such that each subset of nodes correspond to a separate network, with no connections between distinct subsets (see Fig. 1). Wang et al. (2013) proposed ERGMs for multilevel networks, introducing a range of model specifications to account for a range of multilevel structures for two-level networks. Yin and Butts (2022) develop a preprocessing approach to efficiently fit a ’pooled’ ERGM to multiple networks drawn from the same model. Yin et al. (2022) proposed a mixture of ERGMs to model populations of networks in which the group membership is unknown, which was extended to a data-adaptive Dirichlet process mixture of ERGMs by Ren et al. (2023). Schweinberger and Handcock (2015) introduced exponential random graph models with local dependence, providing a general framework encompassing multilevel networks (and thus populations of networks) and establishing a central limit theorem for this class of models.Fig. 1 A population of networks (bottom) can be seen as a special case of a multilevel network (top) in which each subset of nodes contains the same number of nodes and there are no edges between each subset of nodes. (colour figure online)
+
+ERGMs for brain networks
+
+Exponential random graph models have been applied to resting-state fMRI brain networks (see Simpson et al. (2011) for an early example). Simpson et al. (2012) constructed group-representative networks by taking the mean of the parameter estimates from ERGMs fit to each individual network. Sinke et al. (2016) constructed group-representative networks directly from individual diffusion tensor imaging (DTI) brain networks and then fit Bayesian ERGMs to the resulting group networks. Obando and Fallani (2017) applied ERGMs to functional connectivity brain networks derived from electroencephalographic (EEG) signals. In each of these approaches, the networks are fit independently from each other and, unlike the hierarchical approach described here, there is no pooling of information across networks.
+
+Other models for populations of networks
+
+Other statistical network models have recently been extended to handle populations of networks. Sweet et al. (2013) proposed a general framework of hierarchical network models (HNMs), which encompasses the model described in this article. They focus on a hierarchical representation of latent space models (Hoff et al. 2002) applied to social networks. Sweet et al. (2014) studied stochastic blockmodel in the HNM framework to infer clusters of nodes shared across networks. Durante et al. (2017) develop an alternative extension of the latent space model (Hoff et al. 2002) to populations of networks based on a low-dimensional mixture model representation. Durante et al. (2018) applied this model in the context of groups of networks to test for differences. Mukherjee et al. (2017) used graphons to detect clusters among multiple networks within a population (as opposed to clusters within networks). Signorelli and Wit (2020) use a model-based clustering method based on generalized linear (mixed) models to cluster networks that share certain network properties of interest.
+
+Model formulation
+
+Exponential random graph models
+
+The family of exponential random graph models define probability distributions over the space of networks in terms of sets of summary (or sufficient) statistics. We will focus on the case of undirected, binary networks, with Yij=Yji∈{0,1}. Let Y be the range of Y, i.e. the set of all possible outcomes. Let s(y,x) denote a vector of p summary statistics, such that each component is a function si:Y×XN↦R.
+
+An ERGM is specified by a particular set of p summary statistics and a map η:Θ↦Rp. The probability mass function of Y under the corresponding ERGM is given by1 π(y|,x,θ)=expη(θ)Ts(y,x)Z(θ).
+
+Here, θ∈Θ⊆Rp is a vector of p model parameters that must be estimated from the data and Z(θ)=∑y′∈Yexpη(θ)Ts(y′,x) is the normalising constant ensuring the probability mass function sums to one. Given data, that is, a realisation y, the goal is to infer which values of θ best correspond to the data under this distribution. To reduce the notational burden, we will henceforth omit the dependence on the nodal covariates x, considering this to be implicit in the specification of the probability distribution.
+
+A Bayesian multilevel model for populations of networks
+
+The ERGM provides a flexible family of distributions for a single network. Our aim is to extend this to a model for a population of networks in which each network is accompanied by a set of covariates. To do so, we use ERGMs as the basis of a Bayesian multilevel model. Let Y=(Y(1),⋯,Y(n)) be a set of n networks, and let X∈Rn×q be a matrix of q network-level covariates. Identify each network Y(i) with its own vector-valued ERGM parameter θ(i). Write θ=(θ(1),⋯,θ(n)) for the set of network-level parameters.
+
+We model each individual network Y(i) as an exponential random graph, which we denote Y(i)∼π(·|θ(i)). Each individual ERGM must consist of the same set of p summary statistics s(·). We then propose the following multilevel model:2 Y(i)∼π(·|θ(i)),i=1,⋯,nθ(i)∼NxiTβ,Σϵ,i=1,⋯,n
+
+where β is a q×p matrix of parameters, and the q-vector xi corresponds to the ith column of the matrix X. We assume that, conditional on their respective network-level parameters θ(i), the Y(i) are independent. We highlight the connection to multivariate linear regression: we have vector-valued ‘response’ variables θ(i) whose dependence on a set of q explanatory variables X we would like to assess, allowing the components of the residuals ϵ(i):=θ(i)-xiTβ to be correlated. The difference with standard multivariate linear regression is that the responses are not observed but are instead latent parameters of an ERGM model. With this specification comes the flexibility associated with multivariate linear regression; the X matrix can include polynomial terms and interactions between the covariates of interest.
+
+Prior specification
+
+The full conditional likelihood described by (2) can be written3 p(Y∣θ,X,β,Σϵ)=∏i=1np(Y(i)∣θ(i),xi,β,Σϵ)=∏i=1nπ(Y(i)∣θ(i))p(θ(i)∣xi,β,Σϵ).
+
+To complete this model, we must therefore specify a prior on (β,Σϵ). Motivated by computational simplicity, we opt for the (conditional) conjugate prior p(β,Σϵ)=p(β∣Σϵ)p(Σϵ), with4 β∣Σϵ∼MNβ0,Λ0-1,Σϵ,Σϵ∼W-1V0,ν0,
+
+where β0 is a q×p prior mean matrix, Λ0 is a p×p positive definite matrix, V0 is a q×q positive definite matrix, and ν0>q-1. Here, MN(M,U,V) denotes a matrix-normal distribution with location matrix M, row-based scale matrix U, and column-based scale V. W-1(Ψ,ν) is an inverse-Wishart distribution with scale Ψ and ν degrees of freedom.
+
+Equipped with this prior, we can factorise the posterior of (β,Σϵ) given the matrix X and the network-level parameters θ, into p(β,Σϵ∣θ,X)=p(β∣Σϵ,θ,X)p(Σϵ∣θ,X) with5 β∣Σϵ,θ,X∼MNβn,Λn-1,Σϵ,Σϵ∣θ,X∼W-1Vn,νn,
+
+where6 νn=ν0+nΛn=XTX+Λ0βn=Λn-1XTθ+Λ0β0Vn=V0+θ-XβnTθ-Xβn+βn-β0TΛ0βn-β0.
+
+Note that conditional on X and θ, the networks Y are independent of (β,Σϵ) and hence do not appear directly in the (conditional) posterior. However, as we shall see below, the networks are present in the posterior for θ. This motivates a Gibbs sampling approach, whereby we iteratively draw from the required conditional distributions.
+
+Regarding the choice of values for the prior hyperparameters (β0,Λ0,V0,ν0), studies of single-network Bayesian ERGMs typically assume relatively flat multivariate normal prior distributions on the model parameters (Caimo and Friel 2011; Sinke et al. 2016; Thiemichen et al. 2016). In this spirit, we suggest default priors of β0=0 (i.e. the q×p zero matrix), Λ0-1=100Ip, V0=Iq, and n0=q+1. Informative priors can be used given information from previous studies (see e.g. Caimo et al. (2022), Caimo et al. (2017)) though we note that the appropriate setting of informative priors can be a challenging task due to the typically high levels of dependence between parameters (Koskinen et al. 2013).
+
+Posterior computation
+
+The double-intractability of the ERGM posterior distribution means that standard MCMC schemes such as the Metropolis algorithm are not suitable. This is due to the presence of the intractable normalising constants Z(θ(i)) in the denominator, rendering calculation of the Metropolis acceptance rates computationally infeasible. Several methods have been proposed in recent years to perform Bayesian inference in the presence of intractable normalising constants (see Park and Haran (2018) for a review). We focus here on the exchange algorithm (Murray et al. 2006), employed in the context of single-network Bayesian ERGMs by Caimo and Friel (2011). We first recap the exchange algorithm in the context of Bayesian ERGMs before describing a exchange-within-Gibbs scheme to generate samples from the joint posterior.
+
+Consider a Metropolis update for a single-network Bayesian ERGM. The acceptance probability for a proposal θ′ from current value θ requires evaluation of the ratio Z(θ)/Z(θ′), which is computationally intractable. The exchange algorithm is an MCMC scheme designed to circumvent this obstacle. This is achieved by introducing an auxiliary variable y′∼π(·|θ′), i.e. a network drawn from the same exponential random graph model with parameter θ′.
+
+The algorithm targets an augmented posterior7 π(θ,θ′,y′|y)∝π(θ|y)h(θ′|θ)π(y′|θ′)
+
+where π(θ|y) is the original (target) posterior, h(θ′|θ) is an arbitrary, normalisable proposal function, and π(y′|θ) is the likelihood of the auxiliary variable. For simplicity, we assume h(θ′|θ) to be symmetric. Each of the three terms on the right-hand side of Eq. (7) can be normalised, so the left-hand side is well-defined as a probability distribution.
+
+The algorithm proceeds as follows. At each iteration, first perform a Gibbs’ update of (θ′,y′) by drawing θ′∼h(·|θ) followed by y′∼π(·|θ′). Next, exchange θ and θ′ with probability min(1,AR(θ′,θ,y,y′)), where8 AR(θ′,θ,y,y′)=π(θ′|y)π(θ|y)·π(y′|θ)π(y′|θ′)=expθ′Ts(y)π(θ′)expθTs(y)π(θ)Z(θ)Z(θ′)·expθTs(y′)expθ′Ts(y′)Z(θ′)Z(θ)=exp[θ′-θ]T[s(y)-s(y′)]π(θ′)π(θ)
+
+Crucially, the ratio of intractable normalising constants cancel out, and so this acceptance ratio can indeed be evaluated. The stationary distribution of the Markov chain constructed through this scheme is π(θ,θ′,y′|y) (Murray et al. 2006). Thus, by marginalising out θ′ and y′, the algorithm yields samples from the desired posterior, namely π(θ|y).
+
+Algorithm 1 The exchange algorithm update for a Bayesian ERGM (Caimo and Friel 2011)
+
+The exchange algorithm update requires a sample y′ from the ERGM π(·|θ′) in order to compute the acceptance ratio. Although perfect sampling for ERGMs is possible, it is computationally impractical except for a few special cases (Butts 2018). A pragmatic alternative, employed in Caimo and Friel (2011) and Wang and Atchadé (2014), is to use the final iteration of a Metropolis–Hastings algorithm as an approximate sample from π(·|θ′) (Hastings 1970; Hunter et al. 2008). A theoretical justification of this approach is given by Everitt (2012): under certain conditions, despite using an approximate sample, the algorithm nevertheless targets an approximation to the correct posterior distribution. Further, this approximation improves as the number of iterations of the inner MCMC increases.
+
+The exchange-within-Gibbs algorithm
+
+We now extend the exchange algorithm in order to generate samples from our full posterior on a population of networks. As the name suggests, the exchange-within-Gibbs algorithm combines the exchange algorithm with the Gibbs sampler (Geman and Geman 1984) to produce samples from the desired posterior. Note that we can treat the unknown parameters of the model (β,ϵ,Σϵ) as components of a single multi-dimensional parameter. We iteratively sample each component from its conditional distribution given the remaining components.
+
+The full exchange-within-Gibbs scheme is outlined in Algorithm 2. Since each step samples from the respective full conditional distribution, the algorithm ensures that the stationary distribution of the resulting Markov chain is indeed the joint posterior π(β,ϵ,Σϵ|y) (Tierney 1994). As with the exchange algorithm for the single-network Bayesian ERGM, the most computationally expensive step is sampling y′ from π(·|θ′), i.e. simulating an exponential random graph with parameter θ′=Xβ′+ϵ′. Moreover, this step must be performed for each of the individual-level parameter θ(i) updates. Thus, the computational cost of each iteration increases linearly with the number of networks in the data. However, these updates may be performed in parallel so, with access to a sufficient number of computing cores, the actual computational time per iteration typically increases sub-linearly with the number of networks.
+
+Algorithm 2 The exchange-within-Gibbs algorithm for a multilevel Bayesian ERGM
+
+Choice of parametrisation: centering vs. non-centering
+
+The parametrisation of general multilevel models in the context of MCMC computation has been studied in some detail (Gelfand et al. 1995; Papaspiliopoulos et al. 2003, 2007; Yu and Meng 2011). Here, we discuss the two most commonly used parametrisations: the ‘centered’ and the ‘non-centered’. Let μ(i)=xiTβ be the mean for the ith ERGM parameter θ(i). The parametrisation presented thus far is known as the centered parametrisation (CP) Gelfand et al. (1995), Papaspiliopoulos et al. (2007), in which the parameters (β,Σθ) are independent of the data Y:9 Y(i)∼π(·∣θ(i)),i=1,⋯,nθ(i)∼N(μ(i),Σϵ),i=1,⋯,n.
+
+In contrast, the non-centred parametrisation (NCP) can be written as follows:10 Y(i)∼π(·∣μ(i)+ϵ(i)),i=1,⋯,nϵ(i)∼N(0,Σϵ),i=1,⋯,n.
+
+The identity θ(i)=μ(i)+ϵ(i) confirms the equivalence of the two parametrisations. Note that the parameter β enters the likelihood directly in (10) via the μ(i), so the conditional distribution of β given the remaining parameters has an intractable normalising constant ∏i=1nZ(xiTβ). As above, this can be dealt with via an exchange update, in this case requiring simulation of n networks for the normalising constants to cancel in the acceptance ratio, now given by11 AR(β′,β,Y,Y′;Σϵ,X)=exp∑i=1n[xiT(β′-β)]T[s(yi)-s(yi′)]π(β′∣Σϵ)π(β∣Σϵ).
+
+The centred parametrisation and the non-centred parametrisation tend to be complementary: when one performs poorly, the other tends to perform better (Papaspiliopoulos et al. 2007). More precisely, the centred parametrisation tends to lead to more efficient MCMC performance when θ is well-identified by the data Y, whereas the non-centered parametrisation can be more competitive when θ is weakly-identified (relative to (β,Σϵ)). However, if we are in an intermediate setting, and when the parameters of interest are the higher-level parameters (β,Σϵ), it is possible to combine both approaches using an ancillarity-sufficiency interweaving strategy (ASIS; Yu and Meng (2011)). ASIS works by combining the updating schemes of the CP and NCP approaches, introducing an intermediate step to first draw (β,θ) under the centred parametrisation, and then redrawing the parameters under the non-centered parametrisation. The ASIS algorithm for a multilevel Bayesian ERGM is described in Algorithm 3.
+
+Algorithm 3 The ASIS algorithm for a multilevel Bayesian ERGM
+
+Proposal adaptation
+
+We use multivariate normal random walk proposals in the respective exchange updates of both θ(i) and β, for example12 h(θ′|θk-1)=N(θk-1,Σ)
+
+The choice of the the proposal covariance matrix Σ is crucial to the overall efficiency of the MCMC algorithm; we wish to make large proposals that are likely to be accepted in order to explore the posterior in as few iterations as possible. A common approach to tuning covariance proposals for a wide range of random walk based algorithms, including Metropolis-within-Gibbs, is to target an acceptance rate close to 0.234, with acceptance rates between 0.1 and 0.5 often yielding satisfactory results (Roberts et al. 1997, 2001; Roberts and Rosenthal 2009). Since manual tuning of the n+1 proposal covariance matrices would be impractical, we instead implement an adaptive proposal scheme.
+
+For each proposal, we use a version of the adaptive Metropolis algorithm (Haario et al. 2001) considered by Roberts and Rosenthal (2009). Specifically, for the first 1000 iterations, we adapt every 20 iterations, with proposals of the form13 hk(θ′|θk-1)=(1-γ)Nθk-1,(2.38)2δkΣk/p+γNθk-1,(0.1)2δkIp/p,
+
+where Σk is the sample covariance matrix of the posterior samples (θ1,⋯,θk-1) and δk is an additional scaling factor that is varied to control the magnitude of the proposals. Following Roberts and Rosenthal (2009), we set γ=0.05. The role of Σk is to adapt the direction of the proposals to the MCMC run so far, while δk serves to target an acceptance rate of 0.234. Specifically, we start with δ1=1 and increase (resp. decrease) log(δk) by min(0.5,1/(k) if the acceptance rate was below (resp. above) 0.234 in the previous 20 iterations.
+
+Posterior predictive assessment
+
+Having produced a sufficient number of samples from the posterior distribution, we then assess whether the model adequately describes the data. Since determining the distribution of appropriate test quantities is difficult, assessing such goodness-of-fit for ERGMs is typically performed graphically (Hunter et al. 2008). For a single ERGM fit, one can simulate a large number of networks from the fitted model and compare these ‘posterior predictive networks’ to the observed network. This comparison is usually done via a set of network metrics. If a model fits the data well then the network metrics of the posterior predictive networks should be similar to those of the observed network.
+
+For a population of networks, we can apply the same principles. To do so, we choose uniformly at random S values from the posterior samples of β. For each value, we simulate a network from π(·|Xβ(s)). We can then compare these posterior predictive networks to the observed networks based on a set of network metrics. For this purpose, we will use three important network metric distributions that are not explicitly modelled, namely degree distribution, geodesic distance distribution (length of shortest paths) and edge-wise shared partners distribution.
+
+Results
+
+To illustrate our method, we apply it to a set of simulated networks, demonstrating that it is capable of recovering the ground truth. We also apply our method to resting-state fMRI networks from the Cam-CAN project, a study on healthy ageing (Shafto et al. 2014), to assess how network structure varies with age and fluid intelligence. The R scripts used to generate these results can be found at https://github.com/brieuclehmann/multibergm-scripts.
+
+Simulation
+
+We generated sets of 30-node networks with nodes split into two ‘hemispheres’ of 15 nodes each. We simulated the networks from an exponential random graph model with three terms: total number of edges (‘edges’), total number of edges between nodes in the same hemisphere (‘nodematch.hemisphere’), and the geometrically-weighted edgewise-shared partner (GWESP) statistic (‘gwesp.fixed.0.9’). The GWESP statistic of a network y is a measure of clustering and is given by:14 GWESP(y)=eτ∑w=1N{1-(1-e-τ)w}EPw(y),
+
+where EPw(y) is the number of connected node pairs having exactly w shared partners and τ is a decay parameter, which we fix at τ=0.9. The decay parameter attenuates the effect of the number of higher-order edgewise shared partners relative to lower-order edgewise shared partners.
+
+We simulate networks under three distinct settings, varying the number of networks in each case: (i) a population of networks with no additional covariate information, (ii) a population of networks where each network is associated with a single continuous covariate, and (iii) a population of networks with two subgroups, so that each network is associated with a binary covariate indicating group allocation.
+
+No covariate information
+
+To simulate the networks, we first generated individual-level parameters θi∼N(μ,Σ),i=1,⋯,n where15 μ=(-3,0.5,0.5)T
+
+16 Σ=1501-0.50-0.50.50000.5.
+
+We then used the ergm R package (Hunter et al. 2008) to simulate n networks yi∼p(·|θi),i=1,⋯,n. The simulation procedure is based on an MCMC algorithm, initialised at a network with the prescribed number of nodes and covariates (in this case, hemisphere labels). With these simulated networks, we applied our exchange-within-Gibbs algorithm with ASIS (Algorithm 3) to generate 12,000 posterior samples, adapting the random-walk proposals for the first 1,000 iterations, and discarding the first 2,000 as burn-in.
+
+Figure 2 displays summaries of the posterior samples for the group-level mean parameter μ of the model fit to n=10 networks. The true value of μ is covered by the posterior density, while the trace and autocorrelation plots indicate that the MCMC has mixed well. To assess the goodness-of-fit, we generated S=100 networks from the model at posterior samples of μ chosen uniformly at random. Figure 3 shows the degree distribution, geodesic distance distribution and edgewise shared partner distribution of these simulated networks against those to which the model was fit.Fig. 2 Posterior samples produced by the exchange-within-Gibbs algorithm for the group-level mean parameter, μ, of a single group of ten simulated networks. The true value of μ is indicated by the red line. (colour figure online)
+
+Fig. 3 Graphical goodness-of-fit assessment for a single group of ten simulated networks. The box plots correspond to the simulated networks, while the ribbons represent 90% credible intervals corresponding to the posterior predictive networks. Note that a geodesic distance of infinity between two nodes means that there is no path connecting the nodes. (colour figure online)
+
+To complete our analysis of a single group of networks, we compare the density of the posterior samples between groups of size n=10,20,50,100. Figure 4 illustrates how the posterior samples of β concentrates around the true value as the number of networks in the group increases. We also investigated different settings for the prior hyperparameters (Λ0-1=1,10,100 and ν0=5,10,50) with n=10, finding that these did not have an appreciable effect on the posterior density (Supplementary Figure 2).Fig. 4 Posterior density plots for the effect parameters β in a single group of networks with no covariate information. As the number of networks increases, the posterior concentrates around the true value, depicted by the red vertical line. (colour figure online)
+
+As a supplementary analysis, we investigated our model’s performance for increasing network size N=30,60,90,120,150, where N corresponds to the number of nodes in each network. We kept the number of auxiliary MCMC iterations used to simulate each network within the exchange algorithm fixed at naux=1000. This ensured that the computation time for each of these settings was of similar order, ranging from 50 min for N=30 to 90 min for N=150 using using 10 Intel(R) Xeon(R) Gold 6140 CPU @ 2.30GHz processors on a computing cluster. However, the number of auxiliary iterations necessary for convergence increases with network size (Krivitsky and Handcock 2014) and hence these auxiliary draws may not adequately represent draws from the desired ERGM required in the exchange algorithm. Supplementary Figure 1 illustrates this, with model performance degrading significantly for N>60.
+
+Continuous covariate
+
+We now consider a simulation setting where each network is a associated with a single continuous covariate, such as age. We again consider three cases with n=10,20,50 networks in the population, with model matrix xiT=(1,(i-1)/n) and β=(aT,bT)T where a=(-3,0.5,0.5)T and b=(-2.6,0.5,0.2)T, so that the network-level parameter means are uniformly spaced between the vectors a and b. We then generate θi∼N(μi,Σ),i=1,⋯,n with Σ as above, andμi=b+(i-1)n-1(a-b),i=1,⋯,n.
+
+Again, the posterior samples of β concentrate around the true values for both the intercept and the covariate effect parameters as the number of networks in the group increases (Fig. 5).Fig. 5 Posterior density plots for the effect parameters β in a single group of networks associated with a single continuous covariate x. As the number of networks increases, the posterior concentrates around the true value, depicted by the red vertical line. (colour figure online)
+
+Binary covariate
+
+To complete our simulation study, we consider a multilevel setting in which the networks are split into two distinct groups J1,J2, so that xiT=(1,0) if i∈J1 and xiT=(0,1) if J2. We set β=(aT,(b-a)T)T so that μi=a if i∈J1 and μi=b if i∈J2. As above, we first generated individual-level parameters θi∼N(μ(gi),Σ),i=1,⋯,n, where gi∈{1,2} denotes the group membership of the ith network, and then simulated networks yi∼p(·|θi),i=1,⋯,n. We considered a range of numbers of networks, n=10,20,50 each of the two groups. The true values were17 μ(1)=(-3,0.5,0.5)T
+
+18 μ(2)=(-2.6,0.5,0.2)T
+
+19 Σ=1501-0.50-0.50.50000.5.
+
+Figure 6 shows the density of the posterior samples for the group-level parameters (μ(1),μ(2)) for increasing number of networks n per group. We see that, as in the single-group setting, the posteriors concentrate around the true values for each group as the number of networks increases.Fig. 6 Posterior density plots for a two-group model with n=10,20,50 simulated networks in each group. (colour figure online)
+
+Application to human functional connectivity brain networks
+
+We now turn our attention to a real data example: networks derived from resting-state fMRI scans of human brains from the Cambridge Centre for Ageing and Neuroscience (Cam-CAN) research project Shafto et al. (2014), a study on the effect of healthy ageing on cognitive and brain function. The Cam-CAN dataset consists of a range of cognitive tests and functional neuroimaging experiments for approximately 650 healthy individuals aged 18–87. Our aim will be to assess how the functional connectivity structure of the brain varies with age and fluid intelligence, as measured by the Cattell score.
+
+Full details of data collection and preprocessing can be found in Lehmann et al. (2021). To summarise, both structural (T1 and T2) and eyes-closed, resting-state fMRI scans (261 volumes, lasting 8min 40 s) were acquired for each individual. The fMRI scans were motion-corrected and co-registered to the respective structural scans and then mapped to the common Montreal Neurological Institute (MNI) template to ensure comparability across individuals. The fMRI time series were then extracted from 90 cortical and subcortical regions of interest (ROIs) from the AAL atlas (Tzourio-Mazoyer et al. 2002) and adjusted for various confounds using the optimised pipeline of Geerligs et al. (2017).
+
+To construct networks for each individual, we followed a thresholded correlation matrix approach. For individual i, we computed the pairwise Pearson correlation between each of the N=90 preprocessed time series, yielding a N×N correlation matrix C(i). We then applied a threshold r to C(i) to produce an N×N adjacency matrix, A(i), with entries:20 Akl(i)=1ifCkl(i)≥rk,l=1,⋯,N0otherwise.
+
+The adjacency matrix defines an individual’s network, y(i), with an edge between nodes k and l if and only if Akl(i)=1. The threshold r was chosen to yield an average node degree of 3 across all the networks, as recommended by Fallani et al. (2017). See Table 1 for summary statistics on the resulting networks for these individuals, as well as their ages and Cattell scores.Table 1 Summary of age, Cattell score, network density, and network transitivity for all individuals in the Cam-CAN fMRI dataset, as well as the youngest 100 individuals, and the oldest 100 individuals
+
+			All	Young	Old	
+	Age	Mean	53.53	27.45	24.98	
+		SD	18.23	4.19	5.83	
+		Min	18.47	18.47	12.00	
+		Max	88.90	33.45	38.00	
+	Cattell score	Mean	32.24	37.23	24.98	
+		SD	6.64	3.64	5.83	
+		Min	12.00	26.00	12.00	
+		Max	44.00	44.00	38.00	
+	Network density	Mean	0.03	0.04	0.03	
+		SD	0.02	0.02	0.01	
+		Min	0.01	0.01	0.01	
+		Max	0.13	0.13	0.08	
+	Network transitivity	Mean	0.56	0.56	0.55	
+		SD	0.10	0.09	0.09	
+		Min	0.00	0.28	0.18	
+		Max	0.88	0.88	0.82	
+Cattell scores were missing for 14 out of the 587 individuals
+
+We model the population of networks using the framework described in Sect. 2.2 with an exponential random graph model with four terms: total number of edges (‘edges’), total number of edges between nodes in the same hemisphere (‘nodematch.hemisphere’), total number of edges between homotopic nodes (mirror ROIs in each hemisphere; ‘nodematch.homotopy’) and the geometrically-weighted edgewise-shared partner (GWESP) statistic with decay parameter τ=0.9 (‘gwesp.fixed.0.9’).
+
+Young vs. old
+
+We first turn our attention to an age-only analysis, comparing the functional connectivity network structure between the 100 youngest individuals, indexed Jyoung, aged 18-33, and the 100 oldest individuals, Jold, aged 74–87. As in the simulation experiment with a binary covariate, we have xiT=(1,0) if i∈Jyoung and xiT=(0,1) if Jold.
+
+We used the exchange-within-Gibbs algorithm with ASIS to generate 22,000 posterior samples, discarding the first 2,000 samples as burn-in. Figure 7 shows summaries of the posterior samples for (μ(1),μ(2)), with the trace and autocorrelation plots demonstrating that the MCMC has mixed well. The posterior density plots show that the clearest difference between the old group and the young group was the difference in the parameter associated with the number of edges between homotopic nodes (‘nodematch.homotopy’). While this parameter is large and positive for both groups, it is moderately smaller in the old group, indicating that the propensity for homotopic connections is lower in old age. On the other hand, there is no clear evidence for group differences in the remaining parameters. The edges parameters are large and negative, pointing to the overall sparsity of the networks; the intrahemisphere parameters (‘nodematch.hemisphere’) are small and positive, indicating a moderate propensity for connections between nodes in the same half of the brain; and the GWESP parameters are also positive, indicating a propensity to form triangles and thus a degree of functional segregation (Bullmore and Sporns 2009).Fig. 7 MCMC output from the exchange-within-Gibbs algorithm for the group-level mean parameters of a population of resting-state fMRI networks from a group of 100 young individuals and a group of 100 old individuals. (colour figure online)
+
+To assess goodness-of-fit, for both groups we generated S=100 networks from the model at posterior samples of μ(j) chosen uniformly at random. Figure 8 indicates a reasonable fit for both groups, with the geodesic distance and edgewise shared partner distributions showing a good correspondence between the simulated networks and the observed networks. There appears to be a slight discrepancy in the degree distributions, with the simulated networks in the young group in particular having fewer nodes of degree 4 to 6 relative to the observed networks.Fig. 8 Graphical goodness-of-fit assessment for resting-state fMRI networks from a young group and an old group, fitted in a joint model. The box plots correspond to the observed networks, while the ribbons represent 95% credible intervals corresponding to the posterior predictive networks. Note that a geodesic distance of infinity between two nodes means that there is no path connecting the nodes. (colour figure online)
+
+Age and fluid intelligence
+
+Finally, we consider a model that jointly assesses the effect of age and fluid intelligence on the brain’s functional connectivity structure. We use the same ERGM summary statistics as before - edges, ‘nodematch.hemisphere’, ‘nodematch.homotopy’, GWESP - and setxiT=(1,agei,IQi,agei∗IQi),
+
+where agei and IQi denote the age and Cattell score (a measure of fluid intelligence), respectively, of individual i. For this model, we took a subset of 100 individuals across the range of non-missing Cattell scores. We highlight the use of the interaction term between age and fluid intelligence to capture the joint effect of these two covariates over and above their corresponding main effects. We again used the exchange-within-Gibbs algorithm with ASIS to generate 22,000 posterior samples, and discarded the first 2,000 samples as burn-in.
+
+Figure 9 shows the density plots for the resulting posterior samples. As with the previous analysis comparing a group of young individuals and a group of old individuals, the clearest age-related effect was associated with the number of edges between homotopic nodes. Higher fluid intelligence, as measured by the Cattell score, was associated with a higher propensity for the total number of edges, but a lower propensity for both intrahemispheric connections and homotopic connections. Reduced homotopic connectivity has previously been observed in rs-fMRI networks, with evidence suggesting that reduced synchrony between brain hemispheres at rest may be predictive of higher intelligence (Santarnecchi et al. 2015). The parameter estimates for the age - fluid intelligence interaction term were centred around zero, indicating no additional effect on top of the additive effects associated with age and fluid intelligence separately. To explore possible non-linear effects of age and fluid intelligence, we also fit a model with quadratic terms for age and Cattell score, finding no quadratic effects for age but a small quadratic effects on intrahemispheric connections (positive) and triangle propensity (GWESP; negative) (Supplementary Figure 3).Fig. 9 MCMC output from the exchange-within-Gibbs algorithm for the effect parameters of a population of 100 resting-state fMRI networks. (colour figure online)
+
+Discussion
+
+The main contribution of this article is to introduce a multilevel framework for modelling populations of networks with network-level covariate information, along with a novel MCMC procedure for performing inference with the framework. While the framework itself is a natural multilevel extension of a single ERGMs, the inference procedure is more involved due to the intractability of the ERGMs likelihood and the challenges associated with MCMC for hierarchical models. We have presented how our framework can be applied to resting-state fMRI data to assess how the brain’s functional connectivity network structure varies with age and intelligence score. Although we chose here to focus on networks constructed from resting-state fMRI scans, our framework could also be applied to networks derived from other neuroimaging modalities such as magnetoencephalography (MEG) or diffusion tensor imaging (DTI).
+
+An important extension to the framework would be to use weighted exponential random graph models (Krivitsky 2012; Desmarais and Cranmer 2012). These are an extension of the binary ERGMs that can be applied to weighted networks, thus avoiding the thresholding step in the construction of functional connectivity networks. Indeed, one version of a weighted ERGMs, the generalised exponential random graph model (GERGM) (Desmarais and Cranmer 2012) was recently applied to a 20-node functional connectivity network (Stillman et al. 2017). This approach has the additional advantage of modelling the mean connectivity directly and thus would avoid any confounding due to differences in mean connectivity. However, the GERGM is at present extremely computational intensive, rendering it infeasible for a population of networks.
+
+One of the key challenges in applying our framework to real data is the choice of which network summary statistics to include in the model. A fully Bayesian model selection method based on reversible-jump MCMC has been developed for exponential random graph models on single networks (Caimo and Friel 2013). A similar approach could be developed for our framework, though the computational cost is likely to be prohibitive. A more pragmatic approach would be to develop a graphical goodness-of-fit method by comparing the posterior predictive distributions under different models. More flexible specifications of the relationship between the covariates and ERGM parameters, such as spline-based models, would also be a fruitful avenue for future work.
+
+The computational cost of our MCMC algorithm is considerable. Even with a 20-core computing cluster (Intel(R) Xeon(R) Gold 6140 CPU @ 2.30GHz), the algorithm took over 5 h to produce the 22,000 posterior samples in the real data example presented above. The main computational bottleneck lies in simulating the exponential random graphs at each MCMC iteration. While the computational cost should increase roughly linearly in the number of networks, Krivitsky and Handcock (2014) provide empirical evidence indicating that the cost may grow on the order of p(N+E)log(E) where p is the number of summary statistics, N is the number of nodes, and E is the number of edges. It may be possible to reduce the number of ERGMs simulations at each MCMC iteration using noisy Monte Carlo methods (Alquier et al. 2016). Other promising avenues include variational inference for ERGMs (Tan and Friel 2020), or pseudolikelihood methods (Bouranis et al. 2017), which could both be extended to our framework to yield approximate Bayesian inference at a much reduced computational cost relative to MCMC.
+
+Supplementary Information
+
+Below is the link to the electronic supplementary material.Supplementary file 1 (pdf 464 KB)
+
+Acknowledgements
+
+B.L. and S.W. were supported by the UK Medical Research Council [Programme number U105292687]. B.L. was also supported by the UK Engineering and Physical Sciences Research Council through the Bayes4Health programme [Grant number EP/R018561/1] and gratefully acknowledges funding from Jesus College, Oxford. This research was supported by the NIHR Cambridge Biomedical Research Centre (BRC-1215-20014). The computational aspects of this research were supported by the Wellcome Trust Core Award Grant Number 203141/Z/16/Z and the NIHR Oxford BRC. The views expressed are those of the authors and not necessarily those of the NHS, the NIHR or the Department of Health and Social Care.
+
+Declarations
+
+Conflict of interest
+
+The authors have no Conflict of interest to declare.
+
+Publisher's Note
+
+Springer Nature remains neutral with regard to jurisdictional claims in published maps and institutional affiliations.
+==== Refs
+References
+
+Achard S Salvador R Whitcher B Suckling J Bullmore E A resilient, low-frequency, small-world human brain functional network with highly connected association cortical hubs J. Neurosci. 2006 26 1 63 72 10.1523/jneurosci.3874-05.2006 16399673
+Alquier P Friel N Everitt R Boland A Noisy Monte Carlo: convergence of Markov chains with approximate transition kernels Stat. Comput. 2016 26 1 29 47 10.1007/s11222-014-9521-x
+Bouranis L Friel N Maire F Efficient Bayesian inference for exponential random graph models by correcting the pseudo-posterior distribution Soc. Netw. 2017 50 Supplement C 98 108 10.1016/j.socnet.2017.03.013
+Bullmore E Sporns O Complex brain networks: graph theoretical analysis of structural and functional systems Nat. Rev. Neurosci. 2009 10 3 186 198 10.1038/nrn2575 19190637
+Butts CT A perfect sampling method for exponential family random graph models J. Math. Sociol. 2018 42 1 17 36 10.1080/0022250X.2017.1396985
+Caimo A Friel N Bayesian inference for exponential random graph models Soc. Netw. 2011 33 1 41 55 10.1016/j.socnet.2010.09.004
+Caimo A Friel N Bayesian model selection for exponential random graph models Soc. Netw. 2013 35 1 11 24 10.1016/j.socnet.2012.10.003
+Caimo A Pallotti F Lomi A Bayesian exponential random graph modelling of interhospital patient referral networks Stat. Med. 2017 36 18 2902 2920 10.1002/sim.7301 28421624
+Caimo A Bouranis L Krause R Friel N Statistical network analysis with bergm J. Stat. Softw. 2022 104 1 1 23 10.18637/jss.v104.i01
+Desmarais BA Cranmer SJ Statistical inference for valued-edge networks: the generalized exponential random graph model PLoS ONE 2012 7 1 30136 10.1371/journal.pone.0030136
+Durante D Dunson DB Bayesian inference and testing of group differences in brain networks Bayesian Anal. 2018 13 1 29 58 10.1214/16-BA1030
+Durante D Dunson DB Vogelstein JT Nonparametric Bayes modeling of populations of networks J. Am. Stat. Assoc. 2017 112 520 1516 1530 10.1080/01621459.2016.1219260
+Everitt RG Bayesian parameter estimation for latent Markov random fields and social networks J. Comput. Graph. Stat. 2012 21 4 940 960 10.1080/10618600.2012.687493
+Fallani FDV Latora V Chavez M A topological criterion for filtering information in complex brain networks PLoS Comput. Biol. 2017 13 1 1005305 10.1371/journal.pcbi.1005305
+Frank O Strauss D Markov graphs J. Am. Stat. Assoc. 1986 81 395 832 842 10.1080/01621459.1986.10478342
+Fuster JM The cognit: a network model of cortical representation Int. J. Psychophysiol. 2006 60 2 125 132 10.1016/j.ijpsycho.2005.12.015 16626831
+Geerligs, L., Tsvetanov, K.A., Cam-CAN, Henson, R.N.: Challenges in measuring individual differences in functional connectivity using fMRI: The case of healthy aging. Human Brain Mapping 38(8), 4125–4156 (2017) 10.1002/hbm.23653
+Gelfand AE Sahu SK Carlin BP Efficient parametrisations for normal linear mixed models Biometrika 1995 82 3 479 488 10.1093/biomet/82.3.479
+Geman S Geman D Stochastic relaxation, Gibbs distributions, and the Bayesian restoration of images IEEE Trans. Pattern Anal. Mach. Intell. 1984 PAMI–6 6 721 741 10.1109/TPAMI.1984.4767596
+Ginestet CE Nichols TE Bullmore ET Simmons A Brain network analysis: separating cost from topology using cost-integration PLoS ONE 2011 6 7 1 17 10.1371/journal.pone.0021570
+Ginestet CE Li J Balachandran P Rosenberg S Kolaczyk ED Hypothesis testing for network data in functional neuroimaging Ann. Appl. Stat. 2017 11 2 725 750 10.1214/16-AOAS1015
+Haario H Saksman E Tamminen J An adaptive Metropolis algorithm Bernoulli 2001 7 2 223 242 10.2307/3318737
+Hastings WK Monte Carlo sampling methods using Markov chains and their applications Biometrika 1970 57 1 97 109 10.1093/biomet/57.1.97
+Hoff PD Raftery AE Handcock MS Latent space approaches to social network analysis J. Am. Stat. Assoc. 2002 97 460 1090 1098 10.1198/016214502388618906
+Holland PW Laskey KB Leinhardt S Stochastic blockmodels: first steps Soc. Netw. 1983 5 2 109 137 10.1016/0378-8733(83)90021-7
+Hunter D Handcock M Butts C Goodreau S Morris M ERGM: a package to fit, simulate and diagnose exponential-family models for networks J. Stat. Softw. Artic. 2008 24 3 1 29 10.18637/jss.v024.i03
+Hunter DR Goodreau SM Handcock MS Goodness of fit of social network models J. Am. Stat. Assoc. 2008 103 481 248 258 10.1198/016214507000000446
+Kolaczyk ED Statistical Analysis of Network Data: Methods And Models 2009 New York Springer Series in Statistics. Springer
+Koskinen JH Robins GL Wang P Pattison PE Bayesian analysis for partially observed network data, missing ties, attributes and actors Soc. Netw. 2013 35 4 514 527 10.1016/j.socnet.2013.07.003
+Krivitsky PN Exponential-family random graph models for valued networks Electron. J. Statist. 2012 6 1100 1128 10.1214/12-EJS696
+Krivitsky PN Handcock MS Supplementary material: a separable model for dynamic networks J. R. Stat. Soc. Ser. B Stat. Methodol. 2014 76 1 29 46 10.1111/rssb.12014
+Lehmann BCL Henson RN Geerligs L White SR Characterising group-level brain connectivity: a framework using Bayesian exponential random graph models NeuroImage 2021 225 117480 10.1016/j.neuroimage.2020.117480 33099009
+Mukherjee, S.S., Sarkar, P., Lin, L.: On clustering network-valued data. In: Proceedings of the 31st international conference on neural information processing systems. NIPS’17, pp. 7074–7084. Curran Associates Inc., Red Hook, NY, USA (2017)
+Murray, I., Ghahramani, Z., MacKay, D.J.C.: MCMC for doubly-intractable distributions. In: Proceedings of the 22nd Annual Conference on Uncertainty in Artificial Intelligence (UAI-06), pp. 359–366 (2006)
+Obando C Fallani FDV A statistical model for brain networks inferred from large-scale electrophysiological signals J. R. Soc. Interface 2017 14 128 20160940 10.1098/rsif.2016.0940 28275122
+Papaspiliopoulos, O., Roberts, G.O., Sköld, M.: Non-centered parameterisations for hierarchical models and data augmentation. In: Bernardo, J., Bayarri, M., Berger, J., Dawid, A., Heckerman, D., Smith, A., West, M. (eds.) Bayesian Statistics 7: Proceedings of the Seventh Valencia International Meeting, vol. 307 (2003). Oxford University Press, USA
+Papaspiliopoulos O Roberts GO Sköld M A general framework for the parametrization of hierarchical models Stat. Sci. 2007 22 1 59 73 10.1214/088342307000000014
+Park J Haran M Bayesian inference in the presence of intractable normalizing functions J. Am. Stat. Assoc. 2018 113 523 1372 1390 10.1080/01621459.2018.1448824
+Ren S Wang X Liu P Zhang J Bayesian nonparametric mixtures of exponential random graph models for ensembles of networks Soc. Netw. 2023 74 156 165 10.1016/j.socnet.2023.03.005
+Roberts GO Rosenthal JS Optimal scaling for various Metropolis–Hastings algorithms Stat. Sci. 2001 16 4 351 367 10.1214/ss/1015346320
+Roberts GO Rosenthal JS Examples of adaptive MCMC J. Comput. Graph. Stat. 2009 18 2 349 367 10.1198/jcgs.2009.06134
+Roberts GO Gelman A Gilks WR Weak convergence and optimal scaling of random walk metropolis algorithms Ann. Appl. Probab. 1997 7 1 110 120
+Santarnecchi E Tatti E Rossi S Serino V Rossi A Intelligence-related differences in the asymmetry of spontaneous cerebral activity Hum. Brain Mapp. 2015 36 9 3586 3602 10.1002/hbm.22864 26059228
+Schweinberger M Handcock MS Local dependence in random graph models: characterization, properties and statistical inference J. R. Stat. Soc. Ser. B 2015 77 3 647 676 10.1111/rssb.12081
+Schweinberger M Krivitsky PN Butts CT Stewart JR Exponential-family models of random graphs: inference in finite, super and infinite population scenarios Statist. Sci. 2020 35 4 627 662 10.1214/19-STS743
+Shafto MA Tyler LK Dixon M Taylor JR Rowe JB Cusack R Calder AJ Marslen-Wilson WD Duncan J Dalgleish T Henson RN Brayne C Matthews FE The Cambridge centre for ageing and neuroscience (Cam-CAN) study protocol: a cross-sectional, lifespan, multidisciplinary examination of healthy cognitive ageing BMC Neurol. 2014 14 1 1 25 10.1186/s12883-014-0204-1 24383721
+Signorelli M Wit EC Model-based clustering for populations of networks Stat. Model. 2020 20 1 9 29 10.1177/1471082X19871128
+Simpson SL Hayasaka S Laurienti PJ Exponential random graph modeling for complex brain networks PLoS ONE 2011 6 5 20039 10.1371/journal.pone.0020039
+Simpson SL Moussa MN Laurienti PJ An exponential random graph modeling approach to creating group-based representative whole-brain connectivity networks Neuroimage 2012 60 2 1117 1126 10.1016/j.neuroimage.2012.01.071 22281670
+Sinke MRT Dijkhuizen RM Caimo A Stam CJ Otte WM Bayesian exponential random graph modeling of whole-brain structural networks across lifespan NeuroImage 2016 135 Supplement–C 79 91 10.1016/j.neuroimage.2016.04.066 27132542
+Slaughter AJ Koehly LM Multilevel models for social networks: hierarchical Bayesian approaches to exponential random graph modeling Soc. Netw. 2016 44 334 345 10.1016/j.socnet.2015.11.002
+Stillman PE Wilson JD Denny MJ Desmarais BA Bhamidi S Cranmer SJ Lu Z-L Statistical modeling of the default mode brain network reveals a segregated highway structure Sci. Rep. 2017 7 1 11694 10.1038/s41598-017-09896-6 28916779
+Sweet, T. M., Thomas, A. C., Junker, B. W.: Hierarchical mixed membership stochastic blockmodels for multiple networks and experimental interventions. Handbook on mixed membership models and their applications. 463–488 (2014)
+Sweet TM Thomas AC Junker BW Hierarchical network models for education research: hierarchical latent space models J. Edu. Behav. Stat. 2013 38 3 295 318 10.3102/1076998612458702
+Tan, L.S., Friel, N.: Bayesian variational inference for exponential random graph models. J. Comput. Graph. Stat. 1–19 (2020)
+Thiemichen S Friel N Caimo A Kauermann G Bayesian exponential random graph models with nodal random effects Soc. Netw. 2016 46 11 28 10.1016/j.socnet.2016.01.002
+Tierney L Markov chains for exploring posterior distributions Ann. Statist. 1994 22 4 1701 1728 10.1214/aos/1176325750
+Tzourio-Mazoyer N Landeau B Papathanassiou D Crivello F Etard O Delcroix N Mazoyer B Joliot M Automated anatomical labeling of activations in SPM using a macroscopic anatomical parcellation of the MNI MRI single-subject brain Neuroimage 2002 15 1 273 289 10.1006/nimg.2001.0978 11771995
+Wang J Atchadé YF Approximate Bayesian computation for exponential random graph models for large social networks Commun. Stat. Simul. Comput. 2014 43 2 359 377 10.1080/03610918.2012.703359
+Wang P Robins G Pattison P Lazega E Exponential random graph models for multilevel networks Soc. Netw. 2013 35 1 96 115 10.1016/j.socnet.2013.01.004
+Yin F Butts CT Highly scalable maximum likelihood and conjugate Bayesian inference for ERGMs on graph sets with equivalent vertices PLoS ONE 2022 17 8 1 38 10.1371/journal.pone.0273039
+Yin F Shen W Butts CT Finite mixtures of ERGMS for modeling ensembles of networks Bayesian Anal. 2022 17 4 1153 1191 10.1214/21-BA1298
+Yu Y Meng X-L To center or not to center: that is not the question-an ancillarity-sufficiency interweaving strategy (ASIS) for boosting MCMC efficiency J. Comput. Graph. Stat. 2011 20 3 531 570 10.1198/jcgs.2011.203main

@@ -1,0 +1,225 @@
+
+==== Front
+Sci Rep
+Sci Rep
+Scientific Reports
+2045-2322
+Nature Publishing Group UK London
+
+63492
+10.1038/s41598-024-63492-z
+Article
+CellMarkerPipe: cell marker identification and evaluation pipeline in single cell transcriptomes
+Jia Yinglu 12
+Ma Pengchong 1
+Yao Qiuming qyao3@unl.edu
+
+134
+1 https://ror.org/043mer456 grid.24434.35 0000 0004 1937 0060 School of Computing, University of Nebraska Lincoln, 256 Avery Hall, Lincoln, NE 68588 USA
+2 https://ror.org/043mer456 grid.24434.35 0000 0004 1937 0060 Department of Chemistry, University of Nebraska Lincoln, Hamilton Hall, Lincoln, NE 68588 USA
+3 Nebraska Center for the Prevention of Obesity Diseases, 316C Leverton Hall, Lincoln, NE 68583 USA
+4 https://ror.org/043mer456 grid.24434.35 0000 0004 1937 0060 Nebraska Center for Virology, University of Nebraska, 4240 Fair St., Lincoln, NE 68583 USA
+7 6 2024
+7 6 2024
+2024
+14 1315113 2 2024
+29 5 2024
+© The Author(s) 2024
+https://creativecommons.org/licenses/by/4.0/ Open Access This article is licensed under a Creative Commons Attribution 4.0 International License, which permits use, sharing, adaptation, distribution and reproduction in any medium or format, as long as you give appropriate credit to the original author(s) and the source, provide a link to the Creative Commons licence, and indicate if changes were made. The images or other third party material in this article are included in the article's Creative Commons licence, unless indicated otherwise in a credit line to the material. If material is not included in the article's Creative Commons licence and your intended use is not permitted by statutory regulation or exceeds the permitted use, you will need to obtain permission directly from the copyright holder. To view a copy of this licence, visit http://creativecommons.org/licenses/by/4.0/.
+Assessing marker genes from all cell clusters can be time-consuming and lack systematic strategy. Streamlining this process through a unified computational platform that automates identification and benchmarking will greatly enhance efficiency and ensure a fair evaluation. We therefore developed a novel computational platform, cellMarkerPipe (https://github.com/yao-laboratory/cellMarkerPipe), for automated cell-type specific marker gene identification from scRNA-seq data, coupled with comprehensive evaluation schema. CellMarkerPipe adaptively wraps around a collection of commonly used and state-of-the-art tools, including Seurat, COSG, SC3, SCMarker, COMET, and scGeneFit. From rigorously testing across diverse samples, we ascertain SCMarker’s overall reliable performance in single marker gene selection, with COSG showing commendable speed and comparable efficacy. Furthermore, we demonstrate the pivotal role of our approach in real-world medical datasets. This general and opensource pipeline stands as a significant advancement in streamlining cell marker gene identification and evaluation, fitting broad applications in the field of cellular biology and medical research.
+
+Subject terms
+
+Computational platforms and environments
+Data processing
+Genome informatics
+Software
+Standards
+http://dx.doi.org/10.13039/100000002 National Institutes of Health P20GM104320 Nebraska Soybean Boardissue-copyright-statement© Springer Nature Limited 2024
+==== Body
+pmcIntroduction
+
+Single-cell RNA sequencing (scRNA-seq) has emerged as a powerful high-throughput technique, enabling the comprehensive profiling of diverse cell populations within tissue samples1–6. The scRNA-seq technology not only facilitates the exploration of various biological processes in disease and development7–9, but also allows for the identification of both known and novel single cell types, along with the characterization of their respective marker genes10–12. In typical scRNA-seq analysis, following cell type clustering is to obtain marker genes that are specific to the clusters13. These marker genes are then manually inspected using available information in the literature or cell marker databases such as CellMarker14 and PanglaoDB15. While effective, this manual process can be time-consuming and potentially prone to biases when different marker gene identification approaches need to be tested and applied.
+
+A range of computational tools has emerged to enhance the convenience and automation of marker gene identification in scRNA-seq analysis. ScType streamlines cell type annotation through a reference marker gene database16, emphasizing the crucial role of marker gene identification under the cluster context. General-purpose feature selection, particularly dimension reduction based on globally highly variable genes, retains informative genes but may not offer cell type markers. In contrast, for de-novo marker gene identification, methods targeting differential expression (DE) genes have been proven effective in pinpointing genes specific to cell types17. Through extensive testing among DE statistical approaches, Wilcoxon rank sum test was highlighted to be worked well for DE gene identification particularly with sufficient sample size17–19. Seurat, a cornerstone package in scRNA-seq, performs non-parametric Wilcoxon rank sum test by default in FindAllMarkers function20 in a one-against-all manner. SC321, another comprehensive scRNA-seq analysis package, identifies DE genes through a non-parametric Kruskal–Wallis test.
+
+Additional to DE based statistical tests, there exists a category of specialized tools with more sophisticated approaches for cluster-wise marker gene identification. These tools aim to computationally emulate cell sorting by identifying cell type-specific genes or gene panels. COSG22 presents a significant advancement in the field by introducing cosine similarity-based marker gene identification, which proves to be a more precise, robust and scalable method for discerning true marker genes across various cell types. SCMarker23 is an ab initio method designed for marker selection by exploring bi-modally distributed expression levels that are co- or mutually-exclusively expressed with some other genes. Then SCMarker assigns the top ten highest expressed genes from all markers to the specific cell types. Uniquely, COMET24 has capability in predicting advantageous marker panels (gene combinations) from transcriptomic data, by a special hypergeometric test. Finally, scGeneFit25 selects gene markers that collectively optimize cell label hierarchy recovery, leveraging label-aware compressive classification methods and significantly enhancing the accuracy of cell type identification. Then the marker genes are assigned to hierarchical cell labels by their high expressions25.
+
+Given the diverse landscape of the above tools, researchers face a challenge to make a good choice, which requires careful consideration of tool performance, compatibility with specific datasets, and suitability for addressing distinct biological questions. The rapid evolution of technology has led to continuous development of new tools and methodologies, further complicating the selection process for the most appropriate tools. Addressing this challenge, the development of a unified platform for benchmarking marker genes should aim to significantly enhance usability while ensuring consistent and comprehensive evaluation metrics for testing various marker gene identification tools. While versatile benchmark projects for scRNA-seq have been conducted in recent years, such as those addressing differential expression analysis17, dimension reduction methods26, clustering strategies27, and data matrix transformations28, a benchmark for specialized gene marker identification tools is still absent, let alone a unified platform to perform such assessments in a user-friendly manner.
+
+Therefore, we propose cellMarkerPipe, an adaptable and all-in-one platform designed for cell type-specific marker gene identification and benchmarking. This platform conveniently compiled and wrapped around a list of recent and specialized computational tools for cluster-specific marker gene identification (from 2017 to 2022, see Supplementary Table 1), each contributing to the advancement of marker gene identification in the evolving field of single-cell transcriptomics. Rigorous testing on diverse scRNA-seq datasets from human, mouse, and plant samples (Supplementary Table 2), in conjunction with known markers, validates the robustness of our systematic benchmarking approach. Through a case study, we illustrate the potential applications of the cellMarkerPipe platform in advancing gene therapeutics for targeted cell populations, paving the way for personalized and genomic editing treatments. Implemented in both Python and R, this open-source platform empowers researchers across diverse biological domains with a comprehensive and fully automated protocol for cell-type marker gene identification.
+
+Results
+
+Overview of the pipeline
+
+The cellMarkerPipe pipeline accepts input in the 10 × format, comprising both a cell-gene matrix and cell cluster labels (see Fig. 1). The output from the pipeline is an evaluation report with comprehensive metrics for the identified marker genes from any selected methodology.Figure 1 Schematic overview of the pipeline. The cellMarkerPipe comprises three key steps: preparation, selection, and evaluation for marker genes.
+
+The cellMarkerPipe comprises three core modules: preparation, marker selection, and marker evaluation. Firstly, the preparation step includes normalization, scaling, and potential dimension reduction through the selection of highly variable genes. This step also includes the filtering of low-quality single cells following best practices of Seurat (see Methods). The output of the preparation step is a normalized and scaled cell-gene matrix. Secondly, the marker selection step employs a comma separated two-column file (with cell-barcode and cluster-id) and normalized gene expression data from the previous step to perform gene selection using various methods. The pipeline has already supported multiple R/python environments for the prioritized tools, i.e. Seurat, COSG, SC3, SCMarker, COMET, and scGeneFit, to be compared and benchmarked in this paper. The pipeline also has the capability of allowing researchers to incorporate their own tools or gene selection methods, provided the data formats for cell clusters and normalized expression matrix are compatible with our standards. The output of marker selection is a csv file containing genes specific to each cell type. Thirdly, in the evaluation step, the pipeline assesses the marker genes and outputs a report. The evaluation metrics are based on the re-clustering effect. This means the data is re-clustered based on selected markers to compare the resulting clusters with the cell clusters provided by users and/or calibrated with prior knowledge. Optionally, users can also provide known cluster-specific marker genes to evaluate Precision and Recall scores as additional metrics. Thus, the final evaluation report includes scores such as the Adjusted Rand Index (ARI)29, Jaccard index, purity, normalized mutual information (NMI)30, and Fowlkes-Mallows Index (FMI) from the re-clustering assessment31,32, and precision and recall values for each cell type and overall dataset given known marker genes.
+
+Systematic benchmarking in diverse testing scenarios
+
+The evaluation of marker genes across different tools raised several critical considerations, including the number of selected marker genes, relative cell type abundance, input cell numbers, and number of highly variable genes at the dimension reduction stage (Supplementary Table 3). These factors that may affect our evaluation have been systematically explored in this section. Among the various efficacy metrics, ARI is frequently used to assess the re-clustering method based solely on the selected marker genes33. Additionally, precision is utilized to ascertain true positives among the selected marker genes for each cell type. From ARI and precision curves (Fig. 2a–d), SCMarker and COSG consistently perform well as an overall observation. Meanwhile, other tools exhibit similar performance levels case by case which suggest that they can be satisfactory in various scenarios as well. The complete analytical metrics under various testing cases are all reported and show similar patterns (Supplementary Table 3).Figure 2 Testing scenarios for various methods. (a) Evaluation of methods on Zeisel data with varying numbers of selected marker genes. (b) Assessment of methods on Jurkat data with fluctuations in cell type proportions. (c) Examination of methods on PBMC data with varying numbers of cells in the input dataset, and (d) varying numbers of genes post dimension reduction. (e) COSG results showcased for the plant (Arabidopsis root) data, highlighting specific expressions with the top 10 genes in each cluster.
+
+In Case 1 (Fig. 2a), we evaluated the tool performance by controlling the total number of selected marker genes, using a publicly available Zeisel dataset34 from the mouse brain. All the methods can be adjusted by certain parameters to reach the same or similar number of selected marker genes. With more marker genes selected, we observed the increasing trend of ARI scores showing an overall improvement in clustering efficacy. As expected, precision instead decreased since the total selected marker genes will dilute the proportion of known marker genes. Among methods, COSG and SCMarker exhibited good precision scores for identifying true positive gene markers at the same or similar number of marker genes being reported. Marker genes identified by COSG and SCMarker also show more specific gene expressions patterns in correspondent cell types from heatmap (Supplementary Fig. 1). Moreover, ARI reaches saturation for most of the methods especially for SCMarker even with fewer than 20 genes (approximately 2 genes in each of the nine cell types). Since all datasets went through dimension reduction by selecting highly variable expressed genes during the preparation step, we selected the similar number of top high variable genes as a control method to indicate the baseline efficacy compared to those specialized tools. This “high variable” method exhibited lower overall precision but comparable ARI score as to other methods at any selected gene numbers, which indicates that the re-clustering on global informative genes may not always offer marker genes in a cell type specific manner. This implies the necessity of comprehensive metrics in our pipeline. Lastly, since the top 10 selected marker genes for each cluster (this is about 90 marker genes in total) in those methods already display a stabilized clustering performance (ARI saturation), we will always report top 10 marker genes for each cluster in later experiments (and in heatmaps) by default.
+
+In Case 2 (Fig. 2b), we tested methods on the relative cell population by Jurkat dataset35, an artificial mixture of two distinct cell lines (Jurkat and 293 T). By altering the mixing ratio from 1:1 to an imbalanced scenario up to 9:1 (Jurkat:293 T), we observed a decrease in clustering efficacy when the cell types were more severely imbalanced. However, the effect on precision was not consistently stable since there are only one marker genes in each cell line were considered. Overall, SCMarker exhibited relatively higher re-clustering effectiveness in this test of imbalanced cell types, with several other tools demonstrating similar or comparable performance. From the heatmap visualization of marker gene expression specificity, SCMarker, COSG, Seurat and SC3 all display strong patterns (Supplementary Fig. 2).
+
+In Case 3 (Fig. 2c), regarding experimental throughput, we varied the total number of input cells from 100 to 2500 using PBMC-10 K dataset35 to investigate the impact for marker genes identification. We observed an enhanced clustering effectiveness (ARI) and precision score with over 500 cells, equating to roughly 50 cells per cluster. Generally, more cells can provide better distribution of gene expressions but may also bring in more noise. The gene expression specificity pattern is not very observable when using 2500 cells and 5000 genes as inputs in all methods (Supplementary Fig. 3). Given current technological capabilities which enable the processing of over 5000 cells, the limitation of the input cell number is of minor consideration, except for rare cell types.
+
+In Case 4 (Fig. 2d), we tested the effect of input gene numbers (highly variable genes from top 500 to 5,000 in dimension reduction) using PBMC-10 K dataset35. This experiment illustrated that input gene numbers (often after dimension reduction with highly variable genes) may not significantly affect clustering efficacy but do impact precision. SCMarkers and COSG displayed relatively good precision scores in this testing, but their gain in clustering accuracy is minor given all tools including Seurat and SC3 indicates comparable re-clustering scores. This result also emphasizes that leveraging a substantial number of highly variable genes is beneficial for enhancing clustering efficacy36 but may not necessarily serve as specific markers for cell types. This underscores that genes playing crucial roles in overall clustering performance are not necessarily cell type-specific marker genes.
+
+In Case 5 (Fig. 2e), we utilized a plant dataset derived from Arabidopsis root single cells37 to visualize the standardized gene expression specificity using the top 10 selected gene markers in each cell type. Heatmaps can visually represent the marker genes that influenced these cell clusters38. SCMarker, SC3 and COSG played important roles in identifying type-specific expressed genes, with the yellow colors indicating higher specificity of cell type expressions. Additionally, the red box highlights the re-discovery of known marker genes. The marker genes selected by SCMarker, SC3, Seurat and COSG included more reported known marker genes (in red boxes) than those selected by other methods affirming the superior performance of SCMarker, SC3, Seurat and COSG in this context.
+
+Comparative studies in human and mice gut tissues
+
+In this experiment, we utilized datasets from both human and mice gut cells39,40, to conduct comprehensive comparisons across our selected methodologies. Initially, we reconstructed and displayed single-cell clusters colored on the given cell type labels identified in the respective studies (Fig. 3a,b). In the human colon, ileum, and rectum tissues, we obtained marker genes for cell types of Paneth, Goblet, Enterocyte, Stem-cell, Enteroendocrine, EP (Enterocyte progenitor), and TA (transit-amplifying), while in mouse duodenum, ileum, and jejunum tissues, we obtained marker genes for Enterocyte, Tuft, Goblet, Enteroendocrine, Stem-cell, TA, EP, and Paneth cell types. Overall, COSG achieved consistently better gene recall scores in human ileum rectum and mouse duodenum, while SCMarker, SC3 and Seurat performed better in other tissues (Supplementary Table 4). The performance patterns of the computational method COSG remained relatively consistent across both human and mouse, as well as across various tissue types (Fig. 3a,b). From heatmaps, the specific gene expression values within each cell type were distinctly elucidated by the top 10 marker genes identified through the COSG method (Fig. 3c,d). Genes selected by SCMarker also displayed specific cell type expression patterns (Supplementary 4–9) across human and mice tissues. While we did observe shared markers, such as TFF3, ATOH1, and FCGBP in Goblet cells and LGR5 in Stem-cells from both human and mouse ileum data, it is important to notice that, overall, the marker genes identified in human and mice datasets exhibited differences (Fig. 3c,d).Figure 3 Performance of COSG on single-cell data. (a) Evaluation of COSG performance on human gut single-cell data. (b) Evaluation of COSG performance on mice gut single-cell data. (c) Top 10 gene expressions per cell type identified by COSG for human gut samples. (d) Top 10 gene expressions per cell type identified by COSG for mice gut samples.
+
+Running time comparison for various methods
+
+In this experiment, we conducted a thorough analysis of the running time complexity and scalability across various methods using the PBMC dataset. By manipulating the number of genes and cells as input variables, we meticulously measured the running time taken for the marker gene selection step in seconds across different tools (Fig. 4a,b). COMET exhibited challenges in scalability as it necessitates the examination of marker gene combinations, making it less efficient when faced with an increased number of genes or cells. Similarly, scGeneFit displayed relatively extended processing times due to the evaluation of gene networks based on positive and negative correlations. In contrast, the running time for the remaining tools demonstrated similar performance, showing little variation in response to changes in input variables.Figure 4 Running time measurement in seconds for varied input parameters. (a) Variation in running time with changes in the number of genes. (b) Variation in running time with changes in the number of cells in the input data. These computational tasks were executed on a computing node with 10G of allocated memory, running a single process on standard CPUs at the Holland Computing Center, University of Nebraska Lincoln.
+
+Examination of cell makers and cell types in gene therapy
+
+A recent clinical trial41 explores gene editing-based therapy for children with transfusion-dependent β-thalassemia caused by HBB gene mutation. By targeting the BCL11A enhancer, researchers aim to induce γ-globin expression to compensate the globin deficiency. Two children received edited stem cells, achieving successful engraftment and transfusion independence for over 18 months. Single cell data from this study provide exploratory analysis, which revealed no notable side effects. Here we used our cellMarkerPipe to re-evaluate the single cell data from this medical research from one of the children with both unedited and modified blood cells using six methods. We obtained the cell clusters and gene markers from the original publication. With the known blood cell markers41, SCMarker, SC3 and COSG identified a good set of marker genes (Fig. 5a) according to their precision and recall scores. For the clustering effectiveness, all tools displayed comparable scores with their maker genes.Figure 5 Comparative performance in blood samples. (a) Performance of methods in unedited and modified blood samples from the same patient. (b) Top 10 marker gene expressions per cell type identified by COSG for unedited and modified blood samples. (c) Top 10 gene expressions for B cells. (d) Influence of clustering method on recall and precision.
+
+The COSG selected top 10 marker genes were visually represented for each cell type, showcasing their specific expressions in a heatmap (Fig. 5b). This pattern can be also observed in SCMarker identified marker genes, but not observed clearly from other tools (Supplementary Fig. 10–11). Most of these markers were shared across unedited and modified samples in identified blood cell types. Interestingly, when combining B cells (naïve and memory) in these two samples (Fig. 5c), BCL11a did not emerge as a distinguishing marker between edited and unedited cases. This overall analysis suggests that the gene editing effect may not significantly impact major mature cell types according to the marker gene selections. Additionally, we explored potential uncertainties arising from different clustering methods, such as SC3 (Fig. 5d). SC3 and Seurat were both controlled to generate twelve clusters, and we obtained top ten marker genes for each cluster by COSG. While minor differences were observed in overall precision and recall for known cell markers, it's important to notice that the choice of clustering method in scRNA-seq analysis may influence marker gene selection and downstream analysis. Nonetheless, this variation, given commonly used cell clustering methods (such as Seurat is used by default in our cellMarkerPipe), shall not pose a major concern for a real-world data analysis.
+
+Discussion
+
+CellMarkerPipe places a strong emphasis on utilizing cell cluster aware marker gene identification methods. While general dimension reduction or feature selection methods hold their own advantages in specific contexts, the prioritization of specialized marker gene selection techniques in this platform ensures assessment of marker gene quality and specificity that can emulate the cell sorting approach.
+
+CellMarkerPipe offers a comprehensive range of metrics, including clustering effectiveness scores and precision/recall values based on known markers. The distinguishing metrics that determine one tool's superiority over another may vary depending on the conditions and datasets. In our testing, we found that metrics were often similar among tools, though differences could arise. While our conclusions may sometimes favor specific tools, cellMarkerPipe presents all metrics to users, providing them with sufficient information for analysis and judgment.
+
+Among the tools integrated within cellMarkerPipe, SCMarker and COSG both exhibit commendable stability and consistency in their performance. Particularly, COSG stands out for its adeptness and efficiency in employing simple cosine distance measures. This characteristic lends COSG a high degree of reliability in marker gene identification across diverse datasets, underscoring its suitability for robust single-cell analyses.
+
+The unique feature of COMET, its ability to identify combinatorial gene markers, has not been extensively tested and fairly benchmarked in this research. Indeed, the gene panel identification of COMET represents a distinctive advantage, revealing intricate relationships among genes and offering significant biological insights into complex regulatory networks. Nevertheless, this unique capability of COMET comes with the trade-off of expensive time complexity.
+
+Seurat, as a widely adopted tool in single-cell analysis, provides valuable utility through its FindAllMarkers function. It's crucial to recognize that while Seurat is convenient to use and should be suffice for diverse applications, it might not always be the optimal choice for the comprehensive discovery of marker genes. This consideration implies the importance of evaluating other marker identification approaches.
+
+We limit our tests by default settings for differential expression (DE) gene statistical methods in two widely used packages, Seurat and SC3, recognizing the diverse options and settings explored in other DE benchmark projects17,18. When utilizing differential expression (DE) statistical methods, as they may select top-ranked DE genes that are highly expressed in target cells and a small group of nontarget cells, potentially leading to erroneous identification as marker genes22. This highlights the importance of incorporating other more sophisticated marker gene identification methods besides the DE approaches.
+
+Overall, CellMarkerPipe stands out as a new, standardized and uniform platform designed for the identification of cell-specific marker genes, coupled with comprehensive benchmarking capabilities. In practical applications, researchers have the flexibility to seamlessly integrate cellMarkerPipe with any gene selection tool as a plugin, enabling them to efficiently pinpoint marker genes tailored to their specific research objectives. Furthermore, users can readily access an informative evaluation report, thereby ensuring a thorough assessment of the identified markers. This streamlined process exemplifies the adaptability and user-centric nature of cellMarkerPipe, providing a valuable resource for researchers seeking precise and reliable marker gene identification in their single-cell transcriptome analyses.
+
+Methods
+
+Pipeline development
+
+The cellMarkerPipe was developed by both python and R environment. For the simplicity and compatibility concerns, each of the methods we selected has its own working environment in the development of the pipeline. The installation of working environment correspondent to each of the tools is listed in the github (see code availability section). The pipeline was implemented in both command line version and the python modules. Python modular functions are tested in Jupyternotebooks in both a single computer and a computer cluster.
+
+The preprocessing and data preparation step involves filtering data based on criteria such as the minimum and maximum gene count per cell and the percentage of mitochondrial genes per cell, following a widely adopted protocol in Seurat. For re-clustering evaluation, Seurat was employed, as it is the most prevalent package for cell clustering. In the final experiment using a clinical dataset, we also implemented SC3 clustering to compare its clustering effectiveness in the preparation step. The same data formats were prepared from SC3 clustering output so that the marker selection step and evaluation step were run without any revision in procedures.
+
+Benchmark from datasets and tools
+
+The datasets in this study were chosen from popular public scRNA-seq datasets widely used in cell clustering and annotations. These datasets should have a clear demonstration of known cell types and marker genes being used in their study. We also aimed to maximize the species and tissue coverage with diverse application scenarios by these datasets. The data matrices and cell type information were downloaded from NCBI or their publication repository (Supplementary Table 2). The ground truth for the marker genes from each of the datasets were collected from the original publication or relevant studies they refer to (Supplementary Table 5). To make sure the fair comparison of the total gene selections in different tools, we ensure the total number of selected genes are comparable based on the adjustment of the parameters in each tool (in experiments mentioned in Fig. 2a), or simply report the top ten marker genes per cluster (in experiments other than Fig. 2a). For the method scGeneFit, since it’s hard to directly control the selected gene numbers, we tuned the other parameters to make sure the number of selected genes is closest to the testing cases of all other methods. The values of parameters we used in this study for all tools ensure the proper comparison and reproducibility of this benchmark and used as default settings in our pipeline (Supplementary Table 6). When reporting the total selected marker genes (Supplementary Table 7) from each dataset, since some clusters may share the marker genes, the non-redundant numbers were reported in the paper and evaluated in ARI and precision scores. The marker genes for individual cell types were also reported (Supplementary Table 7) and used in gene expression heatmaps (Supplementary Figs. 1–11).
+
+The heatmaps showing the cell type specific gene expressions for selected marker genes per group were generated by Scanpy sc.pl.matrixplot function42 at “standard_scale” mode. This mode is to standardize the given gene expressions into the values between 0 and 1, meaning for each variable or group the values subtract the minimum and divide each by its maximum.
+
+Detailed statistics for these various experiments and more heatmaps were shown in Supplementary Table 3,4 and Supplementary Figs. 1–11.
+
+Evaluation scores in benchmark reports
+
+The final evaluation report provides scores for metrics are either from re-clustering by Seurat default or comparison of the known gene markers. The re-clustering based metrics are Adjusted Rand Index (ARI), Jaccard index, purity, normalized mutual information (NMI), Fowlkes-Mallows Index (FMI). The comparisons of the known markers provide precision and recall. These metrics are demonstrated in the following formula. These scores are obtained by scikit-learn package43.
+
+ARI is a measure of consistency between the observation and expected cluster results. The observation clusters Co is based on identified marker genes, while the expected clusters CE is based on the true cell cluster labels. Assume n is the total number of cells. The number nij represents the cell numbers in both i-th cluster in observation Co and j-th cluster in expectation CE. The number ni. represents the cell numbers in i-th cluster in observation Co, and the number n.j represents the cell numbers in j-th cluster in expectation Co. The ARI can be calculated by the formula below. The ARI value will be in the range [0, 1]. Higher values indicate better agreement between the predicted (observed) and true (expected) clusters by the identified gene markers.1 ARICo,CE=∑i,jnij2-∑ini.2∑jn.j2/n212∑ini.2+∑jn.j2-∑ini.2∑jn.j2/n2
+
+The Jaccard Index measures the similarity between two sets by comparing the intersection (common elements in clusters) with the union (total elements in clusters) of the sets, often used to assess the similarity of clustering results44. The calculation is as follows given the i-th cluster in observation Co and j-th cluster in expectation CE. The overall Jaccard Index is based on the mean of all the cluster-wise comparisons.2 JICio,CjE=Cio∩CjECio∪CjE=nijni.+n.j-nij
+
+NMI quantifies the mutual dependence between two sets of labels, adjusted for chance, providing a measure of the agreement between the two clustering results. In detail, NMI is mutual information between observation and expectation I(Co, CE) normalized by entropies of each H(Co) and H(CE). NMI can be calculated by the following formula.3 NMICo,CE=ICo,CEHCoHCE=∑i,jnijlogn∗nijni.∗n.j∑ini.logni.n∗∑jn.jlogn.jn
+
+FMI assesses the similarity between two cluster results by computing the geometric mean of the pairwise precision and recall. TP (true positive), FP (false positive) and FN (false negative) are based on the cell label contingency table between i-th cluster in observation Co and j-th cluster in expectation CE.4 FMICio,CjE=TPTP+FP∗TPTP+FN
+
+Besides the above re-clustering metrics based on the identified marker genes, if user provides the “true” or expected marker gene sets, our pipeline also calculates the Precision and Recall scores to show whether the predicted marker genes are consistent with biological validated or “true” marker gene sets. Precision means the percentage of the corrected predicted genes among all predicted genes, while Recall means the percentage of the corrected predicted genes among all expected true results. Our pipeline will report cluster-wise Precision and Recall scores for each cluster, as well as the overall Precision and Recall scores when the marker genes from all clusters are pooled together. Figures and tables in this paper only display the overall Precision and Recall scores for easy comparison among methods. Overall, cellMarkerPipe provides very comprehensive metrics in the final evaluation report.
+
+Supplementary Information
+
+Supplementary Table S1.
+
+Supplementary Table S2.
+
+Supplementary Table S3.
+
+Supplementary Table S4.
+
+Supplementary Table S5.
+
+Supplementary Table S6.
+
+Supplementary Table S7.
+
+Supplementary Figures.
+
+Supplementary Information
+
+The online version contains supplementary material available at 10.1038/s41598-024-63492-z.
+
+Acknowledgements
+
+We would like to acknowledge the Holland Computing Center (HCC) in University of Nebraska Lincoln providing computational support. We would like to thank to Dr. Chao Zhang in Boston University Medical Center for brief discussions at the starting point. We would also like to thank to Dr. Yuxuan Wu in East China Normal University (Shanghai), to provide help for the gene editing data set. This research is funded by the Nebraska Soybean Board and the National Institutes of Health (NIH) grant P20GM104320.
+
+Author contributions
+
+The idea and framework of this work are conceived and designed by Q.Y. The implementation of the tool is done by Y.J. The data analysis from all samples, including the figures and tables are done by Y.J. The software package is briefly tested and optimized by P.M. This manuscript is prepared and drafted by both Q.Y. and Y.J. All authors provide revisions to the manuscript.
+
+Data availability
+
+Publicly available scRNA-seq datasets used in this study are listed in Supplementary Table 2. The resulted scores and complete statistics are reported in Supplementary Table 3 and 4. All identified marker genes from this study are available in Supplementary Table 7.
+
+Code availability
+
+Source code for cellMarkerPipe is available in github repository (https://github.com/yao-laboratory/cellMarkerPipe). CellMarkerPipe can be run in both command line version and jupyternotebook version. Testing dataset and example codes are all available in this github repository.
+
+Competing interests
+
+The authors declare no competing interests.
+
+Publisher's note
+
+Springer Nature remains neutral with regard to jurisdictional claims in published maps and institutional affiliations.
+==== Refs
+References
+
+1. Birnbaum KD Otegui MS Bailey-Serres J Rhee SY The plant cell atlas: Focusing new technologies on the kingdom that nourishes the planet Plant Physiol. 2022 10.1093/plphys/kiab584 34935969
+2. Nieto P A single-cell tumor immune atlas for precision oncology Genome Res. 2021 31 1913 1926 10.1101/gr.273300.120 34548323
+3. Fawkner-Corbett D Spatiotemporal analysis of human intestinal development at single-cell resolution Cell 2021 184 810 826 10.1016/j.cell.2020.12.016 33406409
+4. Zilbauer M A roadmap for the human gut cell atlas Nat. Rev. Gastroenterol. Hepatol. 2023 20 597 614 10.1038/s41575-023-00784-1 37258747
+5. Rozenblatt-Rosen O Building a high-quality human cell atlas Nat. Biotechnol. 2021 10.1038/s41587-020-00812-4 33500565
+6. Jovic D Single-cell RNA sequencing technologies and applications: A brief overview Clin. Transl. Med. 2022 12 e694 10.1002/ctm2.694 35352511
+7. Cui Y Single-cell transcriptome analysis maps the developmental track of the human heart Cell Rep. 2019 26 1934 1950 10.1016/j.celrep.2019.01.079 30759401
+8. van Galen P Single-cell RNA-Seq reveals AML hierarchies relevant to disease progression and immunity Cell 2019 176 1265 1281 10.1016/j.cell.2019.01.031 30827681
+9. Melms JC A molecular single-cell lung atlas of lethal COVID-19 Nature 2021 595 114 119 10.1038/s41586-021-03569-1 33915568
+10. Zhong R Immune cell infiltration features and related marker genes in lung cancer based on single-cell RNA-seq Clin. Transl. Oncol. 2021 23 405 417 10.1007/s12094-020-02435-2 32656582
+11. Alam J Single-cell transcriptional profiling of murine conjunctival immune cells reveals distinct populations expressing homeostatic and regulatory genes Mucosal Immunol. 2022 15 620 628 10.1038/s41385-022-00507-w 35361907
+12. Grün D Single-cell messenger RNA sequencing reveals rare intestinal cell types Nature 2015 525 251 255 10.1038/nature14966 26287467
+13. Luecken MD Theis FJ Current best practices in single-cell RNA-seq analysis: A tutorial Mol. Syst. Biol. 2019 15 e8746 10.15252/msb.20188746 31217225
+14. Zhang X Cell Marker: A manually curated resource of cell markers in human and mouse Nucleic Acids Res. 2019 47 D721 D728 10.1093/nar/gky900 30289549
+15. Franzén O Gan LM Björkegren JLM PanglaoDB: A web server for exploration of mouse and human single-cell RNA sequencing data Database 2019 2019 baz046 10.1093/database/baz046 30951143
+16. Ianevski A Giri AK Aittokallio T Fully-automated and ultra-fast cell-type identification using specific marker combinations from single-cell transcriptomic data Nat. Commun. 2022 13 1246 10.1038/s41467-022-28803-w 35273156
+17. Nguyen HCT Baik B Yoon S Park T Nam D Benchmarking integration of single-cell differential expression Nat. Commun 2023 14 1570 10.1038/s41467-023-37126-3 36944632
+18. Pullin JM McCarthy DJ A comparison of marker gene selection methods for single-cell RNA sequencing data bioRxiv 2022 25 56
+19. Li Y Ge X Peng F Li W Li JJ Exaggerated false positives by popular differential expression methods when analyzing human population samples Genome Biol. 2022 23 79 10.1186/s13059-022-02648-4 35292087
+20. Hao Y Integrated analysis of multimodal single-cell data Cell 2021 184 3573 3587 10.1016/j.cell.2021.04.048 34062119
+21. Kiselev VY SC3: Consensus clustering of single-cell RNA-seq data Nat. Methods 2017 14 483 486 10.1038/nmeth.4236 28346451
+22. Dai M Pei X Wang XJ Accurate and fast cell marker gene identification with COSG Brief Bioinform. 2022 23 bbab579 10.1093/bib/bbab579 35048116
+23. Wang F Liang S Kumar T Navin N Chen K SCMarker: Ab initio marker selection for single cell transcriptome profiling PLoS Comput. Biol. 2019 15 e1007445 10.1371/journal.pcbi.1007445 31658262
+24. Delaney C Combinatorial prediction of marker panels from single-cell transcriptomic data Mol. Syst. Biol. 2019 15 e9005 10.15252/msb.20199005 31657111
+25. Dumitrascu B Villar S Mixon DG Engelhardt BE Optimal marker gene selection for cell type discrimination in single cell analyses Nat. Commun. 2021 12 1186 10.1038/s41467-021-21453-4 33608535
+26. Xiang R A comparison for dimensionality reduction methods of single-cell RNA-seq data Front. Genet. 2021 12 646 936 10.3389/fgene.2021.646936
+27. Yu L Cao Y Yang JYH Yang P Benchmarking clustering algorithms on estimating the number of cell types from single-cell RNA-sequencing data Genome Biol. 2022 23 49 10.1186/s13059-022-02622-0 35135612
+28. Ahlmann-Eltze C Huber W Comparison of transformations for single-cell RNA-seq data Nat. Methods 2023 20 665 672 10.1038/s41592-023-01814-1 37037999
+29. Rand WM Objective criteria for the evaluation of clustering methods J. Am. Stat. Assoc. 1971 66 846 850 10.1080/01621459.1971.10482356
+30. Cover TM Thomas JA Elements of information theory Elem. Inf. Theory 2005 10.1002/047174882X
+31. Arinik N Labatut V Figueiredo R Characterizing and comparing external measures for the assessment of cluster analysis and community detection IEEE Access 2021 9 20255 20276 10.1109/ACCESS.2021.3054621
+32. Wu Z Wu H Accounting for cell type hierarchy in evaluating single cell RNA-seq clustering Genome Biol. 2020 21 123 10.1186/s13059-020-02027-x 32450895
+33. Duò A Robinson MD Soneson C A systematic performance evaluation of clustering methods for single-cell RNA-seq data F1000Res 2018 7 66 10.12688/f1000research.15666.2
+34. Zeisel A Cell types in the mouse cortex and hippocampus revealed by single-cell RNA-seq Science 2015 347 1138 1142 10.1126/science.aaa1934 25700174
+35. Zheng GXY Massively parallel digital transcriptional profiling of single cells Nat. Commun. 2017 8 14049 10.1038/ncomms14049 28091601
+36. Yip SH Sham PC Wang J Evaluation of tools for highly variable gene discovery from single-cell RNA-seq data Brief Bioinform. 2018 20 1583 1589 10.1093/bib/bby011
+37. Yan H Identification of new marker genes from plant single-cell RNA-seq data using interpretable machine learning methods New Phytologist 2022 234 1507 1520 10.1111/nph.18053 35211979
+38. Chari T Pachter L The specious art of single-cell genomics PLoS Comput. Biol. 2023 19 e1011288 10.1371/journal.pcbi.1011288 37590228
+39. Wang Y Single-cell transcriptome analysis reveals differential nutrient absorption functions in human intestine J. Exp. Med. 2020 217 e20191130 10.1084/jem.20191130 31753849
+40. Haber AL A single-cell survey of the small intestinal epithelium Nature 2017 551 333 339 10.1038/nature24489 29144463
+41. Fu B CRISPR–Cas9-mediated gene editing of the BCL11A enhancer for pediatric β0/β0 transfusion-dependent β-thalassemia Nat. Med. 2022 28 1573 1580 10.1038/s41591-022-01906-z 35922667
+42. Wolf FA Angerer P Theis FJ SCANPY: Large-scale single-cell gene expression data analysis Genome Biol. 2018 19 1 5 10.1186/s13059-017-1382-0 29301551
+43. Pedregosa F Scikit-learn: Machine learning in Python J. Mach. Learn. Res. 2011 12 2825 2830
+44. Tang M Evaluating single-cell cluster stability using the Jaccard similarity index Bioinformatics 2021 37 2212 2214 10.1093/bioinformatics/btaa956 33165513

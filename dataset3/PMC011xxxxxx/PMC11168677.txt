@@ -1,0 +1,898 @@
+
+==== Front
+PLoS One
+PLoS One
+plos
+PLOS ONE
+1932-6203
+Public Library of Science San Francisco, CA USA
+
+10.1371/journal.pone.0305208
+PONE-D-24-02202
+Research Article
+Research and Analysis Methods
+Imaging Techniques
+Physical Sciences
+Mathematics
+Algebra
+Linear Algebra
+Vector Spaces
+Physical Sciences
+Mathematics
+Applied Mathematics
+Algorithms
+Research and Analysis Methods
+Simulation and Modeling
+Algorithms
+Research and Analysis Methods
+Simulation and Modeling
+Medicine and Health Sciences
+Diagnostic Medicine
+Diagnostic Radiology
+Ultrasound Imaging
+Research and Analysis Methods
+Imaging Techniques
+Diagnostic Radiology
+Ultrasound Imaging
+Medicine and Health Sciences
+Radiology and Imaging
+Diagnostic Radiology
+Ultrasound Imaging
+Physical Sciences
+Mathematics
+Optimization
+Research and Analysis Methods
+Mathematical and Statistical Techniques
+Mathematical Models
+Research and Analysis Methods
+Mathematical and Statistical Techniques
+Mathematical Functions
+Convolution
+Show-through removal with sparsity-based blind deconvolution
+Show-through removal with sparsity-based blind deconvolution
+https://orcid.org/0009-0000-0849-1324
+Kawakami Sota Conceptualization Data curation Formal analysis Investigation Methodology Project administration Resources Software Validation Visualization Writing – original draft 1 *
+Kudo Hiroyuki Supervision Writing – review & editing 2
+1 Degree Programs in Systems and Information Engineering, Graduate School of Science and Technology, University of Tsukuba, Tsukuba, Japan
+2 Institute of Systems and Information Engineering, University of Tsukuba, Tsukuba, Japan
+Chen Abel C. H. Editor
+Chunghwa Telecom Co. Ltd., TAIWAN
+Competing Interests: The authors have declared that no competing interests exist.
+
+* E-mail: kawakami.sota21@gmail.com
+12 6 2024
+2024
+19 6 e030520817 1 2024
+25 5 2024
+© 2024 Kawakami, Kudo
+2024
+Kawakami, Kudo
+https://creativecommons.org/licenses/by/4.0/ This is an open access article distributed under the terms of the Creative Commons Attribution License, which permits unrestricted use, distribution, and reproduction in any medium, provided the original author and source are credited.
+
+When scanning a document printed on both sides by using an electronic scanner, the printed material on the back (front) side may be transmitted to the front (back) side. This phenomenon is called show-through. The problem to remove the show-through from scanned images is called the show-through removal in the literature. In this paper, we propose a new method of show-through removal based on the following principle. The proposed method uses two scanned images with the front side and with the back side as input images. The proposed method is based on Ahmed’s Blind Image Deconvolution method discovered in 2013, which succeeded in formulating Blind Image Deconvolution as a nuclear norm minimization. Since the structure of show-through removal resembles that of Blind Image Deconvolution, we discovered that the show-through removal can be reformulated into a nuclear norm minimization in the space of outer product matrix constructed from an image vector and a point spread function vector of blurring. Using this key idea, we constructed the proposed method as follows. First, our cost function consists of the following three terms. The first term is the data term and the second term is the nuclear norm derived from the above reformulation. The third term is a regularization term to overcome the underdetermined nature of show-through removal problem and the existence of noise in the measured images. The regularization term consists of Total Variation imposed on the images. The resulting nuclear norm minimization problem is solved by using Accelerated Proximal Gradient method and Singular Value Projection with some problem-specific modifications, which converges fast and requires a simple implementation. We show results of simulation studies as well as results of real image experiments to demonstrate the performances of the proposed method.
+
+The author(s) received no specific funding for this work. Data AvailabilityAll code and experiment image files are available from the Zenodo repository (https://zenodo.org/records/11016261).
+Data Availability
+
+All code and experiment image files are available from the Zenodo repository (https://zenodo.org/records/11016261).
+==== Body
+pmc1 Introduction
+
+In recent years, digitization of paper documents has become very popular. When the paper documents are digitized, a phenomenon called show-through may occur, in which the printed material on the back (front) side is transmitted to the front (back) side. It reduces visibility of text and accuracy of OCR (Optical Character Recognition). The problem to remove the show-through from scanned images is called the show-through removal in the literature. Up to now, several methods of the show-through removal have been proposed. For example, the method using binarization [1, 2] and the method using color tone correction [3] have been used in electronic scanners. This is because the process of show-through removal in these methods is simple and requires only a single input image. However, these methods tend to be inaccurate for the printed matter having gradation such as images and drawings. On the other hand, other improved methods for the show-through removal have been proposed, in which both the scanned paper of front page and that of back page are used as input images. There exist a method using Kalman filter [4, 5], a method using Independent Component Analysis (ICA) [6–8], a method using Non-negative Matrix Factorization (NMF) [9], a method using Total Variation (TV) [10], and a method using adaptive filtering [11, 12]. These methods achieve higher accuracy compared to the earlier methods. However, each of these methods still suffers from drawbacks such as difficulty in adjusting parameters, inability to process well when there exists a printed matter on both the front and back pages, and dependency of the solution on initial values of iterative methods.
+
+Also, in recent years, show-through removal methods using Convolutional Neural Network (CNN) have been proposed [13, 14]. Among them, the method based on Auto-encoder [14] has a large potential. A typical major application of Auto-encoder is to remove disturbance from signals or images, which has been already proposed in image denoising, speckle reduction in SAR or ultrasound images, and clutter rejection in radar images. The same method can be also used to remove show-through from scanned images. This method requires only a single image of front side. However, its accuracy depends on used training data, and it may be weaker to the show-through having strong correlation with the front page image. On the other hand, our proposed method requires both of an image of the fore side and that of the back side, but using the two images eliminates the necessity of training data and may lead to an improved accuracy (for example, in the above mentioned case). At the current stage, we believe that both the optimization-based approach like ours and the Auto-encoder-based approach are meaningful to study, because they have different advantages and disadvantages and the both may be able to be combined in the future to develop more accurate or more convenient methods.
+
+In this paper, we propose a new method of show-through removal based on the nuclear norm minimization. The principle of this method is summarized as follows. First, the proposed method uses two scanned images with the front side and with the back side as input images. The proposed method is based on Ahmed’s Blind Image Deconvolution (BID) method [15] discovered in 2013. Most classical methods for BID were based on a non-convex optimization, but Ahmed et al. succeeded in formulating BID as a nuclear norm minimization, which is one of famous convex optimization problems appearing in Compressed Sensing (CS). The key of their work lies in reformulating BID in the space of outer product matrix constructed from an image vector and a Point Spread Function (P.S.F.) vector of blurring. Since the structure of show-through removal resembles that of BID, we discovered that the show-through removal can be reformulated into a nuclear norm minimization in the space of outer product matrix constructed from an image vector and a P.S.F. vector. We have succeeded in this reformulation by following the similar derivation step to Ahmed’s BID method. Using this key idea, we constructed the proposed method as follows. First, our cost function for minimization consists of the following three terms. The first term is the data term and the second term is the nuclear norm derived from the above reformulation. However, without a regularization term, the method does not work well due to the underdetermined nature of show-through removal problem and the existence of noise in the input images. Therefore, we introduce a regularization term, which is TV imposed on the images. The resulting nuclear minimization problem is solved by using Accelerated Proximal Gradient (APG) method [16] and Singular Value Projection (SVP) [17] with some problem-specific modifications, which converges fast and requires a simple implementation. In addition, the implementation of APG method is very simple.
+
+The paper is organized as follows. In Section 2, we describe a mathematical model of show-through removal. In Section 3, we briefly review Ahmed’s BID method which is the basis of this work. In Section 4, we explain the proposed method in detail. The explanation mainly consists of 1) the derivation to convert the show-through removal into a nuclear norm minimization and 2) the algorithm description of the proposed method. In Section 5, we show results of simulation studies as well as results of real image experiments. The conclusion is described in Section 6.
+
+2 Mathematical model of show-through removal
+
+Before explaining the proposed method for show-through removal, we explain a mathematical model of image degradation by the show-through. Due to the show-through, pixel values of the original image on the front side are affected by the blurred image of the back side image and the transmittance (from the back side to the front side). The blurring is caused due to diffusion of light occurring when the light passes through the paper. Using equations, the standard model of show-through can be expressed as G1=T(F1,H,M(F2),a)G2=T(F2,H,M(F1),a), (1)
+
+where G1 is the image of front side with show-through, G2 is the image of back side with show-through, F1 is the original image of front side, F2 is the original image of back side. Furthermore, H is the P.S.F. of the above-mentioned blurring and the parameter a is the transmittance. Furthermore, M(∙) is the operator which flips the image horizontally and T(∙) is the linear operator which represents the degradation caused by the show-through. We note that this linear degradation model of show-through was described in [5].
+
+Next, we describe the detailed form of operator T(∙) appearing in Eq (1). The operator T(∙) is expressed as B1(x,y)=a∑y′=1−Ky2Ky−12∑x′=1−Kx2Kx−12(Lmax−M(F1)(x+x′,y+y′))H(x′,y′)B2(x,y)=a∑y′=1−Ky2Ky−12∑x′=1−Kx2Kx−12(Lmax−M(F2)(x+x′,y+y′))H(x′,y′)G1(x,y)=F1(x,y)−B2(x,y)G2(x,y)=F2(x,y)−B1(x,y). (2)
+
+In Eq (2), B1(x,y) is the horizontally flipped blurred image of front side with inverted pixel value and gain a, B2(x,y) is the horizontally flipped blurred image of back side with inverted pixel value and gain a. Lmax is the maximum value of the image (255 for 8-bit images), and Kx and Ky are width and height of P.S.F. H, respectively. In addition, H(0,0) is defined as the center of H, not the first element. Also, we assume that F1(x,y) and M(F2)(x+x′,y+y′) (as well as F2(x,y) and M(F1)(x+x′,y+y′)) are uncorrelated to each other. In Fig 1, we show example images constructed by using this model. The show-through removal can be formulated as a problem to restore a pair of original images F1 and F2 from a pair of observed images G1 and G2 degraded by the show-through. We remark that, throughout this paper, both the scanned paper of the front side and that of the back side are available for the restoration, because using the two input images allows higher restoration accuracy as demonstrated in [4–12].
+
+10.1371/journal.pone.0305208.g001 Fig 1 Example images constructed by using the show-through model.
+
+(a) G1 degraded image (front side), (b) G2 degraded image (back side), (c) F1 original image (front side), (d) F2 original image (back side), (e) B1 horizontally flipped blurred image with invert pixel and gain a (front side), (f) B2 horizontally flipped blurred image with invert pixel and gain a (back side).
+
+3 Ahmed’s blind image deconvolution method
+
+The proposed method for show-through removal is largely based on Ahmed’s BID method [15] discovered in 2013. In this section, we briefly review Ahmed’s BID method for unfamiliar readers. First, we explain image degradation model by the blurring. Let the original image be F and the P.S.F. of blurring be H. Then, the blurred image S can be expressed as S=F⊗H, (3)
+
+where the symbol ⨂ denotes two-dimensional (2-D) convolution. Let S(x,y),F(x,y), and H(x,y) be values of S,F, and H at pixel (x,y). Then, Eq (3) is expressed as S(x,y)=∑y′=1−Ky2Ky−12∑x′=1−Kx2Kx−12F(x+x′,y+y′)H(x′,y′)(x=1,2⋯Mx,y=1,2⋯My), (4)
+
+where Mx and My are width and height of F, respectively. BID is a problem of estimating the original image F and the P.S.F. H simultaneously from the degraded image S. Most conventional BID methods are based on a non-convex optimization by using an iterative method [18–20]. On the other hand, in 2013, Ahmed et al. [15] succeeded in formulating BID into a form of nuclear norm minimization, which is one of famous convex optimizations problems appearing in CS. The key of their work lies in reformulating BID in the space of outer product matrix constructed by the image vector and the P.S.F. vector. We briefly describe this derivation step below. Let f→=(f1,f2,⋯fMxMy)T be the vectorized form of F. Let h→=(h1,h1,⋯hKxKy)T be the vectorized form of H. We assume that the vectorization of image and P.S.F. is performed according to the raster-scan order. In Ahmed’s BID method, an outer product matrix X constructed from f→ and h→ is used, where X is defined by X=f→h→T=(f1h1f1h2⋯f1hKxKyf2h1f2h2⋯f2hKxKy⋮⋮⋱⋮fMxMyh1fMxMyh2⋯fMxMyhKxKy). (5)
+
+By the definition of outer product, the rank of matrix X is always 1 when the two vectors f→ and h→ are non-zero. Then, by using X, we can perform the same calculation as Eq (4) representing the convolution by S(x,y)=∑y′=1−Ky2Ky−12∑x′=1−Kx2Kx−12X((y′+Ky−12)Kx+x′+Kx+12,(y+y′)Mx+x+x′), (6)
+
+where the convolution could be expressed with a simple linear operator which acts on the matrix X. We denote this linear operator by A(∙). Then, Eq (6) is expressed as s→=A(X), (7)
+
+where s→ is a vector defined by arranging all elements of image S according to the raster-scan order. Therefore, BID can be formulated as a problem to find a matrix X satisfying Eq (7) and having a rank of 1. This problem is expressed as minXrank(X)subjecttos→=A(X). (8)
+
+The problem of finding a matrix with rank of 1 is called the rank minimization in the literature. It is known that computational complexity of the rank minimization is NP-hard, but it can be solved with sufficient accuracy in practice by using a convex relaxation into a nuclear norm minimization. This fact has been demonstrated in a variety of problems in real world [21]. The nuclear norm minimization corresponding to Eq (8) is expressed as minX‖X‖*subjecttos→=A(X). (9)
+
+Through the above derivation step, Ahmed et al. succeeded in formulating BID by a convex optimization. We remark again that the conventional methods of BID [18–20] are based on a non-convex optimization so that the solution depends on initial values of image and P.S.F. used in the iterative method. Therefore, we expect that Ahmed’s BID method allows more stable and more accurate restoration.
+
+4 Proposed method for show-through removal
+
+4.1 Application of Ahmed’s BID method to show-through removal
+
+Let us consider the problem of show-through removal formulated in Section 2. The show-through removal method in this paper estimates the two original images F1 and F2 from the two input degraded images G1 and G2. First, in order to extend Ahmed’s BID method to the show-through removal, the definition of outer product X and the degradation model need to be modified as follows. We note that this modification is a key in this work. We define the outer product matrix X constructed from F1,F2,H,Lmax and a by f→=X=f→h→T(Lmax−f11,Lmax−f12,⋯,Lmax−f1MxMy,Lmax−f21,Lmax−f22,⋯,Lmax−f2MxMy)T,h→=(ah1,ah2,⋯,ahKxKy,1)T (10)
+
+where f→ is a vector defined by arranging all elements of images F1 and F2 (subtracted from Lmax) according to the raster-scan order. This vector takes the inversion of pixel values appearing in the show-through model of Eq (2) into account. Also, in the P.S.F. vector h→ defined by arranging all elements of P.S.F. H according to the raster-scan order, the first KxKy elements of h→ include the multiplication by the transmittance a. This definition allows us to embed both the degradation due to blur H and the effect of transmittance a simultaneously in h→. As a result, we no longer need to estimate the P.S.F. and the transmittance separately. Furthermore, KxKy+1-th (last) element of h→ constructs KxKy+1-th column of matrix X which is equivalent to the image f→.
+
+By defining the matrix X in this way, similarly to Eq (6), the degraded images G1 and G2 defined in Eq (2) can be calculated from the matrix X by F1(x,y)=Lmax−X(KxKy+1,yMx+x)F2(x,y)=Lmax−X(KxKy+1,MxMy+yMx+x)B1(x,y)=∑y′=1−Ky2Ky−12∑x′=1−Kx2Kx−12X((y′+Ky−12)Kx+x′+Kx+12,(y+y′)Mx+x+x′)B2(x,y)=∑y′=1−Ky2Ky−12∑x′=1−Kx2Kx−12X((y′+Ky−12)Kx+x′+Kx+12,MxMy+(y+y′)Mx+x+x′)G1(x,y)=F1(x,y)−M(B2)(x,y)G2(x,y)=F2(x,y)−M(B1)(x,y)(x=1,2⋯Mx,y=1,2⋯My). (11)
+
+In Fig 2, we show the structure of matrix X and the process of generating G1 and G2 from the matrix X by Eq (11).
+
+Furthermore, if we define the blurred image vector g→ by linking the vectorized forms of G1 and G2, Eq (11) can be expressed by using the linear operator T(∙) acting on the matrix X as
+
+10.1371/journal.pone.0305208.g002 Fig 2 Schematic diagram of the structure of matrix XandthegenerationprocessofG1andG2frommatrixX.
+
+g→=T(X)g→=(g11,g12,⋯,g1MxMy,g21,g22,⋯,g2MxMy)T. (12)
+
+According to the above derivation, we succeeded in modelling the image degradation by show-through using the outer product matrix X. Furthermore, from the definition of outer product, we know that the rank of matrix X is always 1 when the two vectors f→ and h→ are non-zero. So, by applying the same nuclear norm minimization as in Ahmed’s BID method, i.e. Eq (9) in the BID case, the show-through removal can be formulated as the following optimization problem.
+
+minX‖X‖*subjecttog→=T(X) (13)
+
+4.2 Description of proposed algorithm
+
+There exist mainly the following two drawbacks in original Ahmed’s BID method. The first drawback is lack of regularization term. Without the regularization term, it does not work well when the problem itself is underdetermined or when the degraded images contain noise. The second drawback is large computational cost, because Ahmed et al. used a slow and inefficient optimization method to solve Eq (9), i.e. general solver of semi-definite programming. To overcome these drawbacks, we have used the similar approach to that in our previous work on the standard BID and motionless super-resolution [22]. For the regularization, we have used a regularization term consisting of TV penalty imposed on the images. To reduce the computational cost, we have used APG method [16] and SVP [17] with some problem-specific modifications to solve Eq (13). This section describes the proposed algorithm in detail.
+
+4.2.1 Regularization term
+
+In its original form, Ahmed’s BID method used some unrealistic constraint such as a priori knowledge on the object support or a distribution of zero coefficient in some transformed (sparsified) space to overcome the problem of undetermined nature of BID problem, because the number of estimated variables is larger than the number of measured data in this problem. To overcome this drawback, we have proposed the use of regularization term [22]. Our regularization term consists of the TV penalty imposed on the images F1 and F2 to be estimated. Thanks to the regularization term described below, we expect that accuracy and stability of show-through removal can be improved significantly.
+
+We denote the TV penalty imposed on the images F1 and F2 by R(X). It is well-known that TV possesses an effect of smoothing flat parts of the image while edge parts are strongly preserved. However, we remark that, in the case of show-through removal, TV must be applied to the optimization variable X (not to the image vector f→). Concretely, R(X) applied to X is expressed as y→h(i)={X(KxKy+1,i+1)−X(KxKy+1,i)(ifimodMx≠0)0(otherwise)(i=1,2,⋯,2MxMy)y→v(i)={X(KxKy+1,i+Mx)−X(KxKy+1,i)(ifceil(iMx)≠My)0(otherwise)(i=1,2,⋯,2MxMy)R(X)=∑i=12MxMyy→h(i)2+y→v(i)2+ε, (14)
+
+where ε>0 is a small positive number. The rationale behind the definition of Eq (14) is as follows. Fortunately, in the definition of matrix X,KxKy+1-th column of X coincides with f→ as mentioned in Eq (10). Therefore, in Eq (14), TV calculated from KxKy+1-th column of X can be directly used as R(X), which corresponds to applying TV on the images. We believe that this definition of R(X) is a clever idea.
+
+Finally, by including this regularization term, our regularized counterpart of Ahmed’s BID method to solve Eq (13) can be formulated as the following optimization problem. minXα‖X‖*+βR(X)subjecttog→=T(X) (15)
+
+When the noise is contained in the degraded input images, it is necessary to change the data fidelity term from the hard constraint into the least-squares cost function, leading to the following optimization problem.
+
+minXα‖X‖*+βR(X)+12‖T(X)−g→‖2 (16)
+
+4.2.2 Optimization method
+
+In CS, the nuclear norm minimization problem is usually solved by using iterative Soft-Thresholding (ST) algorithm, which is known to be a particular application of Proximal Gradient (PG) method. Although this method is known to converge to an exact solution, it is necessary to compute all singular values of matrix X at every iteration. The computation of all the singular values of a large matrix significantly increases computational cost. Furthermore, the speed of convergence is also very slow, because it takes a longer time for the effect of ST to be reflected to the solution. Therefore, we used SVP instead of ST to compute the proximal mapping of nuclear norm. Although using SVP makes it impossible to solve the nuclear norm minimization exactly, it improves practical performances of the proposed method significantly in terms of convergence speed and computational efficiency [17]. In our problem, we know that the rank of X is 1 in prior to the restoration. So, we calculated only one largest singular value and discarded other singular values without computing them at each iteration. In addition, Eq (16) is solved by using APG method [16], which is known to converge faster than the standard PG method. APG method with the above SVP modification in the thresholding is summarized in ALGORITHM 1. We note that Step 4 in ALGORITHM 1 corresponds to the modified SVP part. Furthermore, in order to stabilize the restoration, elements of intermediate matrix Wk being estimated as less than 0 or greater than Lmax was projected to the interval [0,Lmax] in Step 3 of ALGORITHM 1. This modification also improved accuracy of the restoration in addition to the SVP modification.
+
+ALGORITHM 1: ACCELATED PROXIMAL GRADIENT METHOD
+
+Input:X0=f→0h→0T
+
+Output:f→k,h→k
+
+Initialization:t0=t−1=1.0,X−1=X0
+
+k←k+1
+
+Zk=Xk+tk−1−1tk(Xk−Xk−1)
+
+Wk=Zk−(ηk)−1{β∇R(Zk)+T*(T(Zk)−g→)}
+
+Wk=min(Lmax,max(0,Wk))
+
+Wk→UDVT,D=diag(σ1,σ2,⋯,σr)Xk+1=Udiag(σ1,0,⋯,0)VT
+
+tk+1=1+1+4(tk)22
+
+Calculate f→k,h→kfromXk
+
+5 Experimental studies
+
+5.1 Simulation studies
+
+First, we performed several simulation studies by using artificially generated degraded images by the show-through. All images used in simulation experiments in this paper were artificially generated by ourselves. In all the simulation studies below, the following parameter values of image degradation were used. The P.S.F. to blur the back (front) side image was a Gaussian filter with σ = 1.0 and the size of support was set to 3×3 (pixels). The value of transmittance was set to a = 0.1. Conditions in implementing the proposed method are summarized as follows. Initial values of F1 and F2 in the APG iteration were set to the degraded images G1 and G2. The size of estimated P.S.F. was set to 5×5 (pixels), which is larger than the true size of P.S.F., and initial values of P.S.F. in the APG iteration were set to H(x,y)={125(−2≤x≤2,−2≤y≤2)0(otherwise). (17)
+
+Initial values of transmittance was set to a = 0.5. The parameter values in the proposed method were set to β = 2.5 in Eq (16) and ε = 1 in Eq (14). Finally, the step-size value in Step 2 of ALGORITHM 1 was set to (ηk)−1=0.05, and the number of iterations was 200. The hardware and software environment used in the experimental studies is summarized in Table 1. All the images and codes used in the experiments are available from “https://zenodo.org/records/11016261”. All the experiments can be reproduced.
+
+10.1371/journal.pone.0305208.t001 Table 1 Hardware and software environments used in the experimental studies.
+
+OS	Windows 10 64bit	
+CPU	Intel(R) Core(TM) i7-3770 CPU @ 3.40GHz	
+RAM	32.0 GB	
+Programming Language	C++	
+Library	Eigen 3.3.4, OpenCV4.4.5	
+
+5.1.1 Experiment to confirm the effects of regularization term
+
+First, we confirmed the effects of TV regularization term described in Section 4.2.1. Image restorations were performed with and without the TV penalty. We used two images (S1 File) shown in Fig 3(A) and 3(B) for Experiment 1 (Fig 4(A) and 4(B) for Experiment 2), which simulate the printed matters in the front side and the back side, respectively. Also, spatial resolution of these images was 256×256 (pixels). The degraded images by the show-through are shown in Fig 3(C) and 3(D) for Experiment 1 (Fig 4(C) and 4(D) for Experiment 2). The only difference between Experiment 1 and Experiment 2 lies in the original images, where there exist no real image parts having gradation in Experiment 1 and some parts consist of a real image in Experiment 2. The restored images are shown in Fig 3(E)–3(H) for Experiment 1 (Fig 4(E)–4(H) for Experiment 2), where a small part of each image is also shown at the bottom after applying gamma-correction to enhance the difference in restoration. The values of evaluation indices (PSNR and SSIM) are summarized in Table 2. In this experiment, when the TV regularization is not used, the effect of show-through still remains in the restored images, but it could be removed with almost no error values with the TV regularization, leading to improving PSNR and SSIM values significantly.
+
+10.1371/journal.pone.0305208.g003 Fig 3 Images of Experiment 1.
+
+(a) original image (front side), (b) original image (back side), (c) input image (front side), (d) input image (back side), (e) restored image with TV (front side), (f) restored image with TV (back side), (g) restored image without TV (front side), (h) restored image without TV (back side).
+
+10.1371/journal.pone.0305208.g004 Fig 4 Images of Experiment 2.
+
+(a) original image (front side), (b) original image (back side), (c) input image (front side), (d) input image (back side), (e) restored image with TV (front side), (f) restored image with TV (back side), (g) restored image without TV (front side), (h) restored image without TV (back side).
+
+10.1371/journal.pone.0305208.t002 Table 2 Values of evaluation indices (PSNR and SSIM) in Experiment 1 and Experiment 2.
+
+			PSNR	SSIM	
+Experiment 1	Front side	Initial value	26.953	0.941	
+With TV	39.067	0.995	
+Without TV	31.263	0.972	
+Back side	Initial value	30.533	0.919	
+With TV	40.521	0.993	
+Without TV	34.862	0.969	
+Experiment 2	Front side	Initial value	28.086	0.905	
+With TV	39.431	0.991	
+Without TV	32.351	0.967	
+Back side	Initial value	26.079	0.927	
+With TV	41.980	0.993	
+Without TV	30.074	0.956	
+
+5.1.2 Effect of regularization parameters on image quality
+
+The proposed method involves two regularization parameters (i.e. α and β). This section demonstrates the effect of α and β on quality of the restored image. The first parameter α in Eq (16) is the parameter to evaluate the magnitude of the nuclear norm. However, the proposed method with the recommended AGP + SVP optimization method does not need to adjust α. This is because it uses the singular value projection (SVP) instead of the nuclear norm reduction, which directly imposes the constraint that the rank of X is one by computing only one largest singular value and discarding other singular values. The second parameter β affects quality of the restored image. To evaluate the effect of β on the image quality, the same simulation experiments as in Experiment 1 and Experiment 2 were performed with five different values of β (i.e. β = 0.0,1.0,2.5,5.0,10.0). These experiments are named as Experiment 3 and Experiment 4, respectively. Figs 5 and 6 show zoomed small parts of the restored images for each value of β. Table 3 summarizes PSNR and SSIM indices for each value of β. Fig 7 shows changes of PSNR and SSIM indices with different β values. It is observed that increasing β value has no significant effect on large edge parts such as those in Figs 5(A), 5(B) and 6(A), but it does smooth out fine edges such as those in Fig 6(B). From Fig 7 and Table 3, it is also observed that if β is made too large, PSNR and SSIM indices become worse and β = 2.5 yields the best restoration accuracy in average for the setup of Experiments 3 and 4. Finally, we mention that the image quality was not very sensitive to β value than what we expected before these experiments.
+
+10.1371/journal.pone.0305208.g005 Fig 5 Zoomed small parts of the restored images in Experiment 3.
+
+(a) original image (front side), (b) restored image β = 0.0 (front side), (c) restored image β = 1.0 (front side), (d) restored image β = 2.5 (front side), (e) restored image β = 5.0 (front side), (f) restored image β = 10.0 (front side), (g) original image (back side), (h) restored image β = 0.0 (front side), (i) restored image β = 1.0 (back side), (j) restored image β = 2.5 (back side), (k) restored image β = 5.0 (back side), (l) restored image β = 10.0 (back side).
+
+10.1371/journal.pone.0305208.g006 Fig 6 Zoomed small parts of the restored images in Experiment 4.
+
+(a) original image (front side), (b) restored image β = 0.0 (front side), (c) restored image β = 1.0 (front side), (d) restored image β = 2.5 (front side), (e) restored image β = 5.0 (front side), (f) restored image β = 10.0 (front side), (g) original image (back side), (h) restored image β = 0.0 (front side), (i) restored image β = 1.0 (back side), (j) restored image β = 2.5 (back side), (k) restored image β = 5.0 (back side), (l) restored image β = 10.0 (back side).
+
+10.1371/journal.pone.0305208.g007 Fig 7 Changes of evaluation indices (PSNR and SSIM) according to β value in Experiment 3 and Experiment 4. (a) PSNR, (b) SSIM.
+
+10.1371/journal.pone.0305208.t003 Table 3 Values of evaluation indices (PSNR and SSIM) in Experiment 3 and Experiment 4.
+
+		β	PSNR	SSIM	
+Experiment 3	Front side	0.0	31.263	0.972	
+1.0	38.582	0.994	
+2.5	39.067	0.995	
+5.0	37.314	0.994	
+10.0	34.822	0.993	
+Back side	0.0	34.862	0.969	
+1.0	39.293	0.988	
+2.5	40.521	0.993	
+5.0	38.668	0.992	
+10.0	36.100	0.991	
+Experiment 4	Front side	0.0	32.351	0.967	
+1.0	38.456	0.986	
+2.5	39.431	0.991	
+5.0	38.090	0.991	
+10.0	35.420	0.990	
+Back side	0.0	30.074	0.956	
+1.0	43.184	0.996	
+2.5	41.980	0.993	
+5.0	39.487	0.990	
+10.0	35.836	0.985	
+
+5.1.3 Experiment to evaluate convergence
+
+The convergence of the proposed method with the recommended APG + SVP optimization method was evaluated. The same simulation experiments as in Experiment 1 and Experiment 2 were performed with 1000 iterations of APG + SVP method. These experiments are named as Experiment 5 and Experiment 6, respectively. The changes in PSNR and SSIM indices are shown in Fig 8. From Fig 8, it is observed that both PSNR and SSIM converges at 200 iterations and the convergence is stable with no divergence or oscillating behavior. From this experiment, it can be said that the convergence of the method is guaranteed and 200 iterations are sufficient for the convergence.
+
+10.1371/journal.pone.0305208.g008 Fig 8 Changes of evaluation indices (PSNR and SSIM) according to the iteration number in Experiment 5 and Experiment 6.
+
+(a) PSNR, (b) SSIM.
+
+5.1.4 Experiment to confirm the effects of APG and SVP
+
+Next, we confirmed the effects of APG and SVP introduced in Section 4.2.2. Image restorations were performed by changing the combination of APG (or PG) and SVP (or ST) to determine which iterative method converges faster. The input images in Experiment 7 and Experiment 8 were the same as those of Experiment 1 and Experiment 2, respectively. Image restorations were performed with the following four different combinations: APG + SVP (i.e. the method proposed in this paper), PG + SVP, APG + ST, and PG + ST. In this experiment, we judged that the iteration converged when PSNR indices of restored images of both the front and back sides reached to 39 (dB), and the required number of iterations up to the convergence is summarized in Table 4. The changes in PSNR by iterations are shown in Fig 9. As a result, the iteration did not converge with APG + ST and PG + ST. This non-convergence was caused due to the following reason. In APG + ST and PG + ST, the strength of rank 1 constraint imposed on the matrix X is very weak so that a very large number of iterations were necessary up to the convergence. On the other hand, APG + SVP and PG + SVP converged to 39 (dB) in PSNR. However, the number of iterations in APG + SVP was more than 16 times smaller than that of PG + SVP. From this experiment, we conclude that APG + SVP is the best method in terms of convergence speed and computational efficiency.
+
+10.1371/journal.pone.0305208.g009 Fig 9 Changes of PSNR index according to the iteration number in Experiment 7 and Experiment 8.
+
+(a) Experiment 7, (b) Experiment 8.
+
+10.1371/journal.pone.0305208.t004 Table 4 Number of required iterations for each iterative method to reach to 39 (dB) in PSNR for Experiment 7 and Experiment 8.
+
+		NUMBER OF ITERATIONS	
+Experiment 7	APG + SVP	85	
+PG + SVP	1543	
+APG + ST	-	
+PG + ST	-	
+Experiment 8	APG + SVP	85	
+PG + SVP	1387	
+APG + ST	-	
+
+5.1.5 Comparison studies with other methods
+
+To make a comparison with the existing other methods, we chose two typical and well-known methods. The first method is Sharma’s method [12], which is based on the adaptive filter. In this method, it is necessary to input a pixel value of the portion without printed matter and a threshold value to determine whether the show-through occurred or not at each pixel. In this experiment, we adjusted values of these parameter through various trial restorations, and used the same values in all experiments. The second method is NMF method [9]. Unlike Sharma’s method, this method does not need a priori input parameters concerning images to be restored, but the restoration results largely depend on initial values of the iterative method. In this experiment, we used a random initial value in all experiments. The input images in Experiment 9 and Experiment 10 were the same as those of Experiment 1 and Experiment 2, respectively. All the restored images and the corresponding error images by the three methods are shown in Fig 10 for Experiment 9 (Fig 11 for Experiment 10). The corresponding values of evaluation indices (PSNR and SSIM) are summarized in Table 5. The show-through still remains in Fig 10(G) and 10(H) in the NMF method, and Figs 10(E) and 11(F) in Sharma’s method. However, the proposed method successfully removed the show-through in any image. In Table 5, the proposed method achieved the best PSNR and SSIM values for all the images. From the PSNR and SSIM values, it is clear that the proposed method is superior to the compared other methods.
+
+10.1371/journal.pone.0305208.g010 Fig 10 Images of Experiment 9.
+
+(a) original image (front side), (b) original image (back side), (c) restored image by proposed method (front side), (d) restored image by proposed method (back side), (e) restored image by Sharma’s method (front side), (f) restored image by Sharma’s method (back side), (g) restored image by NMF method (front side), (h) restored image by NMF method (back side).
+
+10.1371/journal.pone.0305208.g011 Fig 11 Images of Experiment 10.
+
+(a) original image (front side), (b) original image (back side), (c) restored image by proposed method (front side), (d) restored image by proposed method (back side), (e) restored image by Sharma’s method (front side), (f) restored image by Sharma’s method (back side), (g) restored image by NMF method (front side), (h) restored image by NMF method (back side).
+
+10.1371/journal.pone.0305208.t005 Table 5 Values of evaluation indices (PSNR and SSIM) in Experiment 9 and Experiment 10.
+
+			PSNR	SSIM	
+Experiment 9	Front side	Initial value	26.953	0.941	
+Proposed method	39.067	0.995	
+Sharma’s method	36.407	0.983	
+NMF method	26.631	0.921	
+Back side	Initial value	30.533	0.919	
+Proposed method	40.521	0.993	
+Sharma’s method	37.676	0.961	
+NMF method	28.681	0.856	
+Experiment 10	Front side	Initial value	28.086	0.905	
+Proposed method	39.431	0.991	
+Sharma’s method	37.722	0.946	
+NMF method	32.643	0.838	
+Back side	Initial value	26.079	0.927	
+Proposed method	41.980	0.993	
+Sharma’s method	34.424	0.974	
+NMF method	28.597	0.904	
+
+5.1.6 Evaluation of computation time
+
+Computation times of the proposed method and the comparison methods in Experiments 7–10 were evaluated under the environment of Table 1. Table 6 summarizes the computation time for each optimization method in Experiment 7 and Experiment 8. Table 7 summarizes the computation time for each comparison method in Experiment 9 and Experiment 10. From Table 6, it is observed that APG + SVP optimization method reduces the computation time more than 14 times than PG + SVP. APG + ST and PG + ST were not evaluated because they did not converge. From Table 7, it is observed that the proposed method needs a longer computation time than other methods. This drawback needs to be overcome in future work, for example by using parallel processing.
+
+10.1371/journal.pone.0305208.t006 Table 6 Computation time for Experiment 7 and Experiment 8.
+
+		COMPUTATION TIME (SEC)	
+Experiment 7	APG + SVP	10.20	
+PG + SVP	168.57	
+APG + ST	-	
+PG + ST	-	
+Experiment 8	APG + SVP	10.31	
+PG + SVP	154.37	
+APG + ST	-	
+PG + ST	-	
+
+10.1371/journal.pone.0305208.t007 Table 7 Computation time for Experiment 9 and Experiment 10.
+
+		COMPUTATION TIME (SEC)	
+Experiment 9	Proposed method	24.27	
+Sharma’s method	0.35	
+NMF method	2.60	
+Experiment 10	Proposed method	24.26	
+Sharma’s method	0.37	
+NMF method	2.72	
+
+5.2 Real image experiments
+
+Next, we applied the proposed method, Sharma’s method, and the NMF method to images of actual papers scanned by using an electronic scanner. We call these real data experiments as Experiment 11, Experiment 12, and Experiment 13. We used two input images (S2 File) shown in Fig 12(A) and 12(B) for Experiment 11(Fig 13(A) and 13(B) for Experiment 12, Fig 14(A) and 14(B) for Experiment 13). All images used in the real image experiments were acquired by ourselves by scanning real papers having printed materials on the both sides using an electronic scanner. We note that the images used in the three experiments have different characters described below to one another. The images in Experiment 11consist of text parts both in the front and back sides. The images in Experiment 12 consist of text part in the front side and drawing part in the back side. The images in Experiment 13 consist of real images in the front side and text part in the back side. Also, spatial resolution of the input images in Experiment 11, Experiment 12, and Experiment 13 was 256×256 (pixels), respectively. In implementing the proposed method, values of the parameters and initial values of the iteration were set to the same values as in the simulation studies. All the results are summarized in Fig 12 for Experiment 11 (Fig 13 for Experiment 12, Fig 14 for Experiment 13). The NMF method fails to remove the show-trough in Fig 13(H), while it removes even the true printed matter on the front side in Figs 12(G), 14(G), and 14(H). Both Sharma’s method and the proposed method could remove the show-through well, but Figs 13(F) and 14(E) shows that Sharma’s method also removed the true printed matter in some parts. In the proposed method, such incorrect removals hardly occurred.
+
+10.1371/journal.pone.0305208.g012 Fig 12 Images of Experiment 11.
+
+(a) input image (front side), (b) input image (back side), (c) restored image by proposed method (front side), (d) restored image by proposed method (back side), (e) restored image by Sharma’s method (front side), (f) restored image by Sharma’s method (back side), (g) restored image by NMF method (front side), (h) restored image by NMF method (back side).
+
+10.1371/journal.pone.0305208.g013 Fig 13 Images of Experiment 12.
+
+(a) input image (front side), (b) input image (back side), (c) restored image by proposed method (front side), (d) restored image by proposed method (back side), (e) restored image by Sharma’s method (front side), (f) restored image by Sharma’s method (back side), (g) restored image by NMF method (front side), (h) restored image by NMF method (back side).
+
+10.1371/journal.pone.0305208.g014 Fig 14 Images of Experiment 13.
+
+(a) input image (front side), (b) input image (back side), (c) restored image by proposed method (front side), (d) restored image by proposed method (back side), (e) restored image by Sharma’s method (front side), (f) restored image by Sharma’s method (back side), (g) restored image by NMF method (front side), (h) restored image by NMF method (back side).
+
+5.3 Discussion
+
+From the simulation results in this section, the following six facts about the proposed method can be said. First, the show-through removal by the proposed method improves accuracy by using the TV regularization term. Second, the effect of the choice of β in Eq (16) affects the accuracy of the restored image. Third, the proposed method has good convergence. Forth, the use of APG + SVP as the iterative solution method is able to speed up convergence, improve computational efficiency, and also improve accuracy. Fifth, the proposed method provides accurate and stable restoration results with the simpler parameter adjustment compared with Sharma’s method and the NMF method. The NMF method is a simple method that does not need the parameter adjustment, but it is not practical because initial values of the iteration change the solution significantly. On the other hand, Sharma’s method is able to remove the show-through well if the two parameters, i.e. the pixel value of portion without the printed matter and the threshold value to determine whether the show-through occurred or not at each pixel, are set to appropriate values. However, the threshold value needs to be changed according to the density of printed matter, and the pixel value of portion without the printed matter also needs to be changed according to the type of paper. On the other hand, the parameter adjustment in the proposed method is easier allowing an accurate and stable show-through removal for various different images under different conditions. Sixth, the proposed method has a longer computation time than other methods.
+
+6 Conclusion
+
+In this paper, we proposed a new method of the show-through removal which takes the blurring into account by applying Ahmed’s BID method. From the results of experimental studies, it became clear that the proposed method is able to achieve accurate and stable restorations with the relatively simple parameter adjustments. However, the proposed method still has a limitation that values of the transmittance and the P.S.F. need to be same at every position on the paper. In addition, these values need to be same in the front side and in the back side. In future work, it is necessary to overcome this limitation by developing a space-variant degradation model of show-through and a corresponding restoration method, which better match to real situations. Finally, the most important point to be improved in this method is the reduction of computation time. Reducing computational complexity and increasing convergence speed are also desired.
+
+Supporting information
+
+S1 File Original images used in the simulation experiments.
+
+(ZIP)
+
+S2 File Images used in the real image experiments.
+
+(ZIP)
+
+We appreciate Mr. Yoshitaka Izumi and Mr. Dan Suto for useful discussions on this work.
+
+10.1371/journal.pone.0305208.r001
+Decision Letter 0
+Chen Abel C.H. Academic Editor
+© 2024 Abel C.H. Chen
+2024
+Abel C.H. Chen
+https://creativecommons.org/licenses/by/4.0/ This is an open access article distributed under the terms of the Creative Commons Attribution License, which permits unrestricted use, distribution, and reproduction in any medium, provided the original author and source are credited.
+Submission Version0
+16 Feb 2024
+
+PONE-D-24-02202Show-through removal with sparsity-based blind deconvolutionPLOS ONE
+
+Dear Dr. Kawakami,
+
+Thank you for submitting your manuscript to PLOS ONE. After careful consideration, we feel that it has merit but does not fully meet PLOS ONE’s publication criteria as it currently stands. Therefore, we invite you to submit a revised version of the manuscript that addresses the points raised during the review process.
+
+Please submit your revised manuscript by Apr 01 2024 11:59PM. If you will need more time than this to complete your revisions, please reply to this message or contact the journal office at plosone@plos.org. When you're ready to submit your revision, log on to https://www.editorialmanager.com/pone/ and select the 'Submissions Needing Revision' folder to locate your manuscript file.
+
+Please include the following items when submitting your revised manuscript:A rebuttal letter that responds to each point raised by the academic editor and reviewer(s). You should upload this letter as a separate file labeled 'Response to Reviewers'.
+
+A marked-up copy of your manuscript that highlights changes made to the original version. You should upload this as a separate file labeled 'Revised Manuscript with Track Changes'.
+
+An unmarked version of your revised paper without tracked changes. You should upload this as a separate file labeled 'Manuscript'.
+
+If you would like to make changes to your financial disclosure, please include your updated statement in your cover letter. Guidelines for resubmitting your figure files are available below the reviewer comments at the end of this letter.
+
+If applicable, we recommend that you deposit your laboratory protocols in protocols.io to enhance the reproducibility of your results. Protocols.io assigns your protocol its own identifier (DOI) so that it can be cited independently in the future. For instructions see: https://journals.plos.org/plosone/s/submission-guidelines#loc-laboratory-protocols. Additionally, PLOS ONE offers an option for publishing peer-reviewed Lab Protocol articles, which describe protocols hosted on protocols.io. Read more information on sharing protocols at https://plos.org/protocols?utm_medium=editorial-email&utm_source=authorletters&utm_campaign=protocols.
+
+We look forward to receiving your revised manuscript.
+
+Kind regards,
+
+Abel C.H. Chen
+
+Academic Editor
+
+PLOS ONE
+
+Journal requirements:
+
+When submitting your revision, we need you to address these additional requirements.
+
+1. Please ensure that your manuscript meets PLOS ONE's style requirements, including those for file naming. The PLOS ONE style templates can be found at
+
+https://journals.plos.org/plosone/s/file?id=wjVg/PLOSOne_formatting_sample_main_body.pdf and
+
+https://journals.plos.org/plosone/s/file?id=ba62/PLOSOne_formatting_sample_title_authors_affiliations.pdf
+
+2. Please note that PLOS ONE has specific guidelines on code sharing for submissions in which author-generated code underpins the findings in the manuscript. In these cases, all author-generated code must be made available without restrictions upon publication of the work. Please review our guidelines at https://journals.plos.org/plosone/s/materials-and-software-sharing#loc-sharing-code and ensure that your code is shared in a way that follows best practice and facilitates reproducibility and reuse.
+
+3. When completing the data availability statement of the submission form, you indicated that you will make your data available on acceptance. We strongly recommend all authors decide on a data sharing plan before acceptance, as the process can be lengthy and hold up publication timelines. Please note that, though access restrictions are acceptable now, your entire data will need to be made freely accessible if your manuscript is accepted for publication. This policy applies to all data except where public deposition would breach compliance with the protocol approved by your research ethics board. If you are unable to adhere to our open data policy, please kindly revise your statement to explain your reasoning and we will seek the editor's input on an exemption. Please be assured that, once you have provided your new statement, the assessment of your exemption will not hold up the peer review process.
+
+4. Please include a separate caption for each figure in your manuscript.
+
+[Note: HTML markup is below. Please do not edit.]
+
+Reviewers' comments:
+
+Reviewer's Responses to Questions
+
+Comments to the Author
+
+1. Is the manuscript technically sound, and do the data support the conclusions?
+
+The manuscript must describe a technically sound piece of scientific research with data that supports the conclusions. Experiments must have been conducted rigorously, with appropriate controls, replication, and sample sizes. The conclusions must be drawn appropriately based on the data presented.
+
+Reviewer #1: Yes
+
+Reviewer #2: Partly
+
+**********
+
+2. Has the statistical analysis been performed appropriately and rigorously?
+
+Reviewer #1: Yes
+
+Reviewer #2: I Don't Know
+
+**********
+
+3. Have the authors made all data underlying the findings in their manuscript fully available?
+
+The PLOS Data policy requires authors to make all data underlying the findings described in their manuscript fully available without restriction, with rare exception (please refer to the Data Availability Statement in the manuscript PDF file). The data should be provided as part of the manuscript or its supporting information, or deposited to a public repository. For example, in addition to summary statistics, the data points behind means, medians and variance measures should be available. If there are restrictions on publicly sharing data—e.g. participant privacy or use of data from a third party—those must be specified.
+
+Reviewer #1: Yes
+
+Reviewer #2: Yes
+
+**********
+
+4. Is the manuscript presented in an intelligible fashion and written in standard English?
+
+PLOS ONE does not copyedit accepted manuscripts, so the language in submitted articles must be clear, correct, and unambiguous. Any typographical or grammatical errors should be corrected at revision, so please note any specific errors here.
+
+Reviewer #1: Yes
+
+Reviewer #2: Yes
+
+**********
+
+5. Review Comments to the Author
+
+Please use the space provided to explain your answers to the questions above. You may also include additional comments for the author, including concerns about dual publication, research ethics, or publication ethics. (Please upload your review as an attachment if it exceeds 20,000 characters)
+
+Reviewer #1: In this paper, the blind image deconvolution problem, which is the original image and the point spread function (PSF) are unknown, has been studied. This type of problem cannot be directly solved due to ill-conditioned, and therefore minimization methods are used for this type of problem. The subject under study is a practical one that holds interest for researchers in the field of image processing. While the paper is well-written both scientifically and in terms of its text, it needs to be improved. Some of the corrections that need to be made are listed below.
+
+1- The time required for the algorithm should be examined through an example.
+
+2- To enhance interpretability, the authors should specify the type of system employed for simulating the algorithm. Details such as the simulation environment (Matlab, C, Python, etc.), hardware (CPU or GPU), operating system (Windows or Linux), and other relevant information should be included in the text.
+
+3- The discussion of the convergence of the presented method may be lengthy and challenging in terms of theory. However, it is recommended that the authors demonstrate the convergence of the method in the numerical results section by plotting the changes in PSNR and SSIM values against the number of iterations.
+
+4- In order to be able to simulate the algorithm, the source of the images used in the paper must be stated.
+
+5- The selection of the regularization parameters (\\alpha and \\beta) in the total variation problems are a challenging issue and various methods have been introduced to select these parameters. In the current paper, these parameters have been selected as a fixed number. However, different results are obtained by changing these parameters. The authors are advised to calculate the PSNR and SSIM values in a table for different values of these parameters.
+
+Reviewer #2: Why you didn't use autoencoder as anomaly detection? Autoencoders is a good self-supervised machine learning technique which can use as anomaly detection (Autoencoders and their Applications inMachine Learning: A Survey, DOI: 10.1007/s10462-023-10662-6).
+
+**********
+
+6. PLOS authors have the option to publish the peer review history of their article (what does this mean?). If published, this will include your full peer review and any attached files.
+
+If you choose “no”, your identity will remain anonymous but your review may still be made public.
+
+Do you want your identity to be public for this peer review? For information about this choice, including consent withdrawal, please see our Privacy Policy.
+
+Reviewer #1: No
+
+Reviewer #2: No
+
+**********
+
+[NOTE: If reviewer comments were submitted as an attachment file, they will be attached to this email and accessible via the submission site. Please log into your account, locate the manuscript record, and check for the action link "View Attachments". If this link does not appear, there are no attachment files.]
+
+While revising your submission, please upload your figure files to the Preflight Analysis and Conversion Engine (PACE) digital diagnostic tool, https://pacev2.apexcovantage.com/. PACE helps ensure that figures meet PLOS requirements. To use PACE, you must first register as a user. Registration is free. Then, login and navigate to the UPLOAD tab, where you will find detailed instructions on how to use the tool. If you encounter any issues or have any questions when using PACE, please email PLOS at figures@plos.org. Please note that Supporting Information files do not need this step.
+
+10.1371/journal.pone.0305208.r002
+Author response to Decision Letter 0
+Submission Version1
+22 Apr 2024
+
+Thanks to all the reviewers.
+
+Thank you for your comments and helpful suggestions to improve our paper. We have incorporated all your suggestions into the revised version as explained below.
+
+Response to the reviewer #1
+
+Consern#1: The time required for the algorithm should be examined through an example.
+
+We added the computation times of our simulation experiments in Tables 6 and 7 (Page 17 and 18). Furthermore, Section 5.1.6 was added to explain Tables 6 and 7 (Page 17). From Table 6, it is observed that the optimization method using APG + SVP described in Section 4.2.2 significantly reduces the computation time compared with the PG + SVP. From Table 7, it is observed that the proposed method needs a longer computation time than the other comparison methods. This drawback needs to be overcome in future work, for example by using parallel processing.
+
+Consern#2: To enhance interpretability, the authors should specify the type of system employed for simulating the algorithm. Details such as the simulation environment (Matlab, C, Python, etc.), hardware (CPU or GPU), operating system (Windows or Linux), and other relevant information should be included in the text.
+
+We added Table 1 which summarizes the hardware and software environment used in the experimental studies in Section 5.1 (Page 11). Furthermore, one sentence was added to explain Table 1 (Page 11).
+
+Consern#3: The discussion of the convergence of the presented method may be lengthy and challenging in terms of theory. However, it is recommended that the authors demonstrate the convergence of the method in the numerical results section by plotting the changes in PSNR and SSIM values against the number of iterations.
+
+We performed new experiments (experiments 5 and 6) in Section 5.1.3 to evaluate the convergence of the proposed method with the recommended APG + SVP optimization method. We added Fig 8 which shows graphs of the changes of PSNR and SSIM indices according to the iteration number (Page 14). Furthermore, Section 5.1.3 was added to explain Fig 8 (Page 14). From Fig 8, it is observed that both PSNR and SSIM converges at 200 iterations and the convergence is stable with no divergence or oscillating behavior. From this experiment, we think that it can be said that the convergence of the method is guaranteed and 200 iterations are sufficient for the convergence.
+
+In addition, in the experiments of the optimization methods in Section 5.1.4, we added Fig 9, which shows graphs of the changes of PSNR index for each optimization method (Page 15). Furthermore, a sentence was added to explain Fig 9 (Page 15). It is observed that the recommended APG + SVP method converged fastest among all the four investigated optimization methods.
+
+Consern#4: In order to be able to simulate the algorithm, the source of the images used in the paper must be stated.
+
+All images used in the simulation studies were artificially generated by ourselves. We added a sentence to state this fact in Section 5.1 (Page 11). All images used in the real image experiments were acquired by ourselves by scanning real papers having printed materials on the both sides using an electronic scanner. We added a sentence to state this fact in Section 5.2 (Page 18).
+
+For other researchers, all the image files we used in the experiments are attached to S1 (images used in the simulation experiments) and S2 (images used in the real image experiments) in Supporting Information Section (Page 20).
+
+Consern#5: The selection of the regularization parameters (\\alpha and \\beta) in the total variation problems are a challenging issue and various methods have been introduced to select these parameters. In the current paper, these parameters have been selected as a fixed number. However, different results are obtained by changing these parameters. The authors are advised to calculate the PSNR and SSIM values in a table for different values of these parameters.
+
+The proposed method involves two regularization parameters (i.e. α and β). We added Section 5.1.2 (Page 13), which explains the effect of α and β on quality of the restored image. This section includes results of newly performed experiments (Figs 5, 6, 7 and Table 3) (Page 13 and 14), which demonstrate the effect of β on the image quality. We believe that this answers to your comments in a good way. We repeat the added Section 5.1.2 in the next paragraph for your convenience.
+
+The proposed method involves two regularization parameters (i.e. α and β). This section demonstrates the effect of α and β on quality of the restored image. The first parameter α in Eq (16) is the parameter to evaluate the magnitude of the nuclear norm. However, the proposed method with the recommended AGP + SVP optimization method does not need to adjust α. This is because it uses the singular value projection (SVP) instead of the nuclear norm reduction, which directly imposes the constraint that the rank of X is one by computing only one largest singular value and discarding other singular values. The second parameter β affects quality of the restored image. To evaluate the effect of β on the image quality, the same simulation experiments as in Experiment 1 and Experiment 2 were performed with five different values of β (i.e. β=0.0,1.0,2.5,5.0,10.0). These experiments are named as Experiment 3 and Experiment 4, respectively. Figs 5 and 6 show zoomed small parts of the restored images for each value of β. Table 3 summarizes PSNR and SSIM indices for each value of β. Fig 7 shows changes of PSNR and SSIM indices with different β values. It is observed that increasing β value has no significant effect on large edge parts such as those in Figs 5(a), (b) and 6(a), but it does smooth out fine edges such as those in Fig 6(b). From Fig 7 and Table 3, it is also observed that if β is made too large, PSNR and SSIM indices become worse and β=2.5 yields the best restoration accuracy in average for the setup of Experiments 3 and 4. Finally, we mention that the image quality was not very sensitive to β value than what we expected before these experiments.
+
+Response to the reviewer #2: Why you didn't use autoencoder as anomaly detection? Autoencoders is a good self-supervised machine learning technique which can use as anomaly detection (Autoencoders and their Applications inMachine Learning: A Survey, DOI: 10.1007/s10462-023-10662-6).
+
+After reading your comments, we performed a literature survey. Consequently, we found several show-through removal methods using Auto-encoder. For example, these include a supervised method (DOI:10.1016/j.patcog.2018.08.011), a self-supervised method (DOI:10.48550/arXiv.2203.04814), and an unsupervised method (DOI:10.1016/j.patcog.2021.108099). All of them are based on binarization. We added the most famous method (DOI:10.1016/j.patcog.2018.08.011) as a reference [14] in Introduction (Page 3). Furthermore, in Introduction, we added our short comment repeated in the next paragraphs on the comparison between the optimization-based approach and the Auto-encoder-based approach (Page 3).
+
+Also, in recent years, a show-through removal method using Convolutional Neural Network (CNN) [13] has also been proposed. Among them, the method based on image binarization using Auto-encoder [14] is promising. The Auto-encoder-based approach like [14] can certainly perform accurate show-through removal with only one-sided input image. However, it has the following drawbacks. Since the method uses the image binarization, images with gradations or shadings cannot be recovered well. Furthermore, their accuracy depends on used training data. On the other hand, our proposed method requires both of an image of the fore side and that of the back side, but can be applied to images with gradations or shadings. At the current stage, we believe that both the optimization-based approach like ours and the Auto-encoder-based approach are meaningful to study, because they have different advantages and disadvantages and the both may be able to be combined in the future to develop more accurate or more convenient methods.
+
+Attachment Submitted filename: Response_to_the_reviewers_revision1.docx
+
+10.1371/journal.pone.0305208.r003
+Decision Letter 1
+Chen Abel C.H. Academic Editor
+© 2024 Abel C.H. Chen
+2024
+Abel C.H. Chen
+https://creativecommons.org/licenses/by/4.0/ This is an open access article distributed under the terms of the Creative Commons Attribution License, which permits unrestricted use, distribution, and reproduction in any medium, provided the original author and source are credited.
+Submission Version1
+8 May 2024
+
+PONE-D-24-02202R1Show-through removal with sparsity-based blind deconvolutionPLOS ONE
+
+Dear Dr. Kawakami,
+
+Thank you for submitting your manuscript to PLOS ONE. After careful consideration, we feel that it has merit but does not fully meet PLOS ONE’s publication criteria as it currently stands. Therefore, we invite you to submit a revised version of the manuscript that addresses the points raised during the review process.
+
+Please submit your revised manuscript by Jun 22 2024 11:59PM. If you will need more time than this to complete your revisions, please reply to this message or contact the journal office at plosone@plos.org. When you're ready to submit your revision, log on to https://www.editorialmanager.com/pone/ and select the 'Submissions Needing Revision' folder to locate your manuscript file.
+
+Please include the following items when submitting your revised manuscript:A rebuttal letter that responds to each point raised by the academic editor and reviewer(s). You should upload this letter as a separate file labeled 'Response to Reviewers'.
+
+A marked-up copy of your manuscript that highlights changes made to the original version. You should upload this as a separate file labeled 'Revised Manuscript with Track Changes'.
+
+An unmarked version of your revised paper without tracked changes. You should upload this as a separate file labeled 'Manuscript'.
+
+If you would like to make changes to your financial disclosure, please include your updated statement in your cover letter. Guidelines for resubmitting your figure files are available below the reviewer comments at the end of this letter.
+
+If applicable, we recommend that you deposit your laboratory protocols in protocols.io to enhance the reproducibility of your results. Protocols.io assigns your protocol its own identifier (DOI) so that it can be cited independently in the future. For instructions see: https://journals.plos.org/plosone/s/submission-guidelines#loc-laboratory-protocols. Additionally, PLOS ONE offers an option for publishing peer-reviewed Lab Protocol articles, which describe protocols hosted on protocols.io. Read more information on sharing protocols at https://plos.org/protocols?utm_medium=editorial-email&utm_source=authorletters&utm_campaign=protocols.
+
+We look forward to receiving your revised manuscript.
+
+Kind regards,
+
+Abel C.H. Chen
+
+Academic Editor
+
+PLOS ONE
+
+Journal Requirements:
+
+Please review your reference list to ensure that it is complete and correct. If you have cited papers that have been retracted, please include the rationale for doing so in the manuscript text, or remove these references and replace them with relevant current references. Any changes to the reference list should be mentioned in the rebuttal letter that accompanies your revised manuscript. If you need to cite a retracted article, indicate the article’s retracted status in the References list and also include a citation and full reference for the retraction notice.
+
+[Note: HTML markup is below. Please do not edit.]
+
+Reviewers' comments:
+
+Reviewer's Responses to Questions
+
+Comments to the Author
+
+1. If the authors have adequately addressed your comments raised in a previous round of review and you feel that this manuscript is now acceptable for publication, you may indicate that here to bypass the “Comments to the Author” section, enter your conflict of interest statement in the “Confidential to Editor” section, and submit your "Accept" recommendation.
+
+Reviewer #1: All comments have been addressed
+
+Reviewer #2: All comments have been addressed
+
+**********
+
+2. Is the manuscript technically sound, and do the data support the conclusions?
+
+The manuscript must describe a technically sound piece of scientific research with data that supports the conclusions. Experiments must have been conducted rigorously, with appropriate controls, replication, and sample sizes. The conclusions must be drawn appropriately based on the data presented.
+
+Reviewer #1: Yes
+
+Reviewer #2: Yes
+
+**********
+
+3. Has the statistical analysis been performed appropriately and rigorously?
+
+Reviewer #1: Yes
+
+Reviewer #2: Yes
+
+**********
+
+4. Have the authors made all data underlying the findings in their manuscript fully available?
+
+The PLOS Data policy requires authors to make all data underlying the findings described in their manuscript fully available without restriction, with rare exception (please refer to the Data Availability Statement in the manuscript PDF file). The data should be provided as part of the manuscript or its supporting information, or deposited to a public repository. For example, in addition to summary statistics, the data points behind means, medians and variance measures should be available. If there are restrictions on publicly sharing data—e.g. participant privacy or use of data from a third party—those must be specified.
+
+Reviewer #1: Yes
+
+Reviewer #2: No
+
+**********
+
+5. Is the manuscript presented in an intelligible fashion and written in standard English?
+
+PLOS ONE does not copyedit accepted manuscripts, so the language in submitted articles must be clear, correct, and unambiguous. Any typographical or grammatical errors should be corrected at revision, so please note any specific errors here.
+
+Reviewer #1: Yes
+
+Reviewer #2: Yes
+
+**********
+
+6. Review Comments to the Author
+
+Please use the space provided to explain your answers to the questions above. You may also include additional comments for the author, including concerns about dual publication, research ethics, or publication ethics. (Please upload your review as an attachment if it exceeds 20,000 characters)
+
+Reviewer #1: After reviewing the original text, the revised versions, and the opinions of the referees, as well as considering the answers provided and evaluating the article from a scientific standpoint, I believe that the manuscript in its current form may be considered for the next phase of the editorial process.
+
+Also, as a recommendation for authors, it is suggested that the images and codes used for this article be placed on public repositories like GitHub and its address is mentioned in the text of the article. Additionally, the open-sourcing of the code not only facilitates the dissemination of the paper but also boosts its citation count.
+
+Reviewer #2: All previously provided feedback has been duly addressed. However, it's recommended to consider referencing the most recent work on autoencoders, such as "Autoencoders and their applications in machine learning: a survey (2024)," instead of "A selectional auto-encoder approach for document image binarization (2019)," to ensure the inclusion of up-to-date and comprehensive literature in the manuscript.
+
+**********
+
+7. PLOS authors have the option to publish the peer review history of their article (what does this mean?). If published, this will include your full peer review and any attached files.
+
+If you choose “no”, your identity will remain anonymous but your review may still be made public.
+
+Do you want your identity to be public for this peer review? For information about this choice, including consent withdrawal, please see our Privacy Policy.
+
+Reviewer #1: No
+
+Reviewer #2: No
+
+**********
+
+[NOTE: If reviewer comments were submitted as an attachment file, they will be attached to this email and accessible via the submission site. Please log into your account, locate the manuscript record, and check for the action link "View Attachments". If this link does not appear, there are no attachment files.]
+
+While revising your submission, please upload your figure files to the Preflight Analysis and Conversion Engine (PACE) digital diagnostic tool, https://pacev2.apexcovantage.com/. PACE helps ensure that figures meet PLOS requirements. To use PACE, you must first register as a user. Registration is free. Then, login and navigate to the UPLOAD tab, where you will find detailed instructions on how to use the tool. If you encounter any issues or have any questions when using PACE, please email PLOS at figures@plos.org. Please note that Supporting Information files do not need this step.
+
+10.1371/journal.pone.0305208.r004
+Author response to Decision Letter 1
+Submission Version2
+13 May 2024
+
+Thanks to all the reviewers.
+
+Thank you for your second comments and helpful suggestions to improve our paper. We have incorporated all your suggestions into the revised version as explained below.
+
+Reviewer #1: After reviewing the original text, the revised versions, and the opinions of the referees, as well as considering the answers provided and evaluating the article from a scientific standpoint, I believe that the manuscript in its current form may be considered for the next phase of the editorial process. Also, as a recommendation for authors, it is suggested that the images and codes used for this article be placed on public repositories like GitHub and its address is mentioned in the text of the article. Additionally, the open-sourcing of the code not only facilitates the dissemination of the paper but also boosts its citation count.
+
+Thank you for your comment. According to your advice, I have added the link to repository to get images and codes used in the experiment in section 5.1 (Page 12).
+
+Reviewer #2: All previously provided feedback has been duly addressed. However, it's recommended to consider referencing the most recent work on autoencoders, such as "Autoencoders and their applications in machine learning: a survey (2024)," instead of "A selectional auto-encoder approach for document image binarization (2019)," to ensure the inclusion of up-to-date and comprehensive literature in the manuscript.
+
+Thank you for your comment. As you pointed, our reference to the approach using Auto-encoder was not good in the following sense. We cited a paper on the binarization of document image using Auto-encoder, but this is not a standard usage of Auto-encoder. Since a major application of Auto-encoder is to remove disturbance from images, which has been already proposed in image denoising, speckle reduction in SAR or ultrasound images, and clutter rejection in radar images. The same method can be also used to remove show-through from scanned images. Since the proposed optimization-based method and the Auto-encoder method have different advantages and disadvantages, it would be interesting to compare the two methods in terms of various points of views. So, according to your suggestion, we have made the following changes in the 2-nd revised version. First, we changed the cited paper (Ref. 14) from the previous one to the following new one, which you have introduced to us.
+
+� Berahmand, K., Daneshfar, F., Salehi, E.S. et al. Autoencoders and their applications in machine learning: a survey. Artif Intell Rev 57, 28 (2024). https://doi.org/10.1007/s10462-023-10662-6
+
+Second, we have changed the explanation on the use of Auto-encoder (on Page 3) as summarized in the next paragraph.
+
+Also, in recent years, show-through removal methods using Convolutional Neural Network (CNN) have been proposed [13,14]. Among them, the method based on Auto-encoder [14] has a large potential. A typical major application of Auto-encoder is to remove disturbance from signals or images, which has been already proposed in image denoising, speckle reduction in SAR or ultrasound images, and clutter rejection in radar images. The same method can be also used to remove show-through from scanned images. This method requires only a single image of front side. However, its accuracy depends on used training data, and it may be weaker to the show-through having strong correlation with the front page image. On the other hand, our proposed method requires both of an image of the fore side and that of the back side, but using the two images eliminates the necessity of training data and may lead to an improved accuracy (for example, in the above mentioned case). At the current stage, we believe that both the optimization-based approach like ours and the Auto-encoder-based approach are meaningful to study, because they have different advantages and disadvantages and the both may be able to be combined in the future to develop more accurate or more convenient methods.
+
+Attachment Submitted filename: Response_to_the_reviewers_revision2.docx
+
+10.1371/journal.pone.0305208.r005
+Decision Letter 2
+Chen Abel C.H. Academic Editor
+© 2024 Abel C.H. Chen
+2024
+Abel C.H. Chen
+https://creativecommons.org/licenses/by/4.0/ This is an open access article distributed under the terms of the Creative Commons Attribution License, which permits unrestricted use, distribution, and reproduction in any medium, provided the original author and source are credited.
+Submission Version2
+27 May 2024
+
+Show-through removal with sparsity-based blind deconvolution
+
+PONE-D-24-02202R2
+
+Dear Dr. Kawakami,
+
+We’re pleased to inform you that your manuscript has been judged scientifically suitable for publication and will be formally accepted for publication once it meets all outstanding technical requirements.
+
+Within one week, you’ll receive an e-mail detailing the required amendments. When these have been addressed, you’ll receive a formal acceptance letter and your manuscript will be scheduled for publication.
+
+An invoice will be generated when your article is formally accepted. Please note, if your institution has a publishing partnership with PLOS and your article meets the relevant criteria, all or part of your publication costs will be covered. Please make sure your user information is up-to-date by logging into Editorial Manager at Editorial Manager® and clicking the ‘Update My Information' link at the top of the page. If you have any questions relating to publication charges, please contact our Author Billing department directly at authorbilling@plos.org.
+
+If your institution or institutions have a press office, please notify them about your upcoming paper to help maximize its impact. If they’ll be preparing press materials, please inform our press team as soon as possible -- no later than 48 hours after receiving the formal acceptance. Your manuscript will remain under strict press embargo until 2 pm Eastern Time on the date of publication. For more information, please contact onepress@plos.org.
+
+Kind regards,
+
+Abel C.H. Chen
+
+Academic Editor
+
+PLOS ONE
+
+Additional Editor Comments (optional):
+
+Reviewers' comments:
+
+Reviewer's Responses to Questions
+
+Comments to the Author
+
+1. If the authors have adequately addressed your comments raised in a previous round of review and you feel that this manuscript is now acceptable for publication, you may indicate that here to bypass the “Comments to the Author” section, enter your conflict of interest statement in the “Confidential to Editor” section, and submit your "Accept" recommendation.
+
+Reviewer #1: All comments have been addressed
+
+Reviewer #2: (No Response)
+
+**********
+
+2. Is the manuscript technically sound, and do the data support the conclusions?
+
+The manuscript must describe a technically sound piece of scientific research with data that supports the conclusions. Experiments must have been conducted rigorously, with appropriate controls, replication, and sample sizes. The conclusions must be drawn appropriately based on the data presented.
+
+Reviewer #1: Yes
+
+Reviewer #2: (No Response)
+
+**********
+
+3. Has the statistical analysis been performed appropriately and rigorously?
+
+Reviewer #1: Yes
+
+Reviewer #2: (No Response)
+
+**********
+
+4. Have the authors made all data underlying the findings in their manuscript fully available?
+
+The PLOS Data policy requires authors to make all data underlying the findings described in their manuscript fully available without restriction, with rare exception (please refer to the Data Availability Statement in the manuscript PDF file). The data should be provided as part of the manuscript or its supporting information, or deposited to a public repository. For example, in addition to summary statistics, the data points behind means, medians and variance measures should be available. If there are restrictions on publicly sharing data—e.g. participant privacy or use of data from a third party—those must be specified.
+
+Reviewer #1: Yes
+
+Reviewer #2: (No Response)
+
+**********
+
+5. Is the manuscript presented in an intelligible fashion and written in standard English?
+
+PLOS ONE does not copyedit accepted manuscripts, so the language in submitted articles must be clear, correct, and unambiguous. Any typographical or grammatical errors should be corrected at revision, so please note any specific errors here.
+
+Reviewer #1: Yes
+
+Reviewer #2: (No Response)
+
+**********
+
+6. Review Comments to the Author
+
+Please use the space provided to explain your answers to the questions above. You may also include additional comments for the author, including concerns about dual publication, research ethics, or publication ethics. (Please upload your review as an attachment if it exceeds 20,000 characters)
+
+Reviewer #1: The authors have addressed all the recommendations of the reviewers in a reasonable manner, the manuscript in the current form may be considered for the further phase of the editorial process.
+
+Reviewer #2: The new version of the manuscript correctly do the previous comment.
+
+All the previous comments have been investigated.
+
+**********
+
+7. PLOS authors have the option to publish the peer review history of their article (what does this mean?). If published, this will include your full peer review and any attached files.
+
+If you choose “no”, your identity will remain anonymous but your review may still be made public.
+
+Do you want your identity to be public for this peer review? For information about this choice, including consent withdrawal, please see our Privacy Policy.
+
+Reviewer #1: No
+
+Reviewer #2: Yes: fatemeh daneshfar
+
+**********
+
+10.1371/journal.pone.0305208.r006
+Acceptance letter
+Chen Abel C.H. Academic Editor
+© 2024 Abel C.H. Chen
+2024
+Abel C.H. Chen
+https://creativecommons.org/licenses/by/4.0/ This is an open access article distributed under the terms of the Creative Commons Attribution License, which permits unrestricted use, distribution, and reproduction in any medium, provided the original author and source are credited.
+3 Jun 2024
+
+PONE-D-24-02202R2
+
+PLOS ONE
+
+Dear Dr. Kawakami,
+
+I'm pleased to inform you that your manuscript has been deemed suitable for publication in PLOS ONE. Congratulations! Your manuscript is now being handed over to our production team.
+
+At this stage, our production department will prepare your paper for publication. This includes ensuring the following:
+
+* All references, tables, and figures are properly cited
+
+* All relevant supporting information is included in the manuscript submission,
+
+* There are no issues that prevent the paper from being properly typeset
+
+If revisions are needed, the production department will contact you directly to resolve them. If no revisions are needed, you will receive an email when the publication date has been set. At this time, we do not offer pre-publication proofs to authors during production of the accepted work. Please keep in mind that we are working through a large volume of accepted articles, so please give us a few weeks to review your paper and let you know the next and final steps.
+
+Lastly, if your institution or institutions have a press office, please let them know about your upcoming paper now to help maximize its impact. If they'll be preparing press materials, please inform our press team within the next 48 hours. Your manuscript will remain under strict press embargo until 2 pm Eastern Time on the date of publication. For more information, please contact onepress@plos.org.
+
+If we can help with anything else, please email us at customercare@plos.org.
+
+Thank you for submitting your work to PLOS ONE and supporting open access.
+
+Kind regards,
+
+PLOS ONE Editorial Office Staff
+
+on behalf of
+
+Dr. Abel C.H. Chen
+
+Academic Editor
+
+PLOS ONE
+==== Refs
+References
+
+1 Sauvola J. and Pietikainen M. ," Adaptive document image binarization," Pattern Recognit., 33 (2 ), 225–236 (2000).
+2 L.Jianzhuang, L.Wenqing, and T.Yupeng," Automatic thresholding of gray-level pictures using two-dimension Otsu method," Proc. 1991 International Conference on Circuits and Systems, Vol.1, 325–327 (1991).
+3 Kim S.J. , Jang M.S. , and Park G.T. ," Image contrast enhancement based on segmentation and tone curve control for LCD TV," Digest of Technical Papers International Conference on Consumer Electronics, 1–2 (2009).
+4 N.Ryu et al.," Restoration method for degraded images using two-dimensional block Kalman filter with colored driving source," Proc. 2011 Digital Signal Processing and Signal Processing Education Meeting, 151–156 (2011).
+5 N.Ryu, N.Tanabe, and T.Furukawa," Show-through cancellation using Kalman filter with colored driving source in duplex scanning," Proc. 2015 IEEE International Conference on Digital Signal Processing, 717–720 (2015).
+6 Tonazzini A. , Salerno E. , and Bedini L. ," Fast correction of bleed-through distortion in grayscale documents by a blind source separation technique," Int.J.Doc.Anal Recognit., 10 (1 ), 17–25 (2007).
+7 M.S.C.Almeida and L.B.Almeida," Separating nonlinear image mixtures using a physical model trained with ICA," Proc. 2006 16th IEEE Signal Processing Society Workshop on Machine Learning for Signal Processing, 65–70 (2006).
+8 Almeida M.S.C. and Almeida L.B. ," Nonlinear separation of show-through image mixtures using a physical model trained with ICA," Signal Process., 92 (4 ), 872–884 (2012).
+9 Merrikh-Bayat F. , Babaie-Zadeh M. , and Jutten C. ," Using non-negative matrix factorization for removing show-through," Latent Variable Analysis and Signal Separation. LVA/ICA 2010, Lecture Notes in Computer Science (Vigneron V. , Zarzoso V. , Moreau E. , Gribonval R. , and, Vincent E. , eds), Vol.6365 , 482–489 (2010).
+10 B.Ophir and D.Malah," Show-through cancellation in scanned images using blind source separation techniques," Proc. 2007 IEEE International Conference on Image Processing, 3, 233–236 (2007).
+11 B.Ophir and D.Malah," Improved cross-talk cancellation in scanned images by adaptive decorrelation," Proc. 2004 23rd IEEE Convention of Electrical and Electronics Engineers in Israel, 388–391 (2004).
+12 Sharma G. ," Show-through cancellation in scans of duplex printed documents," IEEE Trans.Image Process., 10 (5 ), 736–754 (2001). doi: 10.1109/83.918567 18249664
+13 Nakahara T. et al .," Deep convolutional neural networks for manga show-through cancellation," IEICE Ttans.Inf. & Syst., E101-D (11 ), 2844–2848 (2018). doi: 10.1587/transinf.2018EDL8051
+14 Berahmand K. , Daneshfa F. , Salehi E.S. , and Li Y. ,”Autoencoders and their applications in machine learning: a survey," Artif Intell Rev., 57 (2 ), 28 (2024).
+15 Ahmed A. , Recht B. , and Romberg J. ," Blind deconvolution using convex programming," IEEE Trans.Inf.Theory, 60 (3 ), 1711–1732 (2013).
+16 Toh K. and Yun S. ," An accelerated proximal gradient algorithm for nuclear norm regularized linear least squares problems," Pacific J. Optim., 6 (3 ), 615–640 (2010).
+17 Jain P. , Meka R. , and Dhillon I. S. ," Guaranteed rank minimization via singular value projection," Advances in Neural Information Processing Systems 23 (NIPS 2010), 23 , 937–945 (2010).
+18 Ayers G.R. and Dainty J.C. ," Iterative blind deconvolution method and its applications," Opt.Lett., 13 (7 ), 547–549 (1988).19745959
+19 Kundur D. and Hatzinakos D. ," Blind image deconvolution," IEEE Signal Process.Mag., 13 (3 ), 43–64 (1996).
+20 Fish D.A. et al .," Blind deconvolution by means of the Richardson–Lucy algorithm,” J.Opt.Soc.Am.A, 12 (1 ), 58–65 (1995).
+21 M.Fazel," Matrix rank minimization with applications," Ph.D Thesis, Stanford University, ProQuest Dissertations (2002).
+22 Y.Izumi, S.Kawakami, and H.Kudo," Motion-less super-resolution under blind condition using sparse optimization," Proc. 5th International Conference on Multimedia and Image Processing, 72–79 (2020).
